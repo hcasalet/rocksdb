@@ -537,6 +537,7 @@ struct DBOptions {
   // through env will be deprecated in favor of file_system (see below)
   // Default: Env::Default()
   Env* env = Env::Default();
+  Env* base_env = Env::Default();
 
   // Limits internal file read/write bandwidth:
   //
