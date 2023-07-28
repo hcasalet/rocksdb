@@ -331,7 +331,7 @@ TEST_F(DBSSTTest, DeleteFileNotCalledForCreatedSSTFile) {
 }
 
 TEST_F(DBSSTTest, DBWithSstFileManager) {
-  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_));
+  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_, env_));
   auto sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
 
   int files_added = 0;
@@ -388,7 +388,7 @@ TEST_F(DBSSTTest, DBWithSstFileManager) {
 
   // Verify that we track all the files again after the DB is closed and opened
   Close();
-  sst_file_manager.reset(NewSstFileManager(env_));
+  sst_file_manager.reset(NewSstFileManager(env_, env_));
   options.sst_file_manager = sst_file_manager;
   sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
 
@@ -400,7 +400,7 @@ TEST_F(DBSSTTest, DBWithSstFileManager) {
 }
 
 TEST_F(DBSSTTest, DBWithSstFileManagerForBlobFiles) {
-  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_));
+  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_, env_));
   auto sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
 
   int files_added = 0;
@@ -492,7 +492,7 @@ TEST_F(DBSSTTest, DBWithSstFileManagerForBlobFiles) {
   // Verify that we track all the files again after the DB is closed and opened.
   Close();
 
-  sst_file_manager.reset(NewSstFileManager(env_));
+  sst_file_manager.reset(NewSstFileManager(env_, env_));
   options.sst_file_manager = sst_file_manager;
   sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
 
@@ -515,7 +515,7 @@ TEST_F(DBSSTTest, DBWithSstFileManagerForBlobFiles) {
 }
 
 TEST_F(DBSSTTest, DBWithSstFileManagerForBlobFilesWithGC) {
-  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_));
+  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_, env_));
   auto sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
   Options options = CurrentOptions();
   options.sst_file_manager = sst_file_manager;
@@ -715,7 +715,7 @@ TEST_P(DBSSTTestRateLimit, RateLimitedDelete) {
   int64_t rate_bytes_per_sec = 1024 * 10;  // 10 Kbs / Sec
   Status s;
   options.sst_file_manager.reset(
-      NewSstFileManager(env_, nullptr, "", 0, false, &s, 0));
+      NewSstFileManager(env_, env_, nullptr, "", 0, false, &s, 0));
   ASSERT_OK(s);
   options.sst_file_manager->SetDeleteRateBytesPerSecond(rate_bytes_per_sec);
   auto sfm = static_cast<SstFileManagerImpl*>(options.sst_file_manager.get());
@@ -788,7 +788,7 @@ TEST_F(DBSSTTest, RateLimitedWALDelete) {
   int64_t rate_bytes_per_sec = 1024 * 10;  // 10 Kbs / Sec
   Status s;
   options.sst_file_manager.reset(
-      NewSstFileManager(env_, nullptr, "", 0, false, &s, 0));
+      NewSstFileManager(env_, env_, nullptr, "", 0, false, &s, 0));
   ASSERT_OK(s);
   options.sst_file_manager->SetDeleteRateBytesPerSecond(rate_bytes_per_sec);
   auto sfm = static_cast<SstFileManagerImpl*>(options.sst_file_manager.get());
@@ -871,7 +871,7 @@ TEST_P(DBWALTestWithParam, WALTrashCleanupOnOpen) {
   int64_t rate_bytes_per_sec = 1024 * 10;  // 10 Kbs / Sec
   Status s;
   options.sst_file_manager.reset(
-      NewSstFileManager(env_, nullptr, "", 0, false, &s, 0));
+      NewSstFileManager(env_, env_, nullptr, "", 0, false, &s, 0));
   ASSERT_OK(s);
   options.sst_file_manager->SetDeleteRateBytesPerSecond(rate_bytes_per_sec);
   auto sfm = static_cast<SstFileManagerImpl*>(options.sst_file_manager.get());
@@ -941,7 +941,7 @@ TEST_F(DBSSTTest, OpenDBWithExistingTrash) {
   Options options = CurrentOptions();
 
   options.sst_file_manager.reset(
-      NewSstFileManager(env_, nullptr, "", 1024 * 1024 /* 1 MB/sec */));
+      NewSstFileManager(env_, env_, nullptr, "", 1024 * 1024 /* 1 MB/sec */));
   auto sfm = static_cast<SstFileManagerImpl*>(options.sst_file_manager.get());
 
   Destroy(last_options_);
@@ -983,7 +983,7 @@ TEST_F(DBSSTTest, DeleteSchedulerMultipleDBPaths) {
   int64_t rate_bytes_per_sec = 1024 * 1024;  // 1 Mb / Sec
   Status s;
   options.sst_file_manager.reset(
-      NewSstFileManager(env_, nullptr, "", rate_bytes_per_sec, false, &s,
+      NewSstFileManager(env_, env_, nullptr, "", rate_bytes_per_sec, false, &s,
                         /* max_trash_db_ratio= */ 1.1));
 
   ASSERT_OK(s);
@@ -1053,7 +1053,7 @@ TEST_F(DBSSTTest, DestroyDBWithRateLimitedDelete) {
   options.disable_auto_compactions = true;
   options.env = env_;
   options.sst_file_manager.reset(
-      NewSstFileManager(env_, nullptr, "", 0, false, &s, 0));
+      NewSstFileManager(env_, env_, nullptr, "", 0, false, &s, 0));
   ASSERT_OK(s);
   DestroyAndReopen(options);
 
@@ -1094,7 +1094,7 @@ TEST_F(DBSSTTest, DestroyDBWithRateLimitedDelete) {
 }
 
 TEST_F(DBSSTTest, DBWithMaxSpaceAllowed) {
-  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_));
+  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_, env_));
   auto sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
 
   Options options = CurrentOptions();
@@ -1124,7 +1124,7 @@ TEST_F(DBSSTTest, DBWithMaxSpaceAllowed) {
 }
 
 TEST_F(DBSSTTest, DBWithMaxSpaceAllowedWithBlobFiles) {
-  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_));
+  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_, env_));
   auto sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
 
   Options options = CurrentOptions();
@@ -1186,7 +1186,7 @@ TEST_F(DBSSTTest, DBWithMaxSpaceAllowedWithBlobFiles) {
 }
 
 TEST_F(DBSSTTest, CancellingCompactionsWorks) {
-  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_));
+  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_, env_));
   auto sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
 
   Options options = CurrentOptions();
@@ -1244,7 +1244,7 @@ TEST_F(DBSSTTest, CancellingCompactionsWorks) {
 }
 
 TEST_F(DBSSTTest, CancellingManualCompactionsWorks) {
-  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_));
+  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_, env_));
   auto sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
 
   Options options = CurrentOptions();
@@ -1360,7 +1360,7 @@ TEST_F(DBSSTTest, DBWithMaxSpaceAllowedRandomized) {
     bg_error_set = false;
     ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->ClearTrace();
     ROCKSDB_NAMESPACE::SyncPoint::GetInstance()->EnableProcessing();
-    std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_));
+    std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_, env_));
     auto sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
 
     Options options = CurrentOptions();
@@ -1760,7 +1760,7 @@ TEST_F(DBSSTTest, GetTotalSstFilesSizeVersionsFilesShared) {
 // This test if blob files are recorded by SST File Manager when Compaction job
 // creates/delete them and in case of AtomicFlush.
 TEST_F(DBSSTTest, DBWithSFMForBlobFilesAtomicFlush) {
-  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_));
+  std::shared_ptr<SstFileManager> sst_file_manager(NewSstFileManager(env_, env_));
   auto sfm = static_cast<SstFileManagerImpl*>(sst_file_manager.get());
   Options options = CurrentOptions();
   options.sst_file_manager = sst_file_manager;

@@ -25,6 +25,7 @@ class SstFileManagerImpl : public SstFileManager {
  public:
   explicit SstFileManagerImpl(const std::shared_ptr<SystemClock>& clock,
                               const std::shared_ptr<FileSystem>& fs,
+                              const std::shared_ptr<FileSystem>& base_fs,
                               const std::shared_ptr<Logger>& logger,
                               int64_t rate_bytes_per_sec,
                               double max_trash_db_ratio,
@@ -149,6 +150,7 @@ class SstFileManagerImpl : public SstFileManager {
 
   std::shared_ptr<SystemClock> clock_;
   std::shared_ptr<FileSystem> fs_;
+  std::shared_ptr<FileSystem> base_fs_;
   std::shared_ptr<Logger> logger_;
   // Mutex to protect tracked_files_, total_files_size_
   port::Mutex mu_;

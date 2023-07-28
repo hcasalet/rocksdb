@@ -366,7 +366,7 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
         /*force_bg=*/false,
         /*force_fg=*/(type == kWalFile) ? !wal_in_db_path_ : false);
   } else {
-    file_deletion_status = env_->DeleteFile(fname);
+    file_deletion_status = base_env_->DeleteFile(fname);
   }
   TEST_SYNC_POINT_CALLBACK("DBImpl::DeleteObsoleteFileImpl:AfterDeletion",
                            &file_deletion_status);
@@ -375,7 +375,7 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
                     "[JOB %d] Delete %s type=%d #%" PRIu64 " -- %s\n", job_id,
                     fname.c_str(), type, number,
                     file_deletion_status.ToString().c_str());
-  } else if (env_->FileExists(fname).IsNotFound()) {
+  } else if (base_env_->FileExists(fname).IsNotFound()) {
     ROCKS_LOG_INFO(
         immutable_db_options_.info_log,
         "[JOB %d] Tried to delete a non-existing file %s type=%d #%" PRIu64

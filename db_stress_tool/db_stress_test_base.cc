@@ -3318,7 +3318,7 @@ void InitializeOptionsGeneral(
       FLAGS_sst_file_manager_bytes_per_truncate > 0) {
     Status status;
     options.sst_file_manager.reset(NewSstFileManager(
-        db_stress_env, options.info_log, "" /* trash_dir */,
+        db_stress_env, db_stress_env, options.info_log, "" /* trash_dir */,
         static_cast<int64_t>(FLAGS_sst_file_manager_bytes_per_sec),
         true /* delete_existing_trash */, &status,
         0.25 /* max_trash_db_ratio */,

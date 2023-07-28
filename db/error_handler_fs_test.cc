@@ -1520,7 +1520,7 @@ TEST_F(DBErrorHandlingFSTest, MultiDBCompactionError) {
   std::vector<Options> options;
   std::vector<std::shared_ptr<ErrorHandlerFSListener>> listener;
   std::vector<DB*> db;
-  std::shared_ptr<SstFileManager> sfm(NewSstFileManager(def_env));
+  std::shared_ptr<SstFileManager> sfm(NewSstFileManager(def_env, def_env));
   int kNumDbInstances = 3;
   Random rnd(301);
 
@@ -1627,7 +1627,7 @@ TEST_F(DBErrorHandlingFSTest, MultiDBVariousErrors) {
   std::vector<Options> options;
   std::vector<std::shared_ptr<ErrorHandlerFSListener>> listener;
   std::vector<DB*> db;
-  std::shared_ptr<SstFileManager> sfm(NewSstFileManager(def_env));
+  std::shared_ptr<SstFileManager> sfm(NewSstFileManager(def_env, def_env));
   int kNumDbInstances = 3;
   Random rnd(301);
 

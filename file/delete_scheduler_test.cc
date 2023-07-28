@@ -96,6 +96,7 @@ class DeleteSchedulerTest : public testing::Test {
     // 25%)
     sst_file_mgr_.reset(
         new SstFileManagerImpl(env_->GetSystemClock(), env_->GetFileSystem(),
+                               env_->GetFileSystem(),
                                nullptr, rate_bytes_per_sec_,
                                /* max_trash_db_ratio= */ 1.1, 128 * 1024));
     delete_scheduler_ = sst_file_mgr_->delete_scheduler();

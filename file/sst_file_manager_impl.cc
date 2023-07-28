@@ -21,16 +21,18 @@ namespace ROCKSDB_NAMESPACE {
 SstFileManagerImpl::SstFileManagerImpl(
     const std::shared_ptr<SystemClock>& clock,
     const std::shared_ptr<FileSystem>& fs,
+    const std::shared_ptr<FileSystem>& base_fs,
     const std::shared_ptr<Logger>& logger, int64_t rate_bytes_per_sec,
     double max_trash_db_ratio, uint64_t bytes_max_delete_chunk)
     : clock_(clock),
       fs_(fs),
+      base_fs_(base_fs),
       logger_(logger),
       total_files_size_(0),
       compaction_buffer_size_(0),
       cur_compactions_reserved_size_(0),
       max_allowed_space_(0),
-      delete_scheduler_(clock_.get(), fs_.get(), rate_bytes_per_sec,
+      delete_scheduler_(clock_.get(), fs_.get(), base_fs_.get(), rate_bytes_per_sec,
                         logger.get(), this, max_trash_db_ratio,
                         bytes_max_delete_chunk),
       cv_(&mu_),
@@ -450,19 +452,21 @@ void SstFileManagerImpl::OnDeleteFileImpl(const std::string& file_path) {
   tracked_files_.erase(tracked_file);
 }
 
-SstFileManager* NewSstFileManager(Env* env, std::shared_ptr<Logger> info_log,
+SstFileManager* NewSstFileManager(Env* env, Env* base_env, std::shared_ptr<Logger> info_log,
                                   std::string trash_dir,
                                   int64_t rate_bytes_per_sec,
                                   bool delete_existing_trash, Status* status,
                                   double max_trash_db_ratio,
                                   uint64_t bytes_max_delete_chunk) {
   const auto& fs = env->GetFileSystem();
-  return NewSstFileManager(env, fs, info_log, trash_dir, rate_bytes_per_sec,
+  const auto& base_fs = base_env->GetFileSystem();
+  return NewSstFileManager(env, fs, base_fs, info_log, trash_dir, rate_bytes_per_sec,
                            delete_existing_trash, status, max_trash_db_ratio,
                            bytes_max_delete_chunk);
 }
 
 SstFileManager* NewSstFileManager(Env* env, std::shared_ptr<FileSystem> fs,
+                                  std::shared_ptr<FileSystem> base_fs,
                                   std::shared_ptr<Logger> info_log,
                                   const std::string& trash_dir,
                                   int64_t rate_bytes_per_sec,
@@ -471,7 +475,7 @@ SstFileManager* NewSstFileManager(Env* env, std::shared_ptr<FileSystem> fs,
                                   uint64_t bytes_max_delete_chunk) {
   const auto& clock = env->GetSystemClock();
   SstFileManagerImpl* res =
-      new SstFileManagerImpl(clock, fs, info_log, rate_bytes_per_sec,
+      new SstFileManagerImpl(clock, fs, base_fs, info_log, rate_bytes_per_sec,
                              max_trash_db_ratio, bytes_max_delete_chunk);
 
   // trash_dir is deprecated and not needed anymore, but if user passed it

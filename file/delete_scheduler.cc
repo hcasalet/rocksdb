@@ -21,13 +21,14 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-DeleteScheduler::DeleteScheduler(SystemClock* clock, FileSystem* fs,
+DeleteScheduler::DeleteScheduler(SystemClock* clock, FileSystem* fs, FileSystem* base_fs,
                                  int64_t rate_bytes_per_sec, Logger* info_log,
                                  SstFileManagerImpl* sst_file_manager,
                                  double max_trash_db_ratio,
                                  uint64_t bytes_max_delete_chunk)
     : clock_(clock),
       fs_(fs),
+      base_fs_(base_fs),
       total_trash_size_(0),
       rate_bytes_per_sec_(rate_bytes_per_sec),
       pending_files_(0),
@@ -67,7 +68,12 @@ Status DeleteScheduler::DeleteFile(const std::string& file_path,
     // Rate limiting is disabled or trash size makes up more than
     // max_trash_db_ratio_ (default 25%) of the total DB size
     TEST_SYNC_POINT("DeleteScheduler::DeleteFile");
-    Status s = fs_->DeleteFile(file_path, IOOptions(), nullptr);
+    Status s;
+    if (file_path.find(".sst") != std::string::npos) {
+      s = fs_->DeleteFile(file_path, IOOptions(), nullptr);
+    } else {
+      s = base_fs_->DeleteFile(file_path, IOOptions(), nullptr);
+    }
     if (s.ok()) {
       s = sst_file_manager_->OnDeleteFile(file_path);
       ROCKS_LOG_INFO(info_log_,
@@ -90,7 +96,12 @@ Status DeleteScheduler::DeleteFile(const std::string& file_path,
   if (!s.ok()) {
     ROCKS_LOG_ERROR(info_log_, "Failed to mark %s as trash -- %s",
                     file_path.c_str(), s.ToString().c_str());
-    s = fs_->DeleteFile(file_path, IOOptions(), nullptr);
+    if (file_path.find(".sst") != std::string::npos) {
+      s = fs_->DeleteFile(file_path, IOOptions(), nullptr);
+    } else {
+      s = base_fs_->DeleteFile(file_path, IOOptions(), nullptr);
+    }
+    
     if (s.ok()) {
       s = sst_file_manager_->OnDeleteFile(file_path);
       ROCKS_LOG_INFO(info_log_, "Deleted file %s immediately",

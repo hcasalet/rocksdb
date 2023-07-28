@@ -119,6 +119,7 @@ class SstFileManager {
 //    directly recover them without checking.
 extern SstFileManager* NewSstFileManager(
     Env* env, std::shared_ptr<FileSystem> fs,
+    std::shared_ptr<FileSystem> base_fs,
     std::shared_ptr<Logger> info_log = nullptr,
     const std::string& trash_dir = "", int64_t rate_bytes_per_sec = 0,
     bool delete_existing_trash = true, Status* status = nullptr,
@@ -128,7 +129,7 @@ extern SstFileManager* NewSstFileManager(
 // Same as above, but takes a pointer to a legacy Env object, instead of
 // Env and FileSystem objects
 extern SstFileManager* NewSstFileManager(
-    Env* env, std::shared_ptr<Logger> info_log = nullptr,
+    Env* env, Env* base_env, std::shared_ptr<Logger> info_log = nullptr,
     std::string trash_dir = "", int64_t rate_bytes_per_sec = 0,
     bool delete_existing_trash = true, Status* status = nullptr,
     double max_trash_db_ratio = 0.25,

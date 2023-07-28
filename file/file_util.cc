@@ -121,7 +121,11 @@ Status DeleteDBFile(const ImmutableDBOptions* db_options,
   if (sfm && !force_fg) {
     return sfm->ScheduleFileDeletion(fname, dir_to_sync, force_bg);
   } else {
-    return db_options->env->DeleteFile(fname);
+    if (fname.find(".sst") != std::string::npos) {
+      return db_options->env->DeleteFile(fname);
+    } else {
+      return db_options->base_env->DeleteFile(fname);
+    } 
   }
 }
 

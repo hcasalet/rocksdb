@@ -193,7 +193,7 @@ DBOptions SanitizeOptions(const std::string& dbname, const DBOptions& src,
   // and facilitating recovery from out of space errors.
   if (result.sst_file_manager.get() == nullptr) {
     std::shared_ptr<SstFileManager> sst_file_manager(
-        NewSstFileManager(result.env, result.info_log));
+        NewSstFileManager(result.env, result.base_env, result.info_log));
     result.sst_file_manager = sst_file_manager;
   }
 

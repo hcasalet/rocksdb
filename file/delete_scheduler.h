@@ -32,7 +32,7 @@ class SystemClock;
 // case DeleteScheduler will delete files immediately.
 class DeleteScheduler {
  public:
-  DeleteScheduler(SystemClock* clock, FileSystem* fs,
+  DeleteScheduler(SystemClock* clock, FileSystem* fs, FileSystem* base_fs,
                   int64_t rate_bytes_per_sec, Logger* info_log,
                   SstFileManagerImpl* sst_file_manager,
                   double max_trash_db_ratio, uint64_t bytes_max_delete_chunk);
@@ -99,6 +99,7 @@ class DeleteScheduler {
 
   SystemClock* clock_;
   FileSystem* fs_;
+  FileSystem* base_fs_;
 
   // total size of trash files
   std::atomic<uint64_t> total_trash_size_;
