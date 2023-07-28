@@ -162,7 +162,9 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
       env_(initial_db_options_.env),
       io_tracer_(std::make_shared<IOTracer>()),
       immutable_db_options_(initial_db_options_),
+      base_env_(immutable_db_options_.base_env),
       fs_(immutable_db_options_.fs, io_tracer_),
+      base_fs_(immutable_db_options_.base_fs, io_tracer_),
       mutable_db_options_(initial_db_options_),
       stats_(immutable_db_options_.stats),
 #ifdef COERCE_CONTEXT_SWITCH
@@ -4610,7 +4612,7 @@ Status DBImpl::GetDbIdentityFromIdentityFile(std::string* identity) const {
   std::string idfilename = IdentityFileName(dbname_);
   const FileOptions soptions;
 
-  Status s = ReadFileToString(fs_.get(), idfilename, identity);
+  Status s = ReadFileToString(base_fs_.get(), idfilename, identity);
   if (!s.ok()) {
     return s;
   }
@@ -4907,7 +4909,7 @@ Status DBImpl::WriteOptionsFile(bool need_mutex_lock,
   std::string file_name =
       TempOptionsFileName(GetName(), versions_->NewFileNumber());
   Status s = PersistRocksDBOptions(db_options, cf_names, cf_opts, file_name,
-                                   fs_.get());
+                                   base_fs_.get());
 
   if (s.ok()) {
     s = RenameTempFileToOptionsFile(file_name);

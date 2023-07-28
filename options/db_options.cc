@@ -684,6 +684,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       verify_sst_unique_id_in_manifest(
           options.verify_sst_unique_id_in_manifest),
       env(options.env),
+      base_env(options.base_env),
       rate_limiter(options.rate_limiter),
       sst_file_manager(options.sst_file_manager),
       info_log(options.info_log),
@@ -757,6 +758,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       compaction_service(options.compaction_service),
       enforce_single_del_contracts(options.enforce_single_del_contracts) {
   fs = env->GetFileSystem();
+  base_fs = base_env->GetFileSystem();
   clock = env->GetSystemClock().get();
   logger = info_log.get();
   stats = statistics.get();

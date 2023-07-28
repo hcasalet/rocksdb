@@ -40,8 +40,8 @@ class WalManager {
              const bool seq_per_batch = false)
       : db_options_(db_options),
         file_options_(file_options),
-        env_(db_options.env),
-        fs_(db_options.fs, io_tracer),
+        env_(db_options.base_env),
+        fs_(db_options.base_fs, io_tracer),
         purge_wal_files_last_run_(0),
         seq_per_batch_(seq_per_batch),
         wal_dir_(db_options_.GetWalDir()),

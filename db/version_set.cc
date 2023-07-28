@@ -5012,6 +5012,8 @@ VersionSet::VersionSet(const std::string& dbname,
       env_(_db_options->env),
       fs_(_db_options->fs, io_tracer),
       clock_(_db_options->clock),
+      base_env_(_db_options->base_env),
+      base_fs_(_db_options->base_fs, io_tracer),
       dbname_(dbname),
       db_options_(_db_options),
       next_file_number_(2),
@@ -5359,7 +5361,7 @@ Status VersionSet::ProcessManifestWrites(
       std::string descriptor_fname =
           DescriptorFileName(dbname_, pending_manifest_file_number_);
       std::unique_ptr<FSWritableFile> descriptor_file;
-      io_s = NewWritableFile(fs_.get(), descriptor_fname, &descriptor_file,
+      io_s = NewWritableFile(base_fs_.get(), descriptor_fname, &descriptor_file,
                              opt_file_opts);
       if (io_s.ok()) {
         descriptor_file->SetPreallocationBlockSize(
@@ -5440,7 +5442,7 @@ Status VersionSet::ProcessManifestWrites(
       assert(manifest_io_status.ok());
     }
     if (s.ok() && new_descriptor_log) {
-      io_s = SetCurrentFile(fs_.get(), dbname_, pending_manifest_file_number_,
+      io_s = SetCurrentFile(base_fs_.get(), dbname_, pending_manifest_file_number_,
                             dir_contains_current_file);
       if (!io_s.ok()) {
         s = io_s;
@@ -5835,7 +5837,7 @@ Status VersionSet::Recover(
   // Read "CURRENT" file, which contains a pointer to the current manifest
   // file
   std::string manifest_path;
-  Status s = GetCurrentManifestPath(dbname_, fs_.get(), &manifest_path,
+  Status s = GetCurrentManifestPath(dbname_, base_fs_.get(), &manifest_path,
                                     &manifest_file_number_);
   if (!s.ok()) {
     return s;
@@ -5847,8 +5849,8 @@ Status VersionSet::Recover(
   std::unique_ptr<SequentialFileReader> manifest_file_reader;
   {
     std::unique_ptr<FSSequentialFile> manifest_file;
-    s = fs_->NewSequentialFile(manifest_path,
-                               fs_->OptimizeForManifestRead(file_options_),
+    s = base_fs_->NewSequentialFile(manifest_path,
+                               base_fs_->OptimizeForManifestRead(file_options_),
                                &manifest_file, nullptr);
     if (!s.ok()) {
       return s;

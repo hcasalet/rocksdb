@@ -301,7 +301,7 @@ Status DBImpl::ValidateOptions(const DBOptions& db_options) {
 
 Status DBImpl::NewDB(std::vector<std::string>* new_filenames) {
   VersionEdit new_db;
-  Status s = SetIdentityFile(env_, dbname_);
+  Status s = SetIdentityFile(base_env_, dbname_);
   if (!s.ok()) {
     return s;
   }
@@ -317,12 +317,12 @@ Status DBImpl::NewDB(std::vector<std::string>* new_filenames) {
   ROCKS_LOG_INFO(immutable_db_options_.info_log, "Creating manifest 1 \n");
   const std::string manifest = DescriptorFileName(dbname_, 1);
   {
-    if (fs_->FileExists(manifest, IOOptions(), nullptr).ok()) {
-      fs_->DeleteFile(manifest, IOOptions(), nullptr).PermitUncheckedError();
+    if (base_fs_->FileExists(manifest, IOOptions(), nullptr).ok()) {
+      base_fs_->DeleteFile(manifest, IOOptions(), nullptr).PermitUncheckedError();
     }
     std::unique_ptr<FSWritableFile> file;
-    FileOptions file_options = fs_->OptimizeForManifestWrite(file_options_);
-    s = NewWritableFile(fs_.get(), manifest, &file, file_options);
+    FileOptions file_options = base_fs_->OptimizeForManifestWrite(file_options_);
+    s = NewWritableFile(base_fs_.get(), manifest, &file, file_options);
     if (!s.ok()) {
       return s;
     }
@@ -344,13 +344,13 @@ Status DBImpl::NewDB(std::vector<std::string>* new_filenames) {
   }
   if (s.ok()) {
     // Make "CURRENT" file that points to the new manifest file.
-    s = SetCurrentFile(fs_.get(), dbname_, 1, directories_.GetDbDir());
+    s = SetCurrentFile(base_fs_.get(), dbname_, 1, directories_.GetDbDir());
     if (new_filenames) {
       new_filenames->emplace_back(
           manifest.substr(manifest.find_last_of("/\\") + 1));
     }
   } else {
-    fs_->DeleteFile(manifest, IOOptions(), nullptr).PermitUncheckedError();
+    base_fs_->DeleteFile(manifest, IOOptions(), nullptr).PermitUncheckedError();
   }
   return s;
 }
@@ -372,15 +372,15 @@ IOStatus DBImpl::CreateAndNewDirectory(
   return fs->NewDirectory(dirname, IOOptions(), directory, nullptr);
 }
 
-IOStatus Directories::SetDirectories(FileSystem* fs, const std::string& dbname,
+IOStatus Directories::SetDirectories(FileSystem* fs, FileSystem* base_fs, const std::string& dbname,
                                      const std::string& wal_dir,
                                      const std::vector<DbPath>& data_paths) {
-  IOStatus io_s = DBImpl::CreateAndNewDirectory(fs, dbname, &db_dir_);
+  IOStatus io_s = DBImpl::CreateAndNewDirectory(base_fs, dbname, &db_dir_);
   if (!io_s.ok()) {
     return io_s;
   }
   if (!wal_dir.empty() && dbname != wal_dir) {
-    io_s = DBImpl::CreateAndNewDirectory(fs, wal_dir, &wal_dir_);
+    io_s = DBImpl::CreateAndNewDirectory(base_fs, wal_dir, &wal_dir_);
     if (!io_s.ok()) {
       return io_s;
     }
@@ -414,14 +414,14 @@ Status DBImpl::Recover(
   assert(db_lock_ == nullptr);
   std::vector<std::string> files_in_dbname;
   if (!read_only) {
-    Status s = directories_.SetDirectories(fs_.get(), dbname_,
+    Status s = directories_.SetDirectories(fs_.get(), base_fs_.get(), dbname_,
                                            immutable_db_options_.wal_dir,
                                            immutable_db_options_.db_paths);
     if (!s.ok()) {
       return s;
     }
 
-    s = env_->LockFile(LockFileName(dbname_), &db_lock_);
+    s = base_env_->LockFile(LockFileName(dbname_), &db_lock_);
     if (!s.ok()) {
       return s;
     }
@@ -433,7 +433,11 @@ Status DBImpl::Recover(
     // can be found, a new db will be created.
     std::string manifest_path;
     if (!immutable_db_options_.best_efforts_recovery) {
-      s = env_->FileExists(current_fname);
+      if (current_fname.find("sst") == std::string::npos) {
+        s = base_env_->FileExists(current_fname);
+      } else {
+        s = env_->FileExists(current_fname);
+      }
     } else {
       s = Status::NotFound();
       IOOptions io_opts;
@@ -488,12 +492,12 @@ Status DBImpl::Recover(
           immutable_db_options_.use_direct_io_for_flush_and_compaction;
       const std::string& fname =
           manifest_path.empty() ? current_fname : manifest_path;
-      s = fs_->NewRandomAccessFile(fname, customized_fs, &idfile, nullptr);
+      s = base_fs_->NewRandomAccessFile(fname, customized_fs, &idfile, nullptr);
       if (!s.ok()) {
         std::string error_str = s.ToString();
         // Check if unsupported Direct I/O is the root cause
         customized_fs.use_direct_reads = false;
-        s = fs_->NewRandomAccessFile(fname, customized_fs, &idfile, nullptr);
+        s = base_fs_->NewRandomAccessFile(fname, customized_fs, &idfile, nullptr);
         if (s.ok()) {
           return Status::InvalidArgument(
               "Direct I/O is not supported by the specified DB.");
@@ -507,7 +511,7 @@ Status DBImpl::Recover(
     assert(files_in_dbname.empty());
     IOOptions io_opts;
     io_opts.do_not_recurse = true;
-    Status s = immutable_db_options_.fs->GetChildren(
+    Status s = immutable_db_options_.base_fs->GetChildren(
         dbname_, io_opts, &files_in_dbname, /*IODebugContext*=*/nullptr);
     if (s.IsNotFound()) {
       return Status::InvalidArgument(dbname_,
@@ -1146,8 +1150,8 @@ Status DBImpl::RecoverLogFiles(const std::vector<uint64_t>& wal_numbers,
     std::unique_ptr<SequentialFileReader> file_reader;
     {
       std::unique_ptr<FSSequentialFile> file;
-      status = fs_->NewSequentialFile(
-          fname, fs_->OptimizeForLogRead(file_options_), &file, nullptr);
+      status = base_fs_->NewSequentialFile(
+          fname, base_fs_->OptimizeForLogRead(file_options_), &file, nullptr);
       if (!status.ok()) {
         MaybeIgnoreError(&status);
         if (!status.ok()) {
@@ -1516,7 +1520,7 @@ Status DBImpl::GetLogSizeAndMaybeTruncate(uint64_t wal_number, bool truncate,
   TEST_SYNC_POINT_CALLBACK("DBImpl::GetLogSizeAndMaybeTruncate:0", /*arg=*/&s);
   if (s.ok() && truncate) {
     std::unique_ptr<FSWritableFile> last_log;
-    Status truncate_status = fs_->ReopenWritableFile(
+    Status truncate_status = base_fs_->ReopenWritableFile(
         fname,
         fs_->OptimizeForLogWrite(
             file_options_,
@@ -1843,7 +1847,7 @@ IOStatus DBImpl::CreateWAL(uint64_t log_file_num, uint64_t recycle_log_number,
   DBOptions db_options =
       BuildDBOptions(immutable_db_options_, mutable_db_options_);
   FileOptions opt_file_options =
-      fs_->OptimizeForLogWrite(file_options_, db_options);
+      base_fs_->OptimizeForLogWrite(file_options_, db_options);
   std::string wal_dir = immutable_db_options_.GetWalDir();
   std::string log_fname = LogFileName(wal_dir, log_file_num);
 
@@ -1854,10 +1858,10 @@ IOStatus DBImpl::CreateWAL(uint64_t log_file_num, uint64_t recycle_log_number,
     std::string old_log_fname = LogFileName(wal_dir, recycle_log_number);
     TEST_SYNC_POINT("DBImpl::CreateWAL:BeforeReuseWritableFile1");
     TEST_SYNC_POINT("DBImpl::CreateWAL:BeforeReuseWritableFile2");
-    io_s = fs_->ReuseWritableFile(log_fname, old_log_fname, opt_file_options,
+    io_s = base_fs_->ReuseWritableFile(log_fname, old_log_fname, opt_file_options,
                                   &lfile, /*dbg=*/nullptr);
   } else {
-    io_s = NewWritableFile(fs_.get(), log_fname, &lfile, opt_file_options);
+    io_s = NewWritableFile(base_fs_.get(), log_fname, &lfile, opt_file_options);
   }
 
   if (io_s.ok()) {

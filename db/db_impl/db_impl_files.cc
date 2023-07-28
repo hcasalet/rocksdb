@@ -923,7 +923,7 @@ Status DBImpl::SetupDBId(bool read_only, RecoveryContext* recovery_ctx) {
   // Check for the IDENTITY file and create it if not there or
   // broken or not matching manifest
   std::string db_id_in_file;
-  s = fs_->FileExists(IdentityFileName(dbname_), IOOptions(), nullptr);
+  s = base_fs_->FileExists(IdentityFileName(dbname_), IOOptions(), nullptr);
   if (s.ok()) {
     s = GetDbIdentityFromIdentityFile(&db_id_in_file);
     if (s.ok() && !db_id_in_file.empty()) {
@@ -951,7 +951,7 @@ Status DBImpl::SetupDBId(bool read_only, RecoveryContext* recovery_ctx) {
   }
   // Persist it to IDENTITY file if allowed
   if (!read_only) {
-    s = SetIdentityFile(env_, dbname_, db_id_);
+    s = SetIdentityFile(base_env_, dbname_, db_id_);
   }
   return s;
 }

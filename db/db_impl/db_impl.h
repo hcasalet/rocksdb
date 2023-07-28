@@ -86,7 +86,7 @@ struct MemTableInfo;
 // Class to maintain directories for all database paths other than main one.
 class Directories {
  public:
-  IOStatus SetDirectories(FileSystem* fs, const std::string& dbname,
+  IOStatus SetDirectories(FileSystem* fs, FileSystem* base_fs, const std::string& dbname,
                           const std::string& wal_dir,
                           const std::vector<DbPath>& data_paths);
 
@@ -1274,7 +1274,9 @@ class DBImpl : public DB {
   Env* const env_;
   std::shared_ptr<IOTracer> io_tracer_;
   const ImmutableDBOptions immutable_db_options_;
+  Env* const base_env_;
   FileSystemPtr fs_;
+  FileSystemPtr base_fs_;
   MutableDBOptions mutable_db_options_;
   Statistics* stats_;
   std::unordered_map<std::string, RecoveredTransaction*>

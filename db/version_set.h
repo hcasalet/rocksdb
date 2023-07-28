@@ -1587,6 +1587,8 @@ class VersionSet {
   Env* const env_;
   FileSystemPtr const fs_;
   SystemClock* const clock_;
+  Env* const base_env_;
+  FileSystemPtr const base_fs_;
   const std::string dbname_;
   std::string db_id_;
   const ImmutableDBOptions* const db_options_;
