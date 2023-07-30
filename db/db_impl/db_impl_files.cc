@@ -206,6 +206,11 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
       std::vector<std::string> files;
       Status s = immutable_db_options_.fs->GetChildren(
           path, io_opts, &files, /*IODebugContext*=*/nullptr);
+      std::vector<std::string> basefiles;
+      s = immutable_db_options_.base_fs->GetChildren(
+          path, io_opts, &basefiles, /*IODebugContext*=*/nullptr);
+      files.insert(files.end(), basefiles.begin(), basefiles.end());
+      
       s.PermitUncheckedError();  // TODO: What should we do on error?
       for (const std::string& file : files) {
         uint64_t number;
