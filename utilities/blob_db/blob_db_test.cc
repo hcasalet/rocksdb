@@ -761,7 +761,7 @@ TEST_F(BlobDBTest, MultipleWriters) {
 TEST_F(BlobDBTest, SstFileManager) {
   // run the same test for Get(), MultiGet() and Iterator each.
   std::shared_ptr<SstFileManager> sst_file_manager(
-      NewSstFileManager(mock_env_.get()));
+      NewSstFileManager(mock_env_.get(), mock_env_.get()));
   sst_file_manager->SetDeleteRateBytesPerSecond(1);
   SstFileManagerImpl *sfm =
       static_cast<SstFileManagerImpl *>(sst_file_manager.get());
@@ -819,7 +819,7 @@ TEST_F(BlobDBTest, SstFileManagerRestart) {
 
   // run the same test for Get(), MultiGet() and Iterator each.
   std::shared_ptr<SstFileManager> sst_file_manager(
-      NewSstFileManager(mock_env_.get()));
+      NewSstFileManager(mock_env_.get(), mock_env_.get()));
   sst_file_manager->SetDeleteRateBytesPerSecond(1);
   SstFileManagerImpl *sfm =
       static_cast<SstFileManagerImpl *>(sst_file_manager.get());
