@@ -3897,6 +3897,8 @@ const std::string& DBImpl::GetName() const { return dbname_; }
 
 Env* DBImpl::GetEnv() const { return env_; }
 
+Env* DBImpl::GetBaseEnv() const { return base_env_; }
+
 FileSystem* DB::GetFileSystem() const {
   const auto& fs = GetEnv()->GetFileSystem();
   return fs.get();
@@ -3904,6 +3906,10 @@ FileSystem* DB::GetFileSystem() const {
 
 FileSystem* DBImpl::GetFileSystem() const {
   return immutable_db_options_.fs.get();
+}
+
+FileSystem* DBImpl::GetBaseFileSystem() const {
+  return immutable_db_options_.base_fs.get();
 }
 
 SystemClock* DBImpl::GetSystemClock() const {
@@ -4996,13 +5002,13 @@ Status DBImpl::RenameTempFileToOptionsFile(const std::string& file_name) {
   std::string options_file_name =
       OptionsFileName(GetName(), options_file_number);
   uint64_t options_file_size = 0;
-  s = GetEnv()->GetFileSize(file_name, &options_file_size);
+  s = GetBaseEnv()->GetFileSize(file_name, &options_file_size);
   if (s.ok()) {
     // Retry if the file name happen to conflict with an existing one.
-    s = GetEnv()->RenameFile(file_name, options_file_name);
+    s = GetBaseEnv()->RenameFile(file_name, options_file_name);
     std::unique_ptr<FSDirectory> dir_obj;
     if (s.ok()) {
-      s = fs_->NewDirectory(GetName(), IOOptions(), &dir_obj, nullptr);
+      s = base_fs_->NewDirectory(GetName(), IOOptions(), &dir_obj, nullptr);
     }
     if (s.ok()) {
       s = dir_obj->FsyncWithDirOptions(IOOptions(), nullptr,

@@ -44,6 +44,9 @@ DBOptions SanitizeOptions(const std::string& dbname, const DBOptions& src,
 
   if (result.env == nullptr) {
     result.env = Env::Default();
+  }
+
+  if (result.base_env == nullptr) {
     result.base_env = Env::Default();
   }
 

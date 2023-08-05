@@ -421,7 +421,9 @@ class DBImpl : public DB {
       ColumnFamilyHandle* column_family) override;
   virtual const std::string& GetName() const override;
   virtual Env* GetEnv() const override;
+  virtual Env* GetBaseEnv() const;
   virtual FileSystem* GetFileSystem() const override;
+  virtual FileSystem* GetBaseFileSystem() const;
   using DB::GetOptions;
   virtual Options GetOptions(ColumnFamilyHandle* column_family) const override;
   using DB::GetDBOptions;
