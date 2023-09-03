@@ -557,6 +557,12 @@ struct AdvancedColumnFamilyOptions {
   // Number of levels for this database
   int num_levels = 7;
 
+  // Allows data format transformation while doing compaction
+  bool transform_while_compacting = false;
+
+  // Number of columns for this database
+  int num_columns = 1;
+
   // Soft limit on number of level-0 files. We start slowing down writes at this
   // point. A value <0 means that no writing slow down will be triggered by
   // number of files in level-0.

@@ -351,6 +351,12 @@ class DB {
   virtual Status CreateColumnFamily(const ColumnFamilyOptions& options,
                                     const std::string& column_family_name,
                                     ColumnFamilyHandle** handle);
+  
+  // Create a column family and other column families on lsm level 1 and
+  // above for this column family to compact the data into
+  virtual Status CreateColumnFamilyAndItsCompactingCFs(const ColumnFamilyOptions& cf_options,
+                                    const std::string& column_family,
+                                    ColumnFamilyHandle** handle); 
 
   // Bulk create column families with the same column family options.
   // Return the handles of the column families through the argument handles.

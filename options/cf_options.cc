@@ -364,6 +364,10 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {offsetof(struct MutableCFOptions, memtable_whole_key_filtering),
           OptionType::kBoolean, OptionVerificationType::kNormal,
           OptionTypeFlags::kMutable}},
+        {"transform_while_compacting",
+         {offsetof(struct MutableCFOptions, transform_while_compacting),
+          OptionType::kBoolean, OptionVerificationType::kNormal,
+          OptionTypeFlags::kMutable}},  
         {"min_partial_merge_operands",
          {0, OptionType::kUInt32T, OptionVerificationType::kDeprecated,
           OptionTypeFlags::kMutable}},
@@ -624,6 +628,9 @@ static std::unordered_map<std::string, OptionTypeInfo>
         {"num_levels",
          {offsetof(struct ImmutableCFOptions, num_levels), OptionType::kInt,
           OptionVerificationType::kNormal, OptionTypeFlags::kNone}},
+        {"num_columns",
+         {offsetof(struct ImmutableCFOptions, num_columns), OptionType::kInt,
+          OptionVerificationType::kNormal, OptionTypeFlags::kNone}},  
         {"bloom_locality",
          {offsetof(struct ImmutableCFOptions, bloom_locality),
           OptionType::kUInt32T, OptionVerificationType::kNormal,
@@ -939,6 +946,7 @@ ImmutableCFOptions::ImmutableCFOptions(const ColumnFamilyOptions& cf_options)
       level_compaction_dynamic_file_size(
           cf_options.level_compaction_dynamic_file_size),
       num_levels(cf_options.num_levels),
+      num_columns(cf_options.num_columns),
       optimize_filters_for_hits(cf_options.optimize_filters_for_hits),
       force_consistency_checks(cf_options.force_consistency_checks),
       preclude_last_level_data_seconds(
@@ -1044,6 +1052,8 @@ void MutableCFOptions::Dump(Logger* log) const {
                  memtable_prefix_bloom_size_ratio);
   ROCKS_LOG_INFO(log, "              memtable_whole_key_filtering: %d",
                  memtable_whole_key_filtering);
+  ROCKS_LOG_INFO(log, "                transform_while_compacting: %d",
+                 transform_while_compacting);
   ROCKS_LOG_INFO(log,
                  "                  memtable_huge_page_size: %" ROCKSDB_PRIszt,
                  memtable_huge_page_size);
