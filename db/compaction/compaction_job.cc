@@ -1299,6 +1299,9 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       RecordCompactionIOStats();
     }
 
+    data::Row rows;
+    rows.ParseFromString(c_iter->value().data());
+
     // Add current compaction_iterator key to target compaction output, if the
     // output file needs to be close or open, it will call the `open_file_func`
     // and `close_file_func`.

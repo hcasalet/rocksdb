@@ -1103,13 +1103,16 @@ set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
 configure_file(util/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
+target_include_directories(${ROCKSDB_STATIC_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto)
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
-  ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+  proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES})
 
+set(ROCKSDB_BUILD_SHARED OFF)
 if(ROCKSDB_BUILD_SHARED)
   add_library(${ROCKSDB_SHARED_LIB} SHARED ${SOURCES} ${BUILD_VERSION_CC})
+  target_include_directories(${ROCKSDB_SHARED_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto)
   target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE
-    ${THIRDPARTY_LIBS} ${SYSTEM_LIBS})
+    proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES})
 
   if(WIN32)
     set_target_properties(${ROCKSDB_SHARED_LIB} PROPERTIES
@@ -1137,12 +1140,13 @@ endif()
 
 option(WITH_JNI "build with JNI" OFF)
 # Tests are excluded from Release builds
-CMAKE_DEPENDENT_OPTION(WITH_TESTS "build with tests" ON
+CMAKE_DEPENDENT_OPTION(WITH_TESTS "build with tests" OFF
   "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
-option(WITH_BENCHMARK_TOOLS "build with benchmarks" ON)
-option(WITH_CORE_TOOLS "build with ldb and sst_dump" ON)
-option(WITH_TOOLS "build with tools" ON)
+option(WITH_BENCHMARK_TOOLS "build with benchmarks" OFF)
+option(WITH_CORE_TOOLS "build with ldb and sst_dump" OFF)
+option(WITH_TOOLS "build with tools" OFF)
 
+set(WITH_TESTS OFF)
 if(WITH_TESTS OR WITH_BENCHMARK_TOOLS OR WITH_TOOLS OR WITH_JNI OR JNI)
   include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/third-party/gtest-1.8.1/fused-src)
 endif()
@@ -1197,32 +1201,32 @@ if(NOT WIN32 OR ROCKSDB_INSTALL_ON_WINDOWS)
 
   install(DIRECTORY "${PROJECT_SOURCE_DIR}/cmake/modules" COMPONENT devel DESTINATION ${package_config_destination})
 
-  install(
-    TARGETS ${ROCKSDB_STATIC_LIB}
-    EXPORT RocksDBTargets
-    COMPONENT devel
-    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-  )
+  #install(
+  #  TARGETS ${ROCKSDB_STATIC_LIB}
+  #  EXPORT RocksDBTargets
+  #  COMPONENT devel
+  #  ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  #  INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+  #)
 
-  if(ROCKSDB_BUILD_SHARED)
-    install(
-      TARGETS ${ROCKSDB_SHARED_LIB}
-      EXPORT RocksDBTargets
-      COMPONENT runtime
-      ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-      RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
-      LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-      INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-    )
-  endif()
+  #if(ROCKSDB_BUILD_SHARED)
+  #  install(
+  #    TARGETS ${ROCKSDB_SHARED_LIB}
+  #    EXPORT RocksDBTargets
+  #    COMPONENT runtime
+  #    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  #    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  #    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+  #    INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+  #  )
+  #endif()
 
-  install(
-    EXPORT RocksDBTargets
-    COMPONENT devel
-    DESTINATION ${package_config_destination}
-    NAMESPACE RocksDB::
-  )
+  #install(
+  #  EXPORT RocksDBTargets
+  #  COMPONENT devel
+  #  DESTINATION ${package_config_destination}
+  #  NAMESPACE RocksDB::
+  #)
 
   install(
     FILES
@@ -1242,6 +1246,7 @@ endif()
 
 option(WITH_ALL_TESTS "Build all test, rather than a small subset" ON)
 
+message(WITH_TEST="${WITH_TESTS}")
 if(WITH_TESTS OR WITH_BENCHMARK_TOOLS)
   add_subdirectory(third-party/gtest-1.8.1/fused-src/gtest)
   add_library(testharness STATIC
@@ -1471,7 +1476,7 @@ if(WITH_TESTS)
   add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
   set(TESTUTILLIB testutillib${ARTIFACT_SUFFIX})
   add_library(${TESTUTILLIB} STATIC ${TESTUTIL_SOURCE})
-  target_link_libraries(${TESTUTILLIB} ${ROCKSDB_LIB} ${FOLLY_LIBS})
+  target_link_libraries(${TESTUTILLIB} ${ROCKSDB_LIB} ${FOLLY_LIBS} proto)
   if(MSVC)
     set_target_properties(${TESTUTILLIB} PROPERTIES COMPILE_FLAGS "/Fd${CMAKE_CFG_INTDIR}/testutillib${ARTIFACT_SUFFIX}.pdb")
   endif()
@@ -1490,7 +1495,7 @@ if(WITH_TESTS)
         EXCLUDE_FROM_DEFAULT_BUILD_RELWITHDEBINFO 1
         OUTPUT_NAME ${exename}${ARTIFACT_SUFFIX}
       )
-      target_link_libraries(${exename}${ARTIFACT_SUFFIX} testutillib${ARTIFACT_SUFFIX} testharness gtest ${THIRDPARTY_LIBS} ${ROCKSDB_LIB})
+      target_link_libraries(${exename}${ARTIFACT_SUFFIX} testutillib${ARTIFACT_SUFFIX} testharness gtest ${THIRDPARTY_LIBS} ${ROCKSDB_LIB} proto)
       if(NOT "${exename}" MATCHES "db_sanity_test")
         gtest_discover_tests(${exename} DISCOVERY_TIMEOUT 120)
         add_dependencies(check ${exename}${ARTIFACT_SUFFIX})
@@ -1511,7 +1516,7 @@ if(WITH_TESTS)
   if(ROCKSDB_LIB_FOR_C)
     set(C_TESTS db/c_test.c)
     add_executable(c_test db/c_test.c)
-    target_link_libraries(c_test ${ROCKSDB_LIB_FOR_C} testharness)
+    target_link_libraries(c_test ${ROCKSDB_LIB_FOR_C} testharness proto)
     add_test(NAME c_test COMMAND c_test${ARTIFACT_SUFFIX})
     add_dependencies(check c_test)
   endif()
@@ -1523,23 +1528,23 @@ if(WITH_BENCHMARK_TOOLS)
     tools/db_bench.cc
     tools/db_bench_tool.cc)
   target_link_libraries(db_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${THIRDPARTY_LIBS})
+    ${ROCKSDB_LIB} ${THIRDPARTY_LIBS} proto)
 
   add_executable(cache_bench${ARTIFACT_SUFFIX}
     cache/cache_bench.cc
     cache/cache_bench_tool.cc)
   target_link_libraries(cache_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
 
   add_executable(memtablerep_bench${ARTIFACT_SUFFIX}
     memtable/memtablerep_bench.cc)
   target_link_libraries(memtablerep_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
 
   add_executable(range_del_aggregator_bench${ARTIFACT_SUFFIX}
     db/range_del_aggregator_bench.cc)
   target_link_libraries(range_del_aggregator_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
 
   add_executable(table_reader_bench${ARTIFACT_SUFFIX}
     table/table_reader_bench.cc)
@@ -1549,12 +1554,12 @@ if(WITH_BENCHMARK_TOOLS)
   add_executable(filter_bench${ARTIFACT_SUFFIX}
     util/filter_bench.cc)
   target_link_libraries(filter_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
 
   add_executable(hash_table_bench${ARTIFACT_SUFFIX}
     utilities/persistent_cache/hash_table_bench.cc)
   target_link_libraries(hash_table_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
 endif()
 
 option(WITH_TRACE_TOOLS "build with trace tools" ON)
@@ -1562,12 +1567,12 @@ if(WITH_TRACE_TOOLS)
   add_executable(block_cache_trace_analyzer${ARTIFACT_SUFFIX}
     tools/block_cache_analyzer/block_cache_trace_analyzer_tool.cc)
   target_link_libraries(block_cache_trace_analyzer${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
 
   add_executable(trace_analyzer${ARTIFACT_SUFFIX}
     tools/trace_analyzer.cc)
   target_link_libraries(trace_analyzer${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS})
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
 
 endif()
 
