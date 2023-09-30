@@ -317,7 +317,7 @@ class DBImpl : public DB {
   virtual Status CreateColumnFamilyAndItsCompactingCFs(
                                   const ColumnFamilyOptions& cf_options,
                                   const std::string& column_family,
-                                  ColumnFamilyHandle** handle) override;
+                                  std::map<std::string, ColumnFamilyHandle*>& handles) override;
   virtual Status CreateColumnFamilies(
       const ColumnFamilyOptions& cf_options,
       const std::vector<std::string>& column_family_names,

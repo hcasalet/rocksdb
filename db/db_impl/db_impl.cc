@@ -3102,12 +3102,15 @@ Status DBImpl::CreateColumnFamily(const ColumnFamilyOptions& cf_options,
 
 Status DBImpl::CreateColumnFamilyAndItsCompactingCFs(const ColumnFamilyOptions& cf_options,
                                   const std::string& column_family,
-                                  ColumnFamilyHandle** handle) {
-  assert(handle != nullptr);
+                                  std::map<std::string, ColumnFamilyHandle*>& handles) {
   bool write_options = false;
-  Status s = CreateColumnFamilyImpl(cf_options, column_family, handle);
+  ColumnFamilyHandle* handle;
+  Status s = CreateColumnFamilyImpl(cf_options, column_family, &handle);
   if (s.ok()) {
     write_options = true;
+    handles.insert({column_family, handle});
+  } else {
+    return s;
   }
   int splits = 1;
   for (int i = 1; i < cf_options.num_levels; i++) {
@@ -3125,6 +3128,7 @@ Status DBImpl::CreateColumnFamilyAndItsCompactingCFs(const ColumnFamilyOptions& 
       if (!s.ok()) {
         break;
       }
+      handles.insert({cf_name, hdl});
     }
   }
 
@@ -4712,7 +4716,7 @@ Status DB::CreateColumnFamily(const ColumnFamilyOptions& /*cf_options*/,
 
 Status DB::CreateColumnFamilyAndItsCompactingCFs(const ColumnFamilyOptions& /*cf_options*/,
                               const std::string& /*column_family_name*/,
-                              ColumnFamilyHandle** /*handle*/) {
+                              std::map<std::string, ColumnFamilyHandle*>& /*handles*/) {
   return Status::NotSupported("");
 }
 

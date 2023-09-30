@@ -356,7 +356,7 @@ class DB {
   // above for this column family to compact the data into
   virtual Status CreateColumnFamilyAndItsCompactingCFs(const ColumnFamilyOptions& cf_options,
                                     const std::string& column_family,
-                                    ColumnFamilyHandle** handle); 
+                                    std::map<std::string, ColumnFamilyHandle*>& handles);
 
   // Bulk create column families with the same column family options.
   // Return the handles of the column families through the argument handles.
