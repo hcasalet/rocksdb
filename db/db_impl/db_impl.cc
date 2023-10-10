@@ -3100,48 +3100,6 @@ Status DBImpl::CreateColumnFamily(const ColumnFamilyOptions& cf_options,
   return s;
 }
 
-Status DBImpl::CreateColumnFamilyAndItsCompactingCFs(const ColumnFamilyOptions& cf_options,
-                                  const std::string& column_family,
-                                  std::map<std::string, ColumnFamilyHandle*>& handles) {
-  bool write_options = false;
-  ColumnFamilyHandle* handle;
-  Status s = CreateColumnFamilyImpl(cf_options, column_family, &handle);
-  if (s.ok()) {
-    write_options = true;
-    handles.insert({column_family, handle});
-  } else {
-    return s;
-  }
-  int splits = 1;
-  for (int i = 1; i < cf_options.num_levels; i++) {
-    if (splits < cf_options.num_columns) {
-      splits *= 2;
-      if (i == cf_options.num_levels-1 || splits > cf_options.num_columns) {
-        splits = cf_options.num_columns;
-      }
-    }
-
-    for (int j = 0; j < splits; j++) {
-      ColumnFamilyHandle* hdl;
-      std::string cf_name = column_family + "_sys_cf_" + std::to_string(i) + "_" + std::to_string(j);
-      s = CreateColumnFamilyImpl(cf_options, cf_name, &hdl);
-      if (!s.ok()) {
-        break;
-      }
-      handles.insert({cf_name, hdl});
-    }
-  }
-
-  if (write_options) {
-    Status persist_options_status = WriteOptionsFile(
-        true /*need_mutex_lock*/, true /*need_enter_write_thread*/);
-    if (s.ok() && !persist_options_status.ok()) {
-      s = persist_options_status;
-    }
-  }
-  return s;
-}
-
 Status DBImpl::CreateColumnFamilies(
     const ColumnFamilyOptions& cf_options,
     const std::vector<std::string>& column_family_names,

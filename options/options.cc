@@ -61,6 +61,7 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       arena_block_size(options.arena_block_size),
       compression_per_level(options.compression_per_level),
       num_levels(options.num_levels),
+      compacting_column_family_num_levels(options.compacting_column_family_num_levels),
       transform_while_compacting(options.transform_while_compacting),
       num_columns(options.num_columns),
       level0_slowdown_writes_trigger(options.level0_slowdown_writes_trigger),
@@ -189,6 +190,8 @@ void ColumnFamilyOptions::Dump(Logger* log) const {
                          ? "nullptr"
                          : memtable_insert_with_hint_prefix_extractor->Name());
     ROCKS_LOG_HEADER(log, "            Options.num_levels: %d", num_levels);
+    ROCKS_LOG_HEADER(log, "            Options.compacting_column_family_num_levels: %d", compacting_column_family_num_levels);
+    ROCKS_LOG_HEADER(log, "            Options.compacting_level_within_column_family_group: %d", compacting_level_within_column_family_group);
     ROCKS_LOG_HEADER(log, "           Options.num_columns: %d", num_columns);
     ROCKS_LOG_HEADER(log, "             Options.transform_while_compacting: %d",
                      transform_while_compacting);
@@ -632,8 +635,9 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeForPointLookup(
   return this;
 }
 
-ColumnFamilyOptions* ColumnFamilyOptions::AllowTransformationWhileCompacting(int levels, int numColumns) {
-  num_levels = levels; 
+ColumnFamilyOptions* ColumnFamilyOptions::AllowTransformationWhileCompacting(int levels, int cf_levels, int numColumns) {
+  num_levels = levels;
+  compacting_column_family_num_levels = cf_levels;
   transform_while_compacting = true;
   num_columns = numColumns;
   return this;
@@ -647,7 +651,7 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeLevelStyleCompaction(
   // this means we'll use 50% extra memory in the worst case, but will reduce
   // write stalls.
   max_write_buffer_number = 6;
-  // start flushing L0->L1 as soon as possible. each file on level0 is
+  // start flushing L0->L1  as soon as possible. each file on level0 is
   // (memtable_memory_budget / 2). This will flush level 0 when it's bigger than
   // memtable_memory_budget.
   level0_file_num_compaction_trigger = 2;
@@ -685,6 +689,12 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeUniversalStyleCompaction(
   // universal style compaction
   compaction_style = kCompactionStyleUniversal;
   compaction_options_universal.compression_size_percent = 80;
+  return this;
+}
+
+ColumnFamilyOptions* ColumnFamilyOptions::SetCompactingLevelWithinColumnFamilyGroup(
+  int compacting_level) {
+  compacting_level_within_column_family_group = compacting_level;
   return this;
 }
 

@@ -68,6 +68,10 @@ struct ImmutableCFOptions {
 
   int num_levels;
 
+  int compacting_column_family_num_levels;
+
+  int compacting_level_within_column_family_group;
+
   int num_columns;
 
   bool optimize_filters_for_hits;

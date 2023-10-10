@@ -85,7 +85,11 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   ColumnFamilyOptions* OptimizeForPointLookup(uint64_t block_cache_size_mb);
 
   // Transform data format while doing compaction
-  ColumnFamilyOptions* AllowTransformationWhileCompacting(int levels, int numColumns);
+  ColumnFamilyOptions* AllowTransformationWhileCompacting(int levels, 
+                            int column_family_group_levels, int numColumns);
+
+  // Set compacting level for a column family inside the compacting group
+  ColumnFamilyOptions* SetCompactingLevelWithinColumnFamilyGroup(int compacting_level);
 
   // Default values for some parameters in ColumnFamilyOptions are not
   // optimized for heavy workloads and big datasets, which means you might
