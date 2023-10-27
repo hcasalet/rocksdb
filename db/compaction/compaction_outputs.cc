@@ -11,7 +11,6 @@
 #include "db/compaction/compaction_outputs.h"
 
 #include "db/builder.h"
-#include "columns.pb.h"
 
 namespace ROCKSDB_NAMESPACE {
 
