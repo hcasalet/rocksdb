@@ -173,6 +173,7 @@ CompactionJob::CompactionJob(
       blob_output_directory_(blob_output_directory),
       db_mutex_(db_mutex),
       db_error_handler_(db_error_handler),
+      transformer_(db_options.transformer.get()),
       existing_snapshots_(std::move(existing_snapshots)),
       earliest_write_conflict_snapshot_(earliest_write_conflict_snapshot),
       snapshot_checker_(snapshot_checker),
@@ -1246,7 +1247,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       job_context_ ? job_context_->GetJobSnapshotSequence()
                    : kMaxSequenceNumber;
 
-  auto c_iter = std::make_unique<CompactionIterator>(
+  auto c_iter = std::make_shared<CompactionIterator>(
       input, cfd->user_comparator(), &merge, versions_->LastSequence(),
       &existing_snapshots_, earliest_write_conflict_snapshot_, job_snapshot_seq,
       snapshot_checker_, env_, ShouldReportDetailedTime(env_, stats_),
@@ -1256,6 +1257,8 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       sub_compact->compaction, compaction_filter, shutting_down_,
       db_options_.info_log, full_history_ts_low, preserve_time_min_seqno_,
       preclude_last_level_min_seqno_);
+  std::vector<CompactionIterator*> c_iters;
+  transformer_->Transform(c_iter.get(), c_iters, 2);
   c_iter->SeekToFirst();
 
   // Assign range delete aggregator to the target output level, which makes sure

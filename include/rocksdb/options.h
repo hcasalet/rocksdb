@@ -56,6 +56,7 @@ class Statistics;
 class InternalKeyComparator;
 class WalFilter;
 class FileSystem;
+class Transformer;
 
 struct Options;
 struct DbPath;
@@ -545,6 +546,9 @@ struct DBOptions {
   // Default: Env::Default()
   Env* env = Env::Default();
   Env* base_env = Env::Default();
+
+  // Transformer transforms compaction outputs into the desired format
+  std::shared_ptr<Transformer> transformer = nullptr;
 
   // Limits internal file read/write bandwidth:
   //

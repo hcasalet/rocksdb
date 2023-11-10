@@ -7,7 +7,7 @@ class Cracker : public Transformer
   public:
     Cracker() {};
   private:
-    void do_transformation(std::string input, std::vector<std::string> outputs, int splits) override;
+    void Transform(CompactionIterator* input_iter, std::vector<CompactionIterator*> output_iters, int splits) override;
 };
 
 }

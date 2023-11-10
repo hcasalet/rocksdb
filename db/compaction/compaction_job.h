@@ -42,6 +42,7 @@
 #include "rocksdb/memtablerep.h"
 #include "rocksdb/transaction_log.h"
 #include "table/scoped_arena_iterator.h"
+#include "transformer/transformer.h"
 #include "util/autovector.h"
 #include "util/stop_watch.h"
 #include "util/thread_local.h"
@@ -294,6 +295,7 @@ class CompactionJob {
   FSDirectory* blob_output_directory_;
   InstrumentedMutex* db_mutex_;
   ErrorHandler* db_error_handler_;
+  Transformer* transformer_;
   // If there were two snapshots with seq numbers s1 and
   // s2 and s1 < s2, and if we find two instances of a key k1 then lies
   // entirely within s1 and s2, then the earlier version of k1 can be safely

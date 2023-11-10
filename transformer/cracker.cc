@@ -2,7 +2,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Cracker::do_transformation(std::string input, std::vector<std::string> outputs, int splits)
+void Cracker::Transform(CompactionIterator* input_iter, std::vector<CompactionIterator*> output_iters, int splits)
 {
     
 }

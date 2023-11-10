@@ -1,20 +1,22 @@
+#pragma once
+
 #include <string>
 #include <vector>
 
+#include "db/compaction/compaction_iterator.h"
+
 namespace ROCKSDB_NAMESPACE {
 
-class Transformer
-{
-  public:
-    // non-virtual interface
-    void transform(std::string input, std::vector<std::string> outputs, int splits) {
-      do_transformation(input, outputs, splits); } // equivalent to "this->do_transformation()"
+class Transformer {
+ public:
+  virtual ~Transformer() {}
 
-    // enable deletion of a Derived* through a Base*
-    virtual ~Transformer() = default;    
-  private:
-    // pure virtual implementation
-    virtual void do_transformation(std::string input, std::vector<std::string> outputs, int splits) = 0;
+  // non-virtual interface
+  virtual void Transform(CompactionIterator* input_iter, std::vector<CompactionIterator*> output_iters, int splits) = 0;
 };
+
+// Create a new Transformer that can be shared among multiple RocksDB instances
+extern Transformer* NewTransformer(
+    const std::string& conversion_type = "");
 
 }
