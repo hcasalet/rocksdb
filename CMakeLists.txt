@@ -842,6 +842,7 @@ set(SOURCES
         trace_replay/trace_record_result.cc
         trace_replay/trace_record.cc
         trace_replay/trace_replay.cc
+        transformer/cracker.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc
