@@ -3,7 +3,8 @@
 #include <string>
 #include <vector>
 
-#include "db/compaction/compaction_iterator.h"
+#include "table/internal_iterator.h"
+#include "util/vector_iterator.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -12,7 +13,7 @@ class Transformer {
   virtual ~Transformer() {}
 
   // non-virtual interface
-  virtual void Transform(CompactionIterator* input_iter, std::vector<CompactionIterator*> output_iters, int splits) = 0;
+  virtual void Transform(InternalIterator* input_iter, std::vector<VectorIterator*> output_iters, int splits) = 0;
 };
 
 // Create a new Transformer that can be shared among multiple RocksDB instances

@@ -688,6 +688,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       rate_limiter(options.rate_limiter),
       sst_file_manager(options.sst_file_manager),
       info_log(options.info_log),
+      transformer(options.transformer),
       info_log_level(options.info_log_level),
       max_file_opening_threads(options.max_file_opening_threads),
       statistics(options.statistics),
