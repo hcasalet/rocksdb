@@ -22,7 +22,8 @@
 
 namespace ROCKSDB_NAMESPACE {
 CompactionIterator::CompactionIterator(
-    InternalIterator* input, const Comparator* cmp, MergeHelper* merge_helper,
+    InternalIterator* input, std::vector<ColumnFamilyData*> output_cfs,
+    const Comparator* cmp, MergeHelper* merge_helper,
     SequenceNumber last_sequence, std::vector<SequenceNumber>* snapshots,
     SequenceNumber earliest_write_conflict_snapshot,
     SequenceNumber job_snapshot, const SnapshotChecker* snapshot_checker,
@@ -38,7 +39,7 @@ CompactionIterator::CompactionIterator(
     const SequenceNumber preserve_time_min_seqno,
     const SequenceNumber preclude_last_level_min_seqno)
     : CompactionIterator(
-          input, cmp, merge_helper, last_sequence, snapshots,
+          input, output_cfs, cmp, merge_helper, last_sequence, snapshots,
           earliest_write_conflict_snapshot, job_snapshot, snapshot_checker, env,
           report_detailed_time, expect_valid_internal_key, range_del_agg,
           blob_file_builder, allow_data_in_errors, enforce_single_del_contracts,
@@ -49,7 +50,8 @@ CompactionIterator::CompactionIterator(
           preserve_time_min_seqno, preclude_last_level_min_seqno) {}
 
 CompactionIterator::CompactionIterator(
-    InternalIterator* input, const Comparator* cmp, MergeHelper* merge_helper,
+    InternalIterator* input, std::vector<ColumnFamilyData*> output_cfs,
+    const Comparator* cmp, MergeHelper* merge_helper,
     SequenceNumber /*last_sequence*/, std::vector<SequenceNumber>* snapshots,
     SequenceNumber earliest_write_conflict_snapshot,
     SequenceNumber job_snapshot, const SnapshotChecker* snapshot_checker,
@@ -67,6 +69,7 @@ CompactionIterator::CompactionIterator(
     const SequenceNumber preclude_last_level_min_seqno)
     : input_(input, cmp,
              !compaction || compaction->DoesInputReferenceBlobFiles()),
+      output_cfs_(output_cfs),
       cmp_(cmp),
       merge_helper_(merge_helper),
       snapshots_(snapshots),

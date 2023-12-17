@@ -81,6 +81,8 @@ class SubcompactionState {
   // it returns both the last level outputs and penultimate level outputs.
   OutputIterator GetOutputs() const;
 
+  OutputIterator GetOutputs(int pos) const;
+
   // Assign range dels aggregator, for each range_del, it can only be assigned
   // to one output level, for per_key_placement, it's going to be the
   // penultimate level.
@@ -123,13 +125,14 @@ class SubcompactionState {
   SubcompactionState& operator=(const SubcompactionState&) = delete;
 
   SubcompactionState(Compaction* c, const std::optional<Slice> _start,
-                     const std::optional<Slice> _end, uint32_t _sub_job_id)
+                     const std::optional<Slice> _end, uint32_t _sub_job_id,
+                     int splits)
       : compaction(c),
         start(_start),
         end(_end),
         sub_job_id(_sub_job_id),
-        compaction_outputs_(c, /*is_penultimate_level=*/false),
-        penultimate_level_outputs_(c, /*is_penultimate_level=*/true) {
+        compaction_outputs_(c, /*is_penultimate_level=*/false, splits),
+        penultimate_level_outputs_(c, /*is_penultimate_level=*/true, splits) {
     assert(compaction != nullptr);
     // Set output split key (used for RoundRobin feature) only for normal
     // compaction_outputs, output to penultimate_level feature doesn't support
@@ -169,11 +172,16 @@ class SubcompactionState {
 
   // Add all the new files from this compaction to version_edit
   void AddOutputsEdit(VersionEdit* out_edit) const {
-    for (const auto& file : penultimate_level_outputs_.outputs_) {
-      out_edit->AddFile(compaction->GetPenultimateLevel(), file.meta);
+    for (size_t i = 0; i < penultimate_level_outputs_.outputs_.size(); i++) {
+      for (const auto& file : penultimate_level_outputs_.outputs_[i]) {
+        out_edit->AddFile(compaction->GetPenultimateLevel(), file.meta);
+      }
     }
-    for (const auto& file : compaction_outputs_.outputs_) {
-      out_edit->AddFile(compaction->output_level(), file.meta);
+
+    for (size_t i = 0; i < compaction_outputs_.outputs_.size(); i++) {
+      for (const auto& file : compaction_outputs_.outputs_[i]) {
+        out_edit->AddFile(compaction->output_level(), file.meta);
+      }
     }
   }
 
@@ -190,7 +198,8 @@ class SubcompactionState {
   // Add compaction_iterator key/value to the `Current` output group.
   Status AddToOutput(const CompactionIterator& iter,
                      const CompactionFileOpenFunc& open_file_func,
-                     const CompactionFileCloseFunc& close_file_func);
+                     const CompactionFileCloseFunc& close_file_func,
+                     Transformer* transformer);
 
   // Close all compaction output files, both output_to_penultimate_level outputs
   // and normal outputs.

@@ -24,8 +24,15 @@ void SubcompactionState::AggregateCompactionStats(
 }
 
 OutputIterator SubcompactionState::GetOutputs() const {
-  return OutputIterator(penultimate_level_outputs_.outputs_,
-                        compaction_outputs_.outputs_);
+  return OutputIterator(penultimate_level_outputs_.outputs_[0],
+                        compaction_outputs_.outputs_[0]);
+}
+
+OutputIterator SubcompactionState::GetOutputs(int pos) const {
+  assert(penultimate_level_outputs_.outputs_.size() > size_t(pos));
+  assert(compaction_outputs_.outputs_.size() > size_t(pos));
+  return OutputIterator(penultimate_level_outputs_.outputs_[pos],
+                        compaction_outputs_.outputs_[pos]);
 }
 
 void SubcompactionState::Cleanup(Cache* cache) {
@@ -91,7 +98,8 @@ Slice SubcompactionState::LargestUserKey() const {
 Status SubcompactionState::AddToOutput(
     const CompactionIterator& iter,
     const CompactionFileOpenFunc& open_file_func,
-    const CompactionFileCloseFunc& close_file_func) {
+    const CompactionFileCloseFunc& close_file_func,
+    Transformer* transformer) {
   // update target output first
   is_current_penultimate_level_ = iter.output_to_penultimate_level();
   current_outputs_ = is_current_penultimate_level_ ? &penultimate_level_outputs_
@@ -100,7 +108,7 @@ Status SubcompactionState::AddToOutput(
     has_penultimate_level_outputs_ = true;
   }
 
-  return Current().AddToOutput(iter, open_file_func, close_file_func);
+  return Current().AddToOutput(iter, open_file_func, close_file_func, transformer);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

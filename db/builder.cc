@@ -194,8 +194,9 @@ Status BuildTable(
             : nullptr);
 
     const std::atomic<bool> kManualCompactionCanceledFalse{false};
+    std::vector<ColumnFamilyData*> cfs;
     CompactionIterator c_iter(
-        iter, ucmp, &merge, kMaxSequenceNumber, &snapshots,
+        iter, cfs, ucmp, &merge, kMaxSequenceNumber, &snapshots,
         earliest_write_conflict_snapshot, job_snapshot, snapshot_checker, env,
         ShouldReportDetailedTime(env, ioptions.stats),
         true /* internal key corruption is not ok */, range_del_agg.get(),

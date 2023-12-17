@@ -218,6 +218,8 @@ class CompactionJob {
 
   CompactionJobStats* compaction_job_stats_;
 
+  Transformer* transformer_;
+
  private:
   friend class CompactionJobTestBase;
 
@@ -262,6 +264,7 @@ class CompactionJob {
                                     const Slice* comp_end_user_key);
   Status InstallCompactionResults(const MutableCFOptions& mutable_cf_options);
   Status OpenCompactionOutputFile(SubcompactionState* sub_compact,
+                                  std::vector<ColumnFamilyData*> output_cfds,
                                   CompactionOutputs& outputs);
   void UpdateCompactionJobStats(
       const InternalStats::CompactionStats& stats) const;
@@ -295,7 +298,7 @@ class CompactionJob {
   FSDirectory* blob_output_directory_;
   InstrumentedMutex* db_mutex_;
   ErrorHandler* db_error_handler_;
-  Transformer* transformer_;
+  
   // If there were two snapshots with seq numbers s1 and
   // s2 and s1 < s2, and if we find two instances of a key k1 then lies
   // entirely within s1 and s2, then the earlier version of k1 can be safely

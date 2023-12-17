@@ -261,6 +261,17 @@ Status CompactionServiceCompactionJob::Run() {
       c->column_family_data()->CalculateSSTWriteHint(c->output_level());
   bottommost_level_ = c->bottommost_level();
 
+  int splits = 1;
+  ColumnFamilyData* cfd = c->column_family_data();
+  if (transformer_ != nullptr) {
+    int compacting_levels = cfd->ioptions()->compacting_column_family_num_levels;
+    if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-2)) != std::string::npos) {
+      splits = cfd->ioptions()->num_columns;
+    } else if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-1)) == std::string::npos) {
+      splits = 2;
+    }
+  }
+
   Slice begin = compaction_input_.begin;
   Slice end = compaction_input_.end;
   compact_->sub_compact_states.emplace_back(
@@ -269,7 +280,7 @@ Status CompactionServiceCompactionJob::Run() {
                                   : std::optional<Slice>(),
       compaction_input_.has_end ? std::optional<Slice>(end)
                                 : std::optional<Slice>(),
-      /*sub_job_id*/ 0);
+      /*sub_job_id*/ 0, splits);
 
   log_buffer_->FlushBufferToLog();
   LogCompaction();

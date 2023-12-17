@@ -19,6 +19,7 @@
 #include "db/snapshot_checker.h"
 #include "options/cf_options.h"
 #include "rocksdb/compaction_filter.h"
+#include "util/vector_iterator.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -190,7 +191,8 @@ class CompactionIterator {
   };
 
   CompactionIterator(
-      InternalIterator* input, const Comparator* cmp, MergeHelper* merge_helper,
+      InternalIterator* input, std::vector<ColumnFamilyData*> output_cfs,
+      const Comparator* cmp, MergeHelper* merge_helper,
       SequenceNumber last_sequence, std::vector<SequenceNumber>* snapshots,
       SequenceNumber earliest_write_conflict_snapshot,
       SequenceNumber job_snapshot, const SnapshotChecker* snapshot_checker,
@@ -209,7 +211,8 @@ class CompactionIterator {
 
   // Constructor with custom CompactionProxy, used for tests.
   CompactionIterator(
-      InternalIterator* input, const Comparator* cmp, MergeHelper* merge_helper,
+      InternalIterator* input, std::vector<ColumnFamilyData*> output_cfs,
+      const Comparator* cmp, MergeHelper* merge_helper,
       SequenceNumber last_sequence, std::vector<SequenceNumber>* snapshots,
       SequenceNumber earliest_write_conflict_snapshot,
       SequenceNumber job_snapshot, const SnapshotChecker* snapshot_checker,
@@ -245,6 +248,7 @@ class CompactionIterator {
   const Slice& value() const { return value_; }
   const Status& status() const { return status_; }
   const ParsedInternalKey& ikey() const { return ikey_; }
+  const std::vector<ColumnFamilyData*> output_cfds() const { return output_cfs_; }
   inline bool Valid() const { return validity_info_.IsValid(); }
   const Slice& user_key() const {
     if (UNLIKELY(is_range_del_)) {
@@ -340,6 +344,7 @@ class CompactionIterator {
   CreatePrefetchBufferCollectionIfNeeded(const CompactionProxy* compaction);
 
   SequenceIterWrapper input_;
+  std::vector<ColumnFamilyData*> output_cfs_;
   const Comparator* cmp_;
   MergeHelper* merge_helper_;
   const std::vector<SequenceNumber>* snapshots_;

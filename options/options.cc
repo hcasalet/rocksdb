@@ -190,11 +190,10 @@ void ColumnFamilyOptions::Dump(Logger* log) const {
                          ? "nullptr"
                          : memtable_insert_with_hint_prefix_extractor->Name());
     ROCKS_LOG_HEADER(log, "            Options.num_levels: %d", num_levels);
+    ROCKS_LOG_HEADER(log, "            Options.transform_while_compacting: %d", transform_while_compacting);
     ROCKS_LOG_HEADER(log, "            Options.compacting_column_family_num_levels: %d", compacting_column_family_num_levels);
     ROCKS_LOG_HEADER(log, "            Options.compacting_level_within_column_family_group: %d", compacting_level_within_column_family_group);
     ROCKS_LOG_HEADER(log, "           Options.num_columns: %d", num_columns);
-    ROCKS_LOG_HEADER(log, "             Options.transform_while_compacting: %d",
-                     transform_while_compacting);
     ROCKS_LOG_HEADER(log, "       Options.min_write_buffer_number_to_merge: %d",
                      min_write_buffer_number_to_merge);
     ROCKS_LOG_HEADER(log, "    Options.max_write_buffer_number_to_maintain: %d",

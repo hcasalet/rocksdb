@@ -45,22 +45,24 @@ class CompactionOutputs {
   CompactionOutputs() = delete;
 
   explicit CompactionOutputs(const Compaction* compaction,
-                             const bool is_penultimate_level);
+                             const bool is_penultimate_level,
+                             int splits);
 
   // Add generated output to the list
   void AddOutput(FileMetaData&& meta, const InternalKeyComparator& icmp,
-                 bool enable_order_check, bool enable_hash,
+                 bool enable_order_check, bool enable_hash, int position,
                  bool finished = false, uint64_t precalculated_hash = 0) {
-    outputs_.emplace_back(std::move(meta), icmp, enable_order_check,
+    assert(outputs_.size() > size_t(position));
+    outputs_[position].emplace_back(std::move(meta), icmp, enable_order_check,
                           enable_hash, finished, precalculated_hash);
   }
 
   // Set new table builder for the current output
-  void NewBuilder(const TableBuilderOptions& tboptions);
+  void NewBuilder(const TableBuilderOptions& tboptions, int position);
 
   // Assign a new WritableFileWriter to the current output
-  void AssignFileWriter(WritableFileWriter* writer) {
-    file_writer_.reset(writer);
+  void AssignFileWriter(WritableFileWriter* writer, int position) {
+    file_writers_[position].reset(writer);
   }
 
   // TODO: Remove it when remote compaction support tiered compaction
@@ -116,23 +118,27 @@ class CompactionOutputs {
   }
 
   IOStatus WriterSyncClose(const Status& intput_status, SystemClock* clock,
-                           Statistics* statistics, bool use_fsync);
+                           Statistics* statistics, bool use_fsync, int position);
 
   TableProperties GetTableProperties() {
-    return builder_->GetTableProperties();
+    return builders_[0]->GetTableProperties();
+  }
+
+  size_t GetOutputsSize() {
+    return outputs_.size();
   }
 
   Slice SmallestUserKey() const {
-    if (!outputs_.empty() && outputs_[0].finished) {
-      return outputs_[0].meta.smallest.user_key();
+    if (!outputs_.empty() && !outputs_[0].empty() && outputs_[0][0].finished) {
+      return outputs_[0][0].meta.smallest.user_key();
     } else {
       return Slice{nullptr, 0};
     }
   }
 
   Slice LargestUserKey() const {
-    if (!outputs_.empty() && outputs_.back().finished) {
-      return outputs_.back().meta.largest.user_key();
+    if (!outputs_.empty() && !outputs_[0].empty() && outputs_[0].back().finished) {
+      return outputs_[0].back().meta.largest.user_key();
     } else {
       return Slice{nullptr, 0};
     }
@@ -140,9 +146,13 @@ class CompactionOutputs {
 
   // In case the last output file is empty, which doesn't need to keep.
   void RemoveLastEmptyOutput() {
-    if (!outputs_.empty() && !outputs_.back().meta.fd.file_size) {
-      // An error occurred, so ignore the last output.
-      outputs_.pop_back();
+    if (!outputs_.empty()) {
+      for (size_t i = 0; i < outputs_.size(); i++) {
+        // An error occurred, so ignore the last output.
+        if (!outputs_[i].empty() && !outputs_[i].back().meta.fd.file_size) {
+          outputs_[i].pop_back();
+        }
+      }
     }
   }
 
@@ -150,20 +160,22 @@ class CompactionOutputs {
   // entry and no range-dels), but file_size might not be 0, as it has SST
   // metadata.
   void RemoveLastOutput() {
-    assert(!outputs_.empty());
-    outputs_.pop_back();
+    for (size_t i = 0; i < outputs_.size(); i++) {
+      assert(!outputs_[i].empty());
+      outputs_[i].pop_back();
+    }
   }
 
-  bool HasBuilder() const { return builder_ != nullptr; }
+  bool HasBuilder() const { return !builders_.empty() && builders_[0] != nullptr; }
 
   FileMetaData* GetMetaData() { return &current_output().meta; }
 
-  bool HasOutput() const { return !outputs_.empty(); }
+  bool HasOutput() const { return !outputs_.empty() && !outputs_[0].empty(); }
 
-  uint64_t NumEntries() const { return builder_->NumEntries(); }
+  uint64_t NumEntries() const { return builders_[0]->NumEntries(); }
 
   void ResetBuilder() {
-    builder_.reset();
+    builders_[0].reset();
     current_output_file_size_ = 0;
   }
 
@@ -220,10 +232,14 @@ class CompactionOutputs {
   bool ShouldStopBefore(const CompactionIterator& c_iter);
 
   void Cleanup() {
-    if (builder_ != nullptr) {
+    if (!builders_.empty()) {
       // May happen if we get a shutdown call in the middle of compaction
-      builder_->Abandon();
-      builder_.reset();
+      for (size_t i = 0; i < builders_.size(); i++) {
+        if (builders_[i] != nullptr) {
+          builders_[i]->Abandon();
+          builders_[i].reset();
+        }
+      }
     }
   }
 
@@ -249,7 +265,8 @@ class CompactionOutputs {
   // close and open new compaction output with the functions provided.
   Status AddToOutput(const CompactionIterator& c_iter,
                      const CompactionFileOpenFunc& open_file_func,
-                     const CompactionFileCloseFunc& close_file_func);
+                     const CompactionFileCloseFunc& close_file_func,
+                     Transformer* transformer);
 
   // Close the current output. `open_file_func` is needed for creating new file
   // for range-dels only output file.
@@ -279,8 +296,14 @@ class CompactionOutputs {
   // run in parallel however it should be much rarer.
   // It's caller's responsibility to make sure it's not empty.
   Output& current_output() {
-    assert(!outputs_.empty());
-    return outputs_.back();
+    assert(!outputs_[0].empty());
+    return outputs_[0].back();
+  }
+
+  Output& current_output(int pos) {
+    assert(outputs_.size() > size_t(pos));
+    assert(!outputs_[pos].empty());
+    return outputs_[pos].back();
   }
 
   // Assign the range_del_agg to the target output level. There's only one
@@ -296,12 +319,12 @@ class CompactionOutputs {
   const Compaction* compaction_;
 
   // current output builder and writer
-  std::unique_ptr<TableBuilder> builder_;
-  std::unique_ptr<WritableFileWriter> file_writer_;
+  std::vector<std::unique_ptr<TableBuilder> > builders_;
+  std::vector<std::unique_ptr<WritableFileWriter> > file_writers_;
   uint64_t current_output_file_size_ = 0;
 
   // all the compaction outputs so far
-  std::vector<Output> outputs_;
+  std::vector<std::vector<Output> > outputs_;
 
   // BlobDB info
   std::vector<BlobFileAddition> blob_file_additions_;

@@ -555,7 +555,7 @@ struct AdvancedColumnFamilyOptions {
   std::vector<CompressionType> compression_per_level;
 
   // Number of levels for this database
-  int num_levels = 1;
+  int num_levels = 7;
 
   // Number of levels for the compacting column family group
   int compacting_column_family_num_levels = 7;

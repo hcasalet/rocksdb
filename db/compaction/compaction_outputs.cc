@@ -11,11 +11,13 @@
 #include "db/compaction/compaction_outputs.h"
 
 #include "db/builder.h"
+#include "transformer/transformer.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-void CompactionOutputs::NewBuilder(const TableBuilderOptions& tboptions) {
-  builder_.reset(NewTableBuilder(tboptions, file_writer_.get()));
+void CompactionOutputs::NewBuilder(const TableBuilderOptions& tboptions,
+                                   int position) {
+  builders_[position].reset(NewTableBuilder(tboptions, file_writers_[position].get()));
 }
 
 Status CompactionOutputs::Finish(const Status& intput_status,
@@ -27,30 +29,32 @@ Status CompactionOutputs::Finish(const Status& intput_status,
     std::string seqno_time_mapping_str;
     seqno_time_mapping.Encode(seqno_time_mapping_str, meta->fd.smallest_seqno,
                               meta->fd.largest_seqno, meta->file_creation_time);
-    builder_->SetSeqnoTimeTableProperties(seqno_time_mapping_str,
+    builders_[0]->SetSeqnoTimeTableProperties(seqno_time_mapping_str,
                                           meta->oldest_ancester_time);
-    s = builder_->Finish();
+    s = builders_[0]->Finish();
 
   } else {
-    builder_->Abandon();
+    builders_[0]->Abandon();
   }
-  Status io_s = builder_->io_status();
+  Status io_s = builders_[0]->io_status();
   if (s.ok()) {
     s = io_s;
   } else {
     io_s.PermitUncheckedError();
   }
-  const uint64_t current_bytes = builder_->FileSize();
+  const uint64_t current_bytes = builders_[0]->FileSize();
   if (s.ok()) {
     meta->fd.file_size = current_bytes;
-    meta->tail_size = builder_->GetTailSize();
-    meta->marked_for_compaction = builder_->NeedCompact();
+    meta->tail_size = builders_[0]->GetTailSize();
+    meta->marked_for_compaction = builders_[0]->NeedCompact();
     meta->user_defined_timestamps_persisted = static_cast<bool>(
-        builder_->GetTableProperties().user_defined_timestamps_persisted);
+        builders_[0]->GetTableProperties().user_defined_timestamps_persisted);
   }
   current_output().finished = true;
   stats_.bytes_written += current_bytes;
-  stats_.num_output_files = outputs_.size();
+  for (size_t i = 0; i < outputs_.size(); i++) {
+    stats_.num_output_files += outputs_[i].size();
+  }
 
   return s;
 }
@@ -58,23 +62,24 @@ Status CompactionOutputs::Finish(const Status& intput_status,
 IOStatus CompactionOutputs::WriterSyncClose(const Status& input_status,
                                             SystemClock* clock,
                                             Statistics* statistics,
-                                            bool use_fsync) {
+                                            bool use_fsync,
+                                            int position) {
   IOStatus io_s;
   if (input_status.ok()) {
     StopWatch sw(clock, statistics, COMPACTION_OUTFILE_SYNC_MICROS);
-    io_s = file_writer_->Sync(use_fsync);
+    io_s = file_writers_[position]->Sync(use_fsync);
   }
   if (input_status.ok() && io_s.ok()) {
-    io_s = file_writer_->Close();
+    io_s = file_writers_[position]->Close();
   }
 
   if (input_status.ok() && io_s.ok()) {
     FileMetaData* meta = GetMetaData();
-    meta->file_checksum = file_writer_->GetFileChecksum();
-    meta->file_checksum_func_name = file_writer_->GetFileChecksumFuncName();
+    meta->file_checksum = file_writers_[position]->GetFileChecksum();
+    meta->file_checksum_func_name = file_writers_[position]->GetFileChecksumFuncName();
   }
 
-  file_writer_.reset();
+  file_writers_[position].reset();
 
   return io_s;
 }
@@ -357,7 +362,8 @@ bool CompactionOutputs::ShouldStopBefore(const CompactionIterator& c_iter) {
 Status CompactionOutputs::AddToOutput(
     const CompactionIterator& c_iter,
     const CompactionFileOpenFunc& open_file_func,
-    const CompactionFileCloseFunc& close_file_func) {
+    const CompactionFileCloseFunc& close_file_func,
+    Transformer* transformer) {
   Status s;
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {
@@ -404,28 +410,55 @@ Status CompactionOutputs::AddToOutput(
     return s;
   }
 
-  assert(builder_ != nullptr);
+  assert(!builders_.empty() && builders_[0] != nullptr);
   const Slice& value = c_iter.value();
-  s = current_output().validator.Add(key, value);
-  if (!s.ok()) {
-    return s;
-  }
-  builder_->Add(key, value);
 
-  stats_.num_output_records++;
-  current_output_file_size_ = builder_->EstimatedFileSize();
-
-  if (blob_garbage_meter_) {
-    s = blob_garbage_meter_->ProcessOutFlow(key, value);
-  }
-
-  if (!s.ok()) {
-    return s;
-  }
-
+  // transform value
+  std::vector<std::string> output_values;
+  int output_cfds_size = static_cast<int>(c_iter.output_cfds().size());
   const ParsedInternalKey& ikey = c_iter.ikey();
-  s = current_output().meta.UpdateBoundaries(key, value, ikey.sequence,
+  if (output_cfds_size > 0) {
+    transformer->Transform(value.data(), &output_values, output_cfds_size);
+  
+    for (int i = 0; i < output_cfds_size; i++) {
+      s = current_output(i).validator.Add(key, Slice(output_values[i]));
+      if (!s.ok()) {
+        return s;
+      }
+      builders_[i]->Add(key, Slice(output_values[i]));
+    
+      stats_.num_output_records++;
+      current_output_file_size_ = builders_[i]->EstimatedFileSize();
+  
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_values[i]));
+      }
+      if (!s.ok()) {
+        return s;
+      }
+
+      s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
                                              ikey.type);
+    }
+  } else {
+    s = current_output().validator.Add(key, value);
+    if (!s.ok()) {
+      return s;
+    }
+    builders_[0]->Add(key, value);
+    stats_.num_output_records++;
+    current_output_file_size_ = builders_[0]->EstimatedFileSize();
+  
+    if (blob_garbage_meter_) {
+      s = blob_garbage_meter_->ProcessOutFlow(key, value);
+    }
+    if (!s.ok()) {
+      return s;
+    }
+
+    s = current_output().meta.UpdateBoundaries(key, value, ikey.sequence,
+                                             ikey.type);
+  }
 
   return s;
 }
@@ -478,7 +511,7 @@ Status CompactionOutputs::AddRangeDels(
   // [lower_bound, upper_bound] should be added to this file. File
   // boundaries (meta.smallest/largest) should be updated accordingly when
   // extended by range tombstones.
-  size_t output_size = outputs_.size();
+  size_t output_size = outputs_[0].size();
   if (output_size == 1) {
     // This is the first file in the subcompaction.
     //
@@ -705,7 +738,7 @@ Status CompactionOutputs::AddRangeDels(
     // min(tombstone_end, upper_bound), so the two ranges overlap.
 
     // Range tombstone is not supported by output validator yet.
-    builder_->Add(kv.first.Encode(), kv.second);
+    builders_[0]->Add(kv.first.Encode(), kv.second);
     assert(icmp.Compare(tombstone_start, tombstone_end) <= 0);
     meta.UpdateBoundariesForRange(tombstone_start, tombstone_end,
                                   tombstone.seq_, icmp);
@@ -781,7 +814,8 @@ void CompactionOutputs::FillFilesToCutForTtl() {
 }
 
 CompactionOutputs::CompactionOutputs(const Compaction* compaction,
-                                     const bool is_penultimate_level)
+                                     const bool is_penultimate_level,
+                                     int splits)
     : compaction_(compaction), is_penultimate_level_(is_penultimate_level) {
   partitioner_ = compaction->output_level() == 0
                      ? nullptr
@@ -792,6 +826,14 @@ CompactionOutputs::CompactionOutputs(const Compaction* compaction,
   }
 
   level_ptrs_ = std::vector<size_t>(compaction_->number_levels(), 0);
+
+  for (int i = 0; i < splits; i++) {
+    std::vector<Output> output;
+    outputs_.push_back(output);
+
+    std::unique_ptr<TableBuilder> builder;
+    builders_.push_back(std::move(builder));
+  }
 }
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -199,7 +199,6 @@ void UpdateColumnFamilyOptions(const MutableCFOptions& moptions,
       moptions.memtable_prefix_bloom_size_ratio;
   cf_opts->memtable_whole_key_filtering = moptions.memtable_whole_key_filtering;
   cf_opts->memtable_huge_page_size = moptions.memtable_huge_page_size;
-  cf_opts->transform_while_compacting = moptions.transform_while_compacting;
   cf_opts->max_successive_merges = moptions.max_successive_merges;
   cf_opts->inplace_update_num_locks = moptions.inplace_update_num_locks;
   cf_opts->prefix_extractor = moptions.prefix_extractor;
@@ -299,6 +298,7 @@ void UpdateColumnFamilyOptions(const ImmutableCFOptions& ioptions,
   cf_opts->level_compaction_dynamic_file_size =
       ioptions.level_compaction_dynamic_file_size;
   cf_opts->num_levels = ioptions.num_levels;
+  cf_opts->transform_while_compacting = ioptions.transform_while_compacting;
   cf_opts->compacting_column_family_num_levels = ioptions.compacting_column_family_num_levels;
   cf_opts->compacting_level_within_column_family_group = ioptions.compacting_level_within_column_family_group;
   cf_opts->num_columns = ioptions.num_columns;

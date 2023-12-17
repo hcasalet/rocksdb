@@ -156,6 +156,7 @@ CompactionJob::CompactionJob(
       bottommost_level_(false),
       write_hint_(Env::WLTH_NOT_SET),
       compaction_job_stats_(compaction_job_stats),
+      transformer_(db_options.transformer.get()),
       job_id_(job_id),
       dbname_(dbname),
       db_id_(db_id),
@@ -173,7 +174,6 @@ CompactionJob::CompactionJob(
       blob_output_directory_(blob_output_directory),
       db_mutex_(db_mutex),
       db_error_handler_(db_error_handler),
-      transformer_(db_options.transformer.get()),
       existing_snapshots_(std::move(existing_snapshots)),
       earliest_write_conflict_snapshot_(earliest_write_conflict_snapshot),
       snapshot_checker_(snapshot_checker),
@@ -254,6 +254,16 @@ void CompactionJob::Prepare() {
   assert(cfd->current()->storage_info()->NumLevelFiles(
              compact_->compaction->level()) > 0);
 
+  int splits = 1;
+  if (transformer_ != nullptr) {
+    int compacting_levels = cfd->ioptions()->compacting_column_family_num_levels;
+    if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-2)) != std::string::npos) {
+      splits = cfd->ioptions()->num_columns;
+    } else if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-1)) == std::string::npos) {
+      splits = 2;
+    }
+  }
+
   write_hint_ = cfd->CalculateSSTWriteHint(c->output_level());
   bottommost_level_ = c->bottommost_level();
 
@@ -267,7 +277,7 @@ void CompactionJob::Prepare() {
           c, (i != 0) ? std::optional<Slice>(boundaries_[i - 1]) : std::nullopt,
           (i != boundaries_.size()) ? std::optional<Slice>(boundaries_[i])
                                     : std::nullopt,
-          static_cast<uint32_t>(i));
+          static_cast<uint32_t>(i), splits);
       // assert to validate that boundaries don't have same user keys (without
       // timestamp part).
       assert(i == 0 || i == boundaries_.size() ||
@@ -278,7 +288,7 @@ void CompactionJob::Prepare() {
                       compact_->sub_compact_states.size());
   } else {
     compact_->sub_compact_states.emplace_back(c, std::nullopt, std::nullopt,
-                                              /*sub_job_id*/ 0);
+                                              /*sub_job_id*/ 0, splits);
   }
 
   // collect all seqno->time information from the input files which will be used
@@ -1051,6 +1061,11 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
 
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
 
+  if (cfd->ioptions()->compacting_level_within_column_family_group ==
+      cfd->ioptions()->compacting_column_family_num_levels - 1) {
+    return;
+  }
+
   // Create compaction filter and fail the compaction if
   // IgnoreSnapshots() = false because it is not supported anymore
   const CompactionFilter* compaction_filter =
@@ -1181,11 +1196,6 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     input = trim_history_iter.get();
   }
 
-  std::vector<VectorIterator*> c_iters;
-  transformer_->Transform(input, c_iters, 2);
-
-  input->SeekToFirst();
-
   AutoThreadOperationStageUpdater stage_updater(
       ThreadStatus::STAGE_COMPACTION_PROCESS_KV);
 
@@ -1209,6 +1219,35 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     prev_cpu_read_nanos = IOSTATS(cpu_read_nanos);
   }
 
+  Status exec_status;
+  std::string input_column_family_name = cfd->GetName();
+  int index = input_column_family_name.find("_sys_cf");
+  std::string input_column_family_base_name = input_column_family_name.substr(0, index);
+
+  int splits = 1;
+  std::vector<VectorIterator*> vec_iters;
+  std::vector<ColumnFamilyData*> output_cfds;
+  if (transformer_ != nullptr) {
+    int compacting_levels = cfd->ioptions()->compacting_column_family_num_levels;
+    if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-2)) != std::string::npos) {
+      splits = cfd->ioptions()->num_columns;
+    } else if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-1)) == std::string::npos) {
+      splits = 2;
+    }
+
+    for (int i = 0; i < splits; i++) {
+      std::string output_column_family_name = input_column_family_base_name + "_sys_cf_" +
+                  std::to_string(cfd->ioptions()->compacting_level_within_column_family_group + 1) +
+                  "_" + std::to_string(i);
+      ColumnFamilyData* output_cf = versions_->GetColumnFamilySet()->GetColumnFamily(output_column_family_name);
+      output_cfds.push_back(output_cf);
+    }
+
+    transformer_->Transform(input, &vec_iters, splits);
+  }
+  
+  input->SeekToFirst();
+
   MergeHelper merge(
       env_, cfd->user_comparator(), cfd->ioptions()->merge_operator.get(),
       compaction_filter, db_options_.info_log.get(),
@@ -1226,9 +1265,9 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   //  2 builders, so may need to move to `CompactionOutputs`
   std::unique_ptr<BlobFileBuilder> blob_file_builder(
       (mutable_cf_options->enable_blob_files &&
-       sub_compact->compaction->output_level() >=
-           mutable_cf_options->blob_file_starting_level)
-          ? new BlobFileBuilder(
+      sub_compact->compaction->output_level() >=
+          mutable_cf_options->blob_file_starting_level)
+        ?   new BlobFileBuilder(
                 versions_, fs_.get(),
                 sub_compact->compaction->immutable_options(),
                 mutable_cf_options, &file_options_, db_id_, db_session_id_,
@@ -1250,16 +1289,16 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       job_context_ ? job_context_->GetJobSnapshotSequence()
                    : kMaxSequenceNumber;
 
-  auto c_iter = std::make_shared<CompactionIterator>(
-      input, cfd->user_comparator(), &merge, versions_->LastSequence(),
-      &existing_snapshots_, earliest_write_conflict_snapshot_, job_snapshot_seq,
-      snapshot_checker_, env_, ShouldReportDetailedTime(env_, stats_),
-      /*expect_valid_internal_key=*/true, range_del_agg.get(),
-      blob_file_builder.get(), db_options_.allow_data_in_errors,
-      db_options_.enforce_single_del_contracts, manual_compaction_canceled_,
-      sub_compact->compaction, compaction_filter, shutting_down_,
-      db_options_.info_log, full_history_ts_low, preserve_time_min_seqno_,
-      preclude_last_level_min_seqno_);
+  std::shared_ptr<CompactionIterator> c_iter;
+  c_iter = std::make_shared<CompactionIterator>(
+    input, output_cfds, cfd->user_comparator(), &merge,
+    versions_->LastSequence(), &existing_snapshots_, earliest_write_conflict_snapshot_, job_snapshot_seq, snapshot_checker_, env_, ShouldReportDetailedTime(env_, stats_),
+    /*expect_valid_internal_key=*/true, range_del_agg.get(),
+    blob_file_builder.get(), db_options_.allow_data_in_errors,
+    db_options_.enforce_single_del_contracts, manual_compaction_canceled_,
+    sub_compact->compaction, compaction_filter, shutting_down_,
+    db_options_.info_log, full_history_ts_low, preserve_time_min_seqno_,
+    preclude_last_level_min_seqno_);
   c_iter->SeekToFirst();
 
   // Assign range delete aggregator to the target output level, which makes sure
@@ -1271,9 +1310,9 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   // define the open and close functions for the compaction files, which will be
   // used open/close output files when needed.
   const CompactionFileOpenFunc open_file_func =
-      [this, sub_compact](CompactionOutputs& outputs) {
-        return this->OpenCompactionOutputFile(sub_compact, outputs);
-      };
+    [this, sub_compact, output_cfds](CompactionOutputs& outputs) {
+      return this->OpenCompactionOutputFile(sub_compact, output_cfds, outputs);
+    };
 
   const CompactionFileCloseFunc close_file_func =
       [this, sub_compact, start_user_key, end_user_key](
@@ -1285,12 +1324,11 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
             sub_compact->end.has_value() ? &end_user_key : nullptr);
       };
 
-  Status status;
   TEST_SYNC_POINT_CALLBACK(
       "CompactionJob::ProcessKeyValueCompaction()::Processing",
       reinterpret_cast<void*>(
           const_cast<Compaction*>(sub_compact->compaction)));
-  while (status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
+  while (exec_status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
     // Invariant: c_iter.status() is guaranteed to be OK if c_iter->Valid()
     // returns true.
     assert(!end.has_value() || cfd->user_comparator()->Compare(
@@ -1308,8 +1346,8 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     // and `close_file_func`.
     // TODO: it would be better to have the compaction file open/close moved
     // into `CompactionOutputs` which has the output file information.
-    status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func);
-    if (!status.ok()) {
+    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, transformer_);
+    if (!exec_status.ok()) {
       break;
     }
 
@@ -1349,43 +1387,43 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   }
   if (c_iter_stats.total_blob_bytes_relocated > 0) {
     RecordTick(stats_, BLOB_DB_GC_BYTES_RELOCATED,
-               c_iter_stats.total_blob_bytes_relocated);
+              c_iter_stats.total_blob_bytes_relocated);
   }
 
   RecordDroppedKeys(c_iter_stats, &sub_compact->compaction_job_stats);
   RecordCompactionIOStats();
 
-  if (status.ok() && cfd->IsDropped()) {
-    status =
+  if (exec_status.ok() && cfd->IsDropped()) {
+    exec_status =
         Status::ColumnFamilyDropped("Column family dropped during compaction");
   }
-  if ((status.ok() || status.IsColumnFamilyDropped()) &&
+  if ((exec_status.ok() || exec_status.IsColumnFamilyDropped()) &&
       shutting_down_->load(std::memory_order_relaxed)) {
-    status = Status::ShutdownInProgress("Database shutdown");
+    exec_status = Status::ShutdownInProgress("Database shutdown");
   }
-  if ((status.ok() || status.IsColumnFamilyDropped()) &&
+  if ((exec_status.ok() || exec_status.IsColumnFamilyDropped()) &&
       (manual_compaction_canceled_.load(std::memory_order_relaxed))) {
-    status = Status::Incomplete(Status::SubCode::kManualCompactionPaused);
+    exec_status = Status::Incomplete(Status::SubCode::kManualCompactionPaused);
   }
-  if (status.ok()) {
-    status = input->status();
+  if (exec_status.ok()) {
+    exec_status = input->status();
   }
-  if (status.ok()) {
-    status = c_iter->status();
+  if (exec_status.ok()) {
+    exec_status = c_iter->status();
   }
 
   // Call FinishCompactionOutputFile() even if status is not ok: it needs to
   // close the output files. Open file function is also passed, in case there's
   // only range-dels, no file was opened, to save the range-dels, it need to
   // create a new output file.
-  status = sub_compact->CloseCompactionFiles(status, open_file_func,
+  exec_status = sub_compact->CloseCompactionFiles(exec_status, open_file_func,
                                              close_file_func);
 
   if (blob_file_builder) {
-    if (status.ok()) {
-      status = blob_file_builder->Finish();
+    if (exec_status.ok()) {
+      exec_status = blob_file_builder->Finish();
     } else {
-      blob_file_builder->Abandon(status);
+      blob_file_builder->Abandon(exec_status);
     }
     blob_file_builder.reset();
     sub_compact->Current().UpdateBlobStats();
@@ -1405,27 +1443,28 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
         IOSTATS(prepare_write_nanos) - prev_prepare_write_nanos;
     sub_compact->compaction_job_stats.cpu_micros -=
         (IOSTATS(cpu_write_nanos) - prev_cpu_write_nanos +
-         IOSTATS(cpu_read_nanos) - prev_cpu_read_nanos) /
+        IOSTATS(cpu_read_nanos) - prev_cpu_read_nanos) /
         1000;
     if (prev_perf_level != PerfLevel::kEnableTimeAndCPUTimeExceptForMutex) {
       SetPerfLevel(prev_perf_level);
     }
   }
-#ifdef ROCKSDB_ASSERT_STATUS_CHECKED
-  if (!status.ok()) {
-    if (c_iter) {
-      c_iter->status().PermitUncheckedError();
+
+  #ifdef ROCKSDB_ASSERT_STATUS_CHECKED
+    if (!exec_status.ok()) {
+      if (c_iter) {
+        c_iter->status().PermitUncheckedError();
+      }
+      if (input) {
+        input->status().PermitUncheckedError();
+      }
     }
-    if (input) {
-      input->status().PermitUncheckedError();
-    }
-  }
-#endif  // ROCKSDB_ASSERT_STATUS_CHECKED
+  #endif  // ROCKSDB_ASSERT_STATUS_CHECKED
 
   blob_counter.reset();
   clip.reset();
   raw_input.reset();
-  sub_compact->status = status;
+  sub_compact->status = exec_status;
   NotifyOnSubcompactionCompleted(sub_compact);
 }
 
@@ -1539,7 +1578,7 @@ Status CompactionJob::FinishCompactionOutputFile(
 
   // Finish and check for file errors
   IOStatus io_s = outputs.WriterSyncClose(s, db_options_.clock, stats_,
-                                          db_options_.use_fsync);
+                                          db_options_.use_fsync, 0);
 
   if (s.ok() && io_s.ok()) {
     file_checksum = meta->file_checksum;
@@ -1753,142 +1792,152 @@ void CompactionJob::RecordCompactionIOStats() {
 }
 
 Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
+                                               std::vector<ColumnFamilyData*> output_cfds,
                                                CompactionOutputs& outputs) {
   assert(sub_compact != nullptr);
-
-  // no need to lock because VersionSet::next_file_number_ is atomic
-  uint64_t file_number = versions_->NewFileNumber();
-  std::string fname = GetTableFileName(file_number);
-  // Fire events.
+  if (transformer_ != nullptr) {
+    assert(outputs.GetOutputsSize() == output_cfds.size());
+  }
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
-  EventHelpers::NotifyTableFileCreationStarted(
-      cfd->ioptions()->listeners, dbname_, cfd->GetName(), fname, job_id_,
-      TableFileCreationReason::kCompaction);
-  // Make the output file
-  std::unique_ptr<FSWritableFile> writable_file;
-#ifndef NDEBUG
-  bool syncpoint_arg = file_options_.use_direct_writes;
-  TEST_SYNC_POINT_CALLBACK("CompactionJob::OpenCompactionOutputFile",
-                           &syncpoint_arg);
-#endif
-
-  // Pass temperature of the last level files to FileSystem.
-  FileOptions fo_copy = file_options_;
-  Temperature temperature = sub_compact->compaction->output_temperature();
-  // only set for the last level compaction and also it's not output to
-  // penultimate level (when preclude_last_level feature is enabled)
-  if (temperature == Temperature::kUnknown &&
-      sub_compact->compaction->is_last_level() &&
-      !sub_compact->IsCurrentPenultimateLevel()) {
-    temperature =
-        sub_compact->compaction->mutable_cf_options()->last_level_temperature;
-  }
-  fo_copy.temperature = temperature;
-
+  int output_size = static_cast<int>(outputs.GetOutputsSize());
   Status s;
-  IOStatus io_s = NewWritableFile(fs_.get(), fname, &writable_file, fo_copy);
-  s = io_s;
-  if (sub_compact->io_status.ok()) {
-    sub_compact->io_status = io_s;
-    // Since this error is really a copy of the io_s that is checked below as s,
-    // it does not also need to be checked.
-    sub_compact->io_status.PermitUncheckedError();
-  }
-  if (!s.ok()) {
-    ROCKS_LOG_ERROR(
-        db_options_.info_log,
-        "[%s] [JOB %d] OpenCompactionOutputFiles for table #%" PRIu64
-        " fails at NewWritableFile with status %s",
-        sub_compact->compaction->column_family_data()->GetName().c_str(),
-        job_id_, file_number, s.ToString().c_str());
-    LogFlush(db_options_.info_log);
-    EventHelpers::LogAndNotifyTableFileCreationFinished(
-        event_logger_, cfd->ioptions()->listeners, dbname_, cfd->GetName(),
-        fname, job_id_, FileDescriptor(), kInvalidBlobFileNumber,
-        TableProperties(), TableFileCreationReason::kCompaction, s,
-        kUnknownFileChecksum, kUnknownFileChecksumFuncName);
-    return s;
-  }
 
-  // Try to figure out the output file's oldest ancester time.
-  int64_t temp_current_time = 0;
-  auto get_time_status = db_options_.clock->GetCurrentTime(&temp_current_time);
-  // Safe to proceed even if GetCurrentTime fails. So, log and proceed.
-  if (!get_time_status.ok()) {
-    ROCKS_LOG_WARN(db_options_.info_log,
-                   "Failed to get current time. Status: %s",
-                   get_time_status.ToString().c_str());
-  }
-  uint64_t current_time = static_cast<uint64_t>(temp_current_time);
-  InternalKey tmp_start, tmp_end;
-  if (sub_compact->start.has_value()) {
-    tmp_start.SetMinPossibleForUserKey(sub_compact->start.value());
-  }
-  if (sub_compact->end.has_value()) {
-    tmp_end.SetMinPossibleForUserKey(sub_compact->end.value());
-  }
-  uint64_t oldest_ancester_time =
-      sub_compact->compaction->MinInputFileOldestAncesterTime(
-          sub_compact->start.has_value() ? &tmp_start : nullptr,
-          sub_compact->end.has_value() ? &tmp_end : nullptr);
-  if (oldest_ancester_time == std::numeric_limits<uint64_t>::max()) {
-    oldest_ancester_time = current_time;
-  }
+  for (int i = 0; i < output_size; i++) {
+    // no need to lock because VersionSet::next_file_number_ is atomic
+    uint64_t file_number = versions_->NewFileNumber();
+    std::string fname = GetTableFileName(file_number);
+    // Fire events.
+    if (transformer_ != nullptr) {
+      cfd = output_cfds[i];
+    }
+    EventHelpers::NotifyTableFileCreationStarted(
+        cfd->ioptions()->listeners, dbname_, cfd->GetName(), fname, job_id_,
+        TableFileCreationReason::kCompaction);
+    // Make the output file
+    std::unique_ptr<FSWritableFile> writable_file;
+    #ifndef NDEBUG
+      bool syncpoint_arg = file_options_.use_direct_writes;
+      TEST_SYNC_POINT_CALLBACK("CompactionJob::OpenCompactionOutputFile",
+                             &syncpoint_arg);
+    #endif
 
-  // Initialize a SubcompactionState::Output and add it to sub_compact->outputs
-  uint64_t epoch_number = sub_compact->compaction->MinInputFileEpochNumber();
-  {
-    FileMetaData meta;
-    meta.fd = FileDescriptor(file_number,
-                             sub_compact->compaction->output_path_id(), 0);
-    meta.oldest_ancester_time = oldest_ancester_time;
-    meta.file_creation_time = current_time;
-    meta.epoch_number = epoch_number;
-    meta.temperature = temperature;
-    assert(!db_id_.empty());
-    assert(!db_session_id_.empty());
-    s = GetSstInternalUniqueId(db_id_, db_session_id_, meta.fd.GetNumber(),
-                               &meta.unique_id);
+    // Pass temperature of the last level files to FileSystem.
+    FileOptions fo_copy = file_options_;
+    Temperature temperature = sub_compact->compaction->output_temperature();
+    // only set for the last level compaction and also it's not output to
+    // penultimate level (when preclude_last_level feature is enabled)
+    if (temperature == Temperature::kUnknown &&
+        sub_compact->compaction->is_last_level() &&
+        !sub_compact->IsCurrentPenultimateLevel()) {
+      temperature =
+          sub_compact->compaction->mutable_cf_options()->last_level_temperature;
+    }
+    fo_copy.temperature = temperature;
+
+    IOStatus io_s = NewWritableFile(fs_.get(), fname, &writable_file, fo_copy);
+    s = io_s;
+    if (sub_compact->io_status.ok()) {
+      sub_compact->io_status = io_s;
+      // Since this error is really a copy of the io_s that is checked below as s,
+      // it does not also need to be checked.
+      sub_compact->io_status.PermitUncheckedError();
+    }
     if (!s.ok()) {
-      ROCKS_LOG_ERROR(db_options_.info_log,
-                      "[%s] [JOB %d] file #%" PRIu64
-                      " failed to generate unique id: %s.",
-                      cfd->GetName().c_str(), job_id_, meta.fd.GetNumber(),
-                      s.ToString().c_str());
+      ROCKS_LOG_ERROR(
+          db_options_.info_log,
+          "[%s] [JOB %d] OpenCompactionOutputFiles for table #%" PRIu64
+          " fails at NewWritableFile with status %s",
+          sub_compact->compaction->column_family_data()->GetName().c_str(),
+          job_id_, file_number, s.ToString().c_str());
+      LogFlush(db_options_.info_log);
+      EventHelpers::LogAndNotifyTableFileCreationFinished(
+          event_logger_, cfd->ioptions()->listeners, dbname_, cfd->GetName(),
+          fname, job_id_, FileDescriptor(), kInvalidBlobFileNumber,
+          TableProperties(), TableFileCreationReason::kCompaction, s,
+          kUnknownFileChecksum, kUnknownFileChecksumFuncName);
       return s;
     }
 
-    outputs.AddOutput(std::move(meta), cfd->internal_comparator(),
-                      sub_compact->compaction->mutable_cf_options()
-                          ->check_flush_compaction_key_order,
-                      paranoid_file_checks_);
+    // Try to figure out the output file's oldest ancester time.
+    int64_t temp_current_time = 0;
+    auto get_time_status = db_options_.clock->GetCurrentTime(&temp_current_time);
+    // Safe to proceed even if GetCurrentTime fails. So, log and proceed.
+    if (!get_time_status.ok()) {
+      ROCKS_LOG_WARN(db_options_.info_log,
+                     "Failed to get current time. Status: %s",
+                    get_time_status.ToString().c_str());
+    }
+    uint64_t current_time = static_cast<uint64_t>(temp_current_time);
+    InternalKey tmp_start, tmp_end;
+    if (sub_compact->start.has_value()) {
+      tmp_start.SetMinPossibleForUserKey(sub_compact->start.value());
+    }
+    if (sub_compact->end.has_value()) {
+      tmp_end.SetMinPossibleForUserKey(sub_compact->end.value());
+    }
+    uint64_t oldest_ancester_time =
+        sub_compact->compaction->MinInputFileOldestAncesterTime(
+            sub_compact->start.has_value() ? &tmp_start : nullptr,
+            sub_compact->end.has_value() ? &tmp_end : nullptr);
+    if (oldest_ancester_time == std::numeric_limits<uint64_t>::max()) {
+      oldest_ancester_time = current_time;
+    }
+
+    // Initialize a SubcompactionState::Output and add it to sub_compact->outputs
+    uint64_t epoch_number = sub_compact->compaction->MinInputFileEpochNumber();
+    {
+      FileMetaData meta;
+      meta.fd = FileDescriptor(file_number,
+                               sub_compact->compaction->output_path_id(), 0);
+      meta.oldest_ancester_time = oldest_ancester_time;
+      meta.file_creation_time = current_time;
+      meta.epoch_number = epoch_number;
+      meta.temperature = temperature;
+      assert(!db_id_.empty());
+      assert(!db_session_id_.empty());
+      s = GetSstInternalUniqueId(db_id_, db_session_id_, meta.fd.GetNumber(),
+                                 &meta.unique_id);
+      if (!s.ok()) {
+        ROCKS_LOG_ERROR(db_options_.info_log,
+                        "[%s] [JOB %d] file #%" PRIu64
+                        " failed to generate unique id: %s.",
+                        cfd->GetName().c_str(), job_id_, meta.fd.GetNumber(),
+                        s.ToString().c_str());
+        return s;
+      }
+
+      outputs.AddOutput(std::move(meta), cfd->internal_comparator(),
+                        sub_compact->compaction->mutable_cf_options()
+                            ->check_flush_compaction_key_order,
+                        paranoid_file_checks_, i);
+    }
+
+    writable_file->SetIOPriority(GetRateLimiterPriority());
+    writable_file->SetWriteLifeTimeHint(write_hint_);
+    FileTypeSet tmp_set = db_options_.checksum_handoff_file_types;
+    writable_file->SetPreallocationBlockSize(static_cast<size_t>(
+        sub_compact->compaction->OutputFilePreallocationSize()));
+    const auto& listeners =
+        sub_compact->compaction->immutable_options()->listeners;
+    outputs.AssignFileWriter(new WritableFileWriter(
+        std::move(writable_file), fname, fo_copy, db_options_.clock, io_tracer_,
+        db_options_.stats, listeners, db_options_.file_checksum_gen_factory.get(),
+        tmp_set.Contains(FileType::kTableFile), false), i);
+
+    TableBuilderOptions tboptions(
+        *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
+        cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),
+        sub_compact->compaction->output_compression(),
+        sub_compact->compaction->output_compression_opts(), cfd->GetID(),
+        cfd->GetName(), sub_compact->compaction->output_level(),
+        bottommost_level_, TableFileCreationReason::kCompaction,
+        0 /* oldest_key_time */, current_time, db_id_, db_session_id_,
+        sub_compact->compaction->max_output_file_size(), file_number);
+
+    outputs.NewBuilder(tboptions, i);
+
+    LogFlush(db_options_.info_log);
   }
-
-  writable_file->SetIOPriority(GetRateLimiterPriority());
-  writable_file->SetWriteLifeTimeHint(write_hint_);
-  FileTypeSet tmp_set = db_options_.checksum_handoff_file_types;
-  writable_file->SetPreallocationBlockSize(static_cast<size_t>(
-      sub_compact->compaction->OutputFilePreallocationSize()));
-  const auto& listeners =
-      sub_compact->compaction->immutable_options()->listeners;
-  outputs.AssignFileWriter(new WritableFileWriter(
-      std::move(writable_file), fname, fo_copy, db_options_.clock, io_tracer_,
-      db_options_.stats, listeners, db_options_.file_checksum_gen_factory.get(),
-      tmp_set.Contains(FileType::kTableFile), false));
-
-  TableBuilderOptions tboptions(
-      *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
-      cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),
-      sub_compact->compaction->output_compression(),
-      sub_compact->compaction->output_compression_opts(), cfd->GetID(),
-      cfd->GetName(), sub_compact->compaction->output_level(),
-      bottommost_level_, TableFileCreationReason::kCompaction,
-      0 /* oldest_key_time */, current_time, db_id_, db_session_id_,
-      sub_compact->compaction->max_output_file_size(), file_number);
-
-  outputs.NewBuilder(tboptions);
-
-  LogFlush(db_options_.info_log);
   return s;
 }
 

@@ -473,8 +473,9 @@ Status FlushJob::MemPurge() {
     assert(job_context_);
     SequenceNumber job_snapshot_seq = job_context_->GetJobSnapshotSequence();
     const std::atomic<bool> kManualCompactionCanceledFalse{false};
+    std::vector<ColumnFamilyData*> output_cfs;
     CompactionIterator c_iter(
-        iter.get(), (cfd_->internal_comparator()).user_comparator(), &merge,
+        iter.get(), output_cfs, (cfd_->internal_comparator()).user_comparator(), &merge,
         kMaxSequenceNumber, &existing_snapshots_,
         earliest_write_conflict_snapshot_, job_snapshot_seq, snapshot_checker_,
         env, ShouldReportDetailedTime(env, ioptions->stats),
