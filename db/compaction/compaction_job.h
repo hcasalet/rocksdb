@@ -258,6 +258,7 @@ class CompactionJob {
 
   Status FinishCompactionOutputFile(const Status& input_status,
                                     SubcompactionState* sub_compact,
+                                    std::vector<ColumnFamilyData*> output_cfds,
                                     CompactionOutputs& outputs,
                                     const Slice& next_table_min_key,
                                     const Slice* comp_start_user_key,

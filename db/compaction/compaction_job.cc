@@ -1315,11 +1315,11 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     };
 
   const CompactionFileCloseFunc close_file_func =
-      [this, sub_compact, start_user_key, end_user_key](
+      [this, sub_compact, output_cfds, start_user_key, end_user_key](
           CompactionOutputs& outputs, const Status& status,
           const Slice& next_table_min_key) {
         return this->FinishCompactionOutputFile(
-            status, sub_compact, outputs, next_table_min_key,
+            status, sub_compact, output_cfds, outputs, next_table_min_key,
             sub_compact->start.has_value() ? &start_user_key : nullptr,
             sub_compact->end.has_value() ? &end_user_key : nullptr);
       };
@@ -1511,6 +1511,7 @@ void CompactionJob::RecordDroppedKeys(
 
 Status CompactionJob::FinishCompactionOutputFile(
     const Status& input_status, SubcompactionState* sub_compact,
+    std::vector<ColumnFamilyData*> output_cfds,
     CompactionOutputs& outputs, const Slice& next_table_min_key,
     const Slice* comp_start_user_key, const Slice* comp_end_user_key) {
   AutoThreadOperationStageUpdater stage_updater(
@@ -1518,165 +1519,176 @@ Status CompactionJob::FinishCompactionOutputFile(
   assert(sub_compact != nullptr);
   assert(outputs.HasBuilder());
 
-  FileMetaData* meta = outputs.GetMetaData();
-  uint64_t output_number = meta->fd.GetNumber();
-  assert(output_number != 0);
+  Status s;
+  for (size_t i = 0; i < outputs.GetOutputsSize(); i++) {
+    FileMetaData* meta = outputs.GetMetaData(i);
+    uint64_t output_number = meta->fd.GetNumber();
+    assert(output_number != 0);
 
-  ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
-  std::string file_checksum = kUnknownFileChecksum;
-  std::string file_checksum_func_name = kUnknownFileChecksumFuncName;
-
-  // Check for iterator errors
-  Status s = input_status;
-
-  // Add range tombstones
-  auto earliest_snapshot = kMaxSequenceNumber;
-  if (existing_snapshots_.size() > 0) {
-    earliest_snapshot = existing_snapshots_[0];
-  }
-  if (s.ok()) {
-    CompactionIterationStats range_del_out_stats;
-    // if the compaction supports per_key_placement, only output range dels to
-    // the penultimate level.
-    // Note: Use `bottommost_level_ = true` for both bottommost and
-    // output_to_penultimate_level compaction here, as it's only used to decide
-    // if range dels could be dropped.
-    if (outputs.HasRangeDel()) {
-      s = outputs.AddRangeDels(comp_start_user_key, comp_end_user_key,
-                               range_del_out_stats, bottommost_level_,
-                               cfd->internal_comparator(), earliest_snapshot,
-                               next_table_min_key, full_history_ts_low_);
+    ColumnFamilyData* cfd;
+    if (transformer_ != nullptr) {
+      cfd = output_cfds[i];
+    } else {
+      cfd = sub_compact->compaction->column_family_data();
     }
-    RecordDroppedKeys(range_del_out_stats, &sub_compact->compaction_job_stats);
-    TEST_SYNC_POINT("CompactionJob::FinishCompactionOutputFile1");
-  }
+    
+    std::string file_checksum = kUnknownFileChecksum;
+    std::string file_checksum_func_name = kUnknownFileChecksumFuncName;
 
-  const uint64_t current_entries = outputs.NumEntries();
+    // Check for iterator errors
+    s = input_status;
 
-  s = outputs.Finish(s, seqno_time_mapping_);
+    // Add range tombstones
+    auto earliest_snapshot = kMaxSequenceNumber;
+    if (existing_snapshots_.size() > 0) {
+      earliest_snapshot = existing_snapshots_[0];
+    }
+    if (s.ok()) {
+      CompactionIterationStats range_del_out_stats;
+      // if the compaction supports per_key_placement, only output range dels to
+      // the penultimate level.
+      // Note: Use `bottommost_level_ = true` for both bottommost and
+      // output_to_penultimate_level compaction here, as it's only used to decide
+      // if range dels could be dropped.
+      if (outputs.HasRangeDel()) {
+        s = outputs.AddRangeDels(comp_start_user_key, comp_end_user_key,
+                                 range_del_out_stats, bottommost_level_,
+                                 cfd->internal_comparator(), earliest_snapshot,
+                                 next_table_min_key, full_history_ts_low_, i);
+      }
 
-  if (s.ok()) {
-    // With accurate smallest and largest key, we can get a slightly more
-    // accurate oldest ancester time.
-    // This makes oldest ancester time in manifest more accurate than in
-    // table properties. Not sure how to resolve it.
-    if (meta->smallest.size() > 0 && meta->largest.size() > 0) {
-      uint64_t refined_oldest_ancester_time;
-      Slice new_smallest = meta->smallest.user_key();
-      Slice new_largest = meta->largest.user_key();
-      if (!new_largest.empty() && !new_smallest.empty()) {
-        refined_oldest_ancester_time =
-            sub_compact->compaction->MinInputFileOldestAncesterTime(
-                &(meta->smallest), &(meta->largest));
-        if (refined_oldest_ancester_time !=
-            std::numeric_limits<uint64_t>::max()) {
-          meta->oldest_ancester_time = refined_oldest_ancester_time;
+      if (i == 0) {
+        RecordDroppedKeys(range_del_out_stats, &sub_compact->compaction_job_stats);
+      }
+      TEST_SYNC_POINT("CompactionJob::FinishCompactionOutputFile1");
+    }
+
+    const uint64_t current_entries = outputs.NumEntries(i);
+    s = outputs.Finish(s, seqno_time_mapping_, i);
+
+    if (s.ok()) {
+      // With accurate smallest and largest key, we can get a slightly more
+      // accurate oldest ancester time.
+      // This makes oldest ancester time in manifest more accurate than in
+      // table properties. Not sure how to resolve it.
+      if (meta->smallest.size() > 0 && meta->largest.size() > 0) {
+        uint64_t refined_oldest_ancester_time;
+        Slice new_smallest = meta->smallest.user_key();
+        Slice new_largest = meta->largest.user_key();
+        if (!new_largest.empty() && !new_smallest.empty()) {
+          refined_oldest_ancester_time =
+              sub_compact->compaction->MinInputFileOldestAncesterTime(
+                  &(meta->smallest), &(meta->largest));
+          if (refined_oldest_ancester_time !=
+              std::numeric_limits<uint64_t>::max()) {
+            meta->oldest_ancester_time = refined_oldest_ancester_time;
+          }
         }
       }
     }
-  }
 
-  // Finish and check for file errors
-  IOStatus io_s = outputs.WriterSyncClose(s, db_options_.clock, stats_,
-                                          db_options_.use_fsync, 0);
+    // Finish and check for file errors
+    IOStatus io_s = outputs.WriterSyncClose(s, db_options_.clock, stats_,
+                                            db_options_.use_fsync, i);
 
-  if (s.ok() && io_s.ok()) {
-    file_checksum = meta->file_checksum;
-    file_checksum_func_name = meta->file_checksum_func_name;
-  }
-
-  if (s.ok()) {
-    s = io_s;
-  }
-  if (sub_compact->io_status.ok()) {
-    sub_compact->io_status = io_s;
-    // Since this error is really a copy of the
-    // "normal" status, it does not also need to be checked
-    sub_compact->io_status.PermitUncheckedError();
-  }
-
-  TableProperties tp;
-  if (s.ok()) {
-    tp = outputs.GetTableProperties();
-  }
-
-  if (s.ok() && current_entries == 0 && tp.num_range_deletions == 0) {
-    // If there is nothing to output, no necessary to generate a sst file.
-    // This happens when the output level is bottom level, at the same time
-    // the sub_compact output nothing.
-    std::string fname =
-        TableFileName(sub_compact->compaction->immutable_options()->cf_paths,
-                      meta->fd.GetNumber(), meta->fd.GetPathId());
-
-    // TODO(AR) it is not clear if there are any larger implications if
-    // DeleteFile fails here
-    Status ds = env_->DeleteFile(fname);
-    if (!ds.ok()) {
-      ROCKS_LOG_WARN(
-          db_options_.info_log,
-          "[%s] [JOB %d] Unable to remove SST file for table #%" PRIu64
-          " at bottom level%s",
-          cfd->GetName().c_str(), job_id_, output_number,
-          meta->marked_for_compaction ? " (need compaction)" : "");
+    if (s.ok() && io_s.ok()) {
+      file_checksum = meta->file_checksum;
+      file_checksum_func_name = meta->file_checksum_func_name;
     }
 
-    // Also need to remove the file from outputs, or it will be added to the
-    // VersionEdit.
-    outputs.RemoveLastOutput();
-    meta = nullptr;
-  }
-
-  if (s.ok() && (current_entries > 0 || tp.num_range_deletions > 0)) {
-    // Output to event logger and fire events.
-    outputs.UpdateTableProperties();
-    ROCKS_LOG_INFO(db_options_.info_log,
-                   "[%s] [JOB %d] Generated table #%" PRIu64 ": %" PRIu64
-                   " keys, %" PRIu64 " bytes%s, temperature: %s",
-                   cfd->GetName().c_str(), job_id_, output_number,
-                   current_entries, meta->fd.file_size,
-                   meta->marked_for_compaction ? " (need compaction)" : "",
-                   temperature_to_string[meta->temperature].c_str());
-  }
-  std::string fname;
-  FileDescriptor output_fd;
-  uint64_t oldest_blob_file_number = kInvalidBlobFileNumber;
-  Status status_for_listener = s;
-  if (meta != nullptr) {
-    fname = GetTableFileName(meta->fd.GetNumber());
-    output_fd = meta->fd;
-    oldest_blob_file_number = meta->oldest_blob_file_number;
-  } else {
-    fname = "(nil)";
     if (s.ok()) {
-      status_for_listener = Status::Aborted("Empty SST file not kept");
+      s = io_s;
     }
-  }
-  EventHelpers::LogAndNotifyTableFileCreationFinished(
-      event_logger_, cfd->ioptions()->listeners, dbname_, cfd->GetName(), fname,
-      job_id_, output_fd, oldest_blob_file_number, tp,
-      TableFileCreationReason::kCompaction, status_for_listener, file_checksum,
-      file_checksum_func_name);
+    if (sub_compact->io_status.ok()) {
+      sub_compact->io_status = io_s;
+      // Since this error is really a copy of the
+      // "normal" status, it does not also need to be checked
+      sub_compact->io_status.PermitUncheckedError();
+    }
 
-  // Report new file to SstFileManagerImpl
-  auto sfm =
-      static_cast<SstFileManagerImpl*>(db_options_.sst_file_manager.get());
-  if (sfm && meta != nullptr && meta->fd.GetPathId() == 0) {
-    Status add_s = sfm->OnAddFile(fname);
-    if (!add_s.ok() && s.ok()) {
-      s = add_s;
+    TableProperties tp;
+    if (s.ok()) {
+      tp = outputs.GetTableProperties(i);
     }
-    if (sfm->IsMaxAllowedSpaceReached()) {
-      // TODO(ajkr): should we return OK() if max space was reached by the final
-      // compaction output file (similarly to how flush works when full)?
-      s = Status::SpaceLimit("Max allowed space was reached");
-      TEST_SYNC_POINT(
-          "CompactionJob::FinishCompactionOutputFile:MaxAllowedSpaceReached");
-      InstrumentedMutexLock l(db_mutex_);
-      db_error_handler_->SetBGError(s, BackgroundErrorReason::kCompaction);
-    }
-  }
 
-  outputs.ResetBuilder();
+    if (s.ok() && current_entries == 0 && tp.num_range_deletions == 0) {
+      // If there is nothing to output, no necessary to generate a sst file.
+      // This happens when the output level is bottom level, at the same time
+      // the sub_compact output nothing.
+      std::string fname =
+          TableFileName(sub_compact->compaction->immutable_options()->cf_paths,
+                        meta->fd.GetNumber(), meta->fd.GetPathId());
+
+      // TODO(AR) it is not clear if there are any larger implications if
+      // DeleteFile fails here
+      Status ds = env_->DeleteFile(fname);
+      if (!ds.ok()) {
+        ROCKS_LOG_WARN(
+            db_options_.info_log,
+            "[%s] [JOB %d] Unable to remove SST file for table #%" PRIu64
+            " at bottom level%s",
+            cfd->GetName().c_str(), job_id_, output_number,
+            meta->marked_for_compaction ? " (need compaction)" : "");
+      }
+
+      // Also need to remove the file from outputs, or it will be added to the
+      // VersionEdit.
+      outputs.RemoveLastOutput();
+      meta = nullptr;
+    }
+
+    if (s.ok() && (current_entries > 0 || tp.num_range_deletions > 0)) {
+      // Output to event logger and fire events.
+      outputs.UpdateTableProperties(i);
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "[%s] [JOB %d] Generated table #%" PRIu64 ": %" PRIu64
+                     " keys, %" PRIu64 " bytes%s, temperature: %s",
+                     cfd->GetName().c_str(), job_id_, output_number,
+                     current_entries, meta->fd.file_size,
+                     meta->marked_for_compaction ? " (need compaction)" : "",
+                     temperature_to_string[meta->temperature].c_str());
+    }
+    std::string fname;
+    FileDescriptor output_fd;
+    uint64_t oldest_blob_file_number = kInvalidBlobFileNumber;
+    Status status_for_listener = s;
+    if (meta != nullptr) {
+      fname = GetTableFileName(meta->fd.GetNumber());
+      output_fd = meta->fd;
+      oldest_blob_file_number = meta->oldest_blob_file_number;
+    } else {
+      fname = "(nil)";
+      if (s.ok()) {
+        status_for_listener = Status::Aborted("Empty SST file not kept");
+      }
+    }
+    EventHelpers::LogAndNotifyTableFileCreationFinished(
+        event_logger_, cfd->ioptions()->listeners, dbname_, cfd->GetName(), fname,
+        job_id_, output_fd, oldest_blob_file_number, tp,
+        TableFileCreationReason::kCompaction, status_for_listener, file_checksum,
+        file_checksum_func_name);
+
+    // Report new file to SstFileManagerImpl
+    auto sfm =
+        static_cast<SstFileManagerImpl*>(db_options_.sst_file_manager.get());
+    if (sfm && meta != nullptr && meta->fd.GetPathId() == 0) {
+      Status add_s = sfm->OnAddFile(fname);
+      if (!add_s.ok() && s.ok()) {
+        s = add_s;
+      }
+      if (sfm->IsMaxAllowedSpaceReached()) {
+        // TODO(ajkr): should we return OK() if max space was reached by the final
+        // compaction output file (similarly to how flush works when full)?
+        s = Status::SpaceLimit("Max allowed space was reached");
+        TEST_SYNC_POINT(
+            "CompactionJob::FinishCompactionOutputFile:MaxAllowedSpaceReached");
+        InstrumentedMutexLock l(db_mutex_);
+        db_error_handler_->SetBGError(s, BackgroundErrorReason::kCompaction);
+      }
+    }
+
+    outputs.ResetBuilder(i);
+  }
   return s;
 }
 

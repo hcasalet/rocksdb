@@ -21,41 +21,40 @@ void CompactionOutputs::NewBuilder(const TableBuilderOptions& tboptions,
 }
 
 Status CompactionOutputs::Finish(const Status& intput_status,
-                                 const SeqnoToTimeMapping& seqno_time_mapping) {
-  FileMetaData* meta = GetMetaData();
-  assert(meta != nullptr);
+                                 const SeqnoToTimeMapping& seqno_time_mapping,
+                                 int position) {
   Status s = intput_status;
+  Status io_s;
+  FileMetaData* meta = GetMetaData(position);
+  assert(meta != nullptr);
   if (s.ok()) {
     std::string seqno_time_mapping_str;
     seqno_time_mapping.Encode(seqno_time_mapping_str, meta->fd.smallest_seqno,
-                              meta->fd.largest_seqno, meta->file_creation_time);
-    builders_[0]->SetSeqnoTimeTableProperties(seqno_time_mapping_str,
-                                          meta->oldest_ancester_time);
-    s = builders_[0]->Finish();
-
+                            meta->fd.largest_seqno, meta->file_creation_time);
+    builders_[position]->SetSeqnoTimeTableProperties(seqno_time_mapping_str,
+                                        meta->oldest_ancester_time);
+    s = builders_[position]->Finish();
   } else {
-    builders_[0]->Abandon();
+    builders_[position]->Abandon();
   }
-  Status io_s = builders_[0]->io_status();
+  io_s = builders_[position]->io_status();
   if (s.ok()) {
     s = io_s;
   } else {
     io_s.PermitUncheckedError();
   }
-  const uint64_t current_bytes = builders_[0]->FileSize();
+  const uint64_t current_bytes = builders_[position]->FileSize();
   if (s.ok()) {
     meta->fd.file_size = current_bytes;
-    meta->tail_size = builders_[0]->GetTailSize();
-    meta->marked_for_compaction = builders_[0]->NeedCompact();
+    meta->tail_size = builders_[position]->GetTailSize();
+    meta->marked_for_compaction = builders_[position]->NeedCompact();
     meta->user_defined_timestamps_persisted = static_cast<bool>(
-        builders_[0]->GetTableProperties().user_defined_timestamps_persisted);
+        builders_[position]->GetTableProperties().user_defined_timestamps_persisted);
   }
-  current_output().finished = true;
+  current_output(position).finished = true;
   stats_.bytes_written += current_bytes;
-  for (size_t i = 0; i < outputs_.size(); i++) {
-    stats_.num_output_files += outputs_[i].size();
-  }
-
+  stats_.num_output_files += outputs_[position].size();
+  
   return s;
 }
 
@@ -74,7 +73,7 @@ IOStatus CompactionOutputs::WriterSyncClose(const Status& input_status,
   }
 
   if (input_status.ok() && io_s.ok()) {
-    FileMetaData* meta = GetMetaData();
+    FileMetaData* meta = GetMetaData(position);
     meta->file_checksum = file_writers_[position]->GetFileChecksum();
     meta->file_checksum_func_name = file_writers_[position]->GetFileChecksumFuncName();
   }
@@ -410,7 +409,6 @@ Status CompactionOutputs::AddToOutput(
     return s;
   }
 
-  assert(!builders_.empty() && builders_[0] != nullptr);
   const Slice& value = c_iter.value();
 
   // transform value
@@ -441,7 +439,7 @@ Status CompactionOutputs::AddToOutput(
                                              ikey.type);
     }
   } else {
-    s = current_output().validator.Add(key, value);
+    s = current_output(0).validator.Add(key, value);
     if (!s.ok()) {
       return s;
     }
@@ -456,7 +454,7 @@ Status CompactionOutputs::AddToOutput(
       return s;
     }
 
-    s = current_output().meta.UpdateBoundaries(key, value, ikey.sequence,
+    s = current_output(0).meta.UpdateBoundaries(key, value, ikey.sequence,
                                              ikey.type);
   }
 
@@ -486,7 +484,8 @@ Status CompactionOutputs::AddRangeDels(
     const Slice* comp_start_user_key, const Slice* comp_end_user_key,
     CompactionIterationStats& range_del_out_stats, bool bottommost_level,
     const InternalKeyComparator& icmp, SequenceNumber earliest_snapshot,
-    const Slice& next_table_min_key, const std::string& full_history_ts_low) {
+    const Slice& next_table_min_key, const std::string& full_history_ts_low,
+    int position) {
   // The following example does not happen since
   // CompactionOutput::ShouldStopBefore() always return false for the first
   // point key. But we should consider removing this dependency. Suppose for the
@@ -499,7 +498,7 @@ Status CompactionOutputs::AddRangeDels(
   // and meta.largest will be set to comp_start_user_key@kMaxSequenceNumber
   // which violates the assumption that meta.smallest should be <= meta.largest.
   assert(HasRangeDel());
-  FileMetaData& meta = current_output().meta;
+  FileMetaData& meta = current_output(position).meta;
   const Comparator* ucmp = icmp.user_comparator();
   InternalKey lower_bound_buf, upper_bound_buf;
   Slice lower_bound_guard, upper_bound_guard;
@@ -511,7 +510,7 @@ Status CompactionOutputs::AddRangeDels(
   // [lower_bound, upper_bound] should be added to this file. File
   // boundaries (meta.smallest/largest) should be updated accordingly when
   // extended by range tombstones.
-  size_t output_size = outputs_[0].size();
+  size_t output_size = outputs_[position].size();
   if (output_size == 1) {
     // This is the first file in the subcompaction.
     //
@@ -738,7 +737,7 @@ Status CompactionOutputs::AddRangeDels(
     // min(tombstone_end, upper_bound), so the two ranges overlap.
 
     // Range tombstone is not supported by output validator yet.
-    builders_[0]->Add(kv.first.Encode(), kv.second);
+    builders_[position]->Add(kv.first.Encode(), kv.second);
     assert(icmp.Compare(tombstone_start, tombstone_end) <= 0);
     meta.UpdateBoundariesForRange(tombstone_start, tombstone_end,
                                   tombstone.seq_, icmp);
@@ -833,6 +832,9 @@ CompactionOutputs::CompactionOutputs(const Compaction* compaction,
 
     std::unique_ptr<TableBuilder> builder;
     builders_.push_back(std::move(builder));
+
+    std::unique_ptr<WritableFileWriter> filewriter;
+    file_writers_.push_back(std::move(filewriter));
   }
 }
 

@@ -109,19 +109,20 @@ class CompactionOutputs {
 
   // Finish the current output file
   Status Finish(const Status& intput_status,
-                const SeqnoToTimeMapping& seqno_time_mapping);
+                const SeqnoToTimeMapping& seqno_time_mapping,
+                int position);
 
   // Update output table properties from table builder
-  void UpdateTableProperties() {
-    current_output().table_properties =
-        std::make_shared<TableProperties>(GetTableProperties());
+  void UpdateTableProperties(int position) {
+    current_output(position).table_properties =
+        std::make_shared<TableProperties>(GetTableProperties(position));
   }
 
   IOStatus WriterSyncClose(const Status& intput_status, SystemClock* clock,
                            Statistics* statistics, bool use_fsync, int position);
 
-  TableProperties GetTableProperties() {
-    return builders_[0]->GetTableProperties();
+  TableProperties GetTableProperties(int position) {
+    return builders_[position]->GetTableProperties();
   }
 
   size_t GetOutputsSize() {
@@ -166,16 +167,26 @@ class CompactionOutputs {
     }
   }
 
-  bool HasBuilder() const { return !builders_.empty() && builders_[0] != nullptr; }
+  bool HasBuilder() const { 
+    if (builders_.size() != outputs_.size()) {
+      return false;
+    }
+    for (size_t i = 0; i < builders_.size(); i++) {
+      if (builders_[i] == nullptr) {
+        return false;
+      }
+    }
+    return true;
+  }
 
-  FileMetaData* GetMetaData() { return &current_output().meta; }
+  FileMetaData* GetMetaData(int position) { return &current_output(position).meta; }
 
   bool HasOutput() const { return !outputs_.empty() && !outputs_[0].empty(); }
 
-  uint64_t NumEntries() const { return builders_[0]->NumEntries(); }
+  uint64_t NumEntries(int position) const { return builders_[position]->NumEntries(); }
 
-  void ResetBuilder() {
-    builders_[0].reset();
+  void ResetBuilder(int position) {
+    builders_[position].reset();
     current_output_file_size_ = 0;
   }
 
@@ -195,7 +206,8 @@ class CompactionOutputs {
                       bool bottommost_level, const InternalKeyComparator& icmp,
                       SequenceNumber earliest_snapshot,
                       const Slice& next_table_min_key,
-                      const std::string& full_history_ts_low);
+                      const std::string& full_history_ts_low,
+                      int position);
 
   // if the outputs have range delete, range delete is also data
   bool HasRangeDel() const {
@@ -295,11 +307,6 @@ class CompactionOutputs {
   // particularly likely for the later subcompactions to be empty. Once they are
   // run in parallel however it should be much rarer.
   // It's caller's responsibility to make sure it's not empty.
-  Output& current_output() {
-    assert(!outputs_[0].empty());
-    return outputs_[0].back();
-  }
-
   Output& current_output(int pos) {
     assert(outputs_.size() > size_t(pos));
     assert(!outputs_[pos].empty());
