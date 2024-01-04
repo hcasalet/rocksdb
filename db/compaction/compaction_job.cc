@@ -1936,7 +1936,19 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         db_options_.stats, listeners, db_options_.file_checksum_gen_factory.get(),
         tmp_set.Contains(FileType::kTableFile), false), i);
 
-    TableBuilderOptions tboptions(
+    if (transformer_ != nullptr) {
+      TableBuilderOptions tboptions(
+        *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
+        cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),
+        sub_compact->compaction->output_compression(),
+        sub_compact->compaction->output_compression_opts(), cfd->GetID(),
+        cfd->GetName(), 0,
+        bottommost_level_, TableFileCreationReason::kCompaction,
+        0 /* oldest_key_time */, current_time, db_id_, db_session_id_,
+        sub_compact->compaction->max_output_file_size(), file_number);
+      outputs.NewBuilder(tboptions, i);
+    } else {
+      TableBuilderOptions tboptions(
         *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
         cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),
         sub_compact->compaction->output_compression(),
@@ -1945,8 +1957,8 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         bottommost_level_, TableFileCreationReason::kCompaction,
         0 /* oldest_key_time */, current_time, db_id_, db_session_id_,
         sub_compact->compaction->max_output_file_size(), file_number);
-
-    outputs.NewBuilder(tboptions, i);
+      outputs.NewBuilder(tboptions, i);
+    }
 
     LogFlush(db_options_.info_log);
   }
