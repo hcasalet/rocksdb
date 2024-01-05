@@ -263,7 +263,8 @@ class CompactionJob {
                                     const Slice& next_table_min_key,
                                     const Slice* comp_start_user_key,
                                     const Slice* comp_end_user_key);
-  Status InstallCompactionResults(const MutableCFOptions& mutable_cf_options);
+  Status InstallCompactionResults(const MutableCFOptions& mutable_cf_options,
+                                  std::vector<ColumnFamilyData*> transforming_cfds);
   Status OpenCompactionOutputFile(SubcompactionState* sub_compact,
                                   std::vector<ColumnFamilyData*> output_cfds,
                                   CompactionOutputs& outputs);
@@ -278,6 +279,10 @@ class CompactionJob {
   void NotifyOnSubcompactionBegin(SubcompactionState* sub_compact);
 
   void NotifyOnSubcompactionCompleted(SubcompactionState* sub_compact);
+
+  void GetTransformingCfds(int splits, std::vector<ColumnFamilyData*>& output_cfds);
+
+  int GetSplits(ColumnFamilyData* cfd);
 
   uint32_t job_id_;
 

@@ -256,12 +256,7 @@ void CompactionJob::Prepare() {
 
   int splits = 1;
   if (transformer_ != nullptr) {
-    int compacting_levels = cfd->ioptions()->compacting_column_family_num_levels;
-    if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-2)) != std::string::npos) {
-      splits = cfd->ioptions()->num_columns;
-    } else if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-1)) == std::string::npos) {
-      splits = 2;
-    }
+    splits = GetSplits(cfd);
   }
 
   write_hint_ = cfd->CalculateSSTWriteHint(c->output_level());
@@ -834,13 +829,25 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
 
   ColumnFamilyData* cfd = compact_->compaction->column_family_data();
   assert(cfd);
-
   int output_level = compact_->compaction->output_level();
-  cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_,
+
+  std::vector<ColumnFamilyData*> output_cfds;
+  if (transformer_ != nullptr) {
+    int splits = GetSplits(cfd);
+    GetTransformingCfds(splits, output_cfds);
+    output_level = 0;
+
+    for (auto output_cfd : output_cfds) {
+      output_cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_,
                                             compaction_stats_);
+    }
+  } else {
+    cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_,
+                                              compaction_stats_);
+  }
 
   if (status.ok()) {
-    status = InstallCompactionResults(mutable_cf_options);
+    status = InstallCompactionResults(mutable_cf_options, output_cfds);
   }
   if (!versions_->io_status().ok()) {
     io_status_ = versions_->io_status();
@@ -1220,29 +1227,12 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   }
 
   Status exec_status;
-  std::string input_column_family_name = cfd->GetName();
-  int index = input_column_family_name.find("_sys_cf");
-  std::string input_column_family_base_name = input_column_family_name.substr(0, index);
-
   int splits = 1;
   std::vector<VectorIterator*> vec_iters;
   std::vector<ColumnFamilyData*> output_cfds;
   if (transformer_ != nullptr) {
-    int compacting_levels = cfd->ioptions()->compacting_column_family_num_levels;
-    if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-2)) != std::string::npos) {
-      splits = cfd->ioptions()->num_columns;
-    } else if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-1)) == std::string::npos) {
-      splits = 2;
-    }
-
-    for (int i = 0; i < splits; i++) {
-      std::string output_column_family_name = input_column_family_base_name + "_sys_cf_" +
-                  std::to_string(cfd->ioptions()->compacting_level_within_column_family_group + 1) +
-                  "_" + std::to_string(i);
-      ColumnFamilyData* output_cf = versions_->GetColumnFamilySet()->GetColumnFamily(output_column_family_name);
-      output_cfds.push_back(output_cf);
-    }
-
+    splits = GetSplits(cfd);
+    GetTransformingCfds(splits, output_cfds);
     transformer_->Transform(input, &vec_iters, splits);
   }
   
@@ -1550,14 +1540,11 @@ Status CompactionJob::FinishCompactionOutputFile(
       // Note: Use `bottommost_level_ = true` for both bottommost and
       // output_to_penultimate_level compaction here, as it's only used to decide
       // if range dels could be dropped.
-      if (outputs.HasRangeDel()) {
+      if (outputs.HasRangeDel() && i == 0) {
         s = outputs.AddRangeDels(comp_start_user_key, comp_end_user_key,
                                  range_del_out_stats, bottommost_level_,
                                  cfd->internal_comparator(), earliest_snapshot,
                                  next_table_min_key, full_history_ts_low_, i);
-      }
-
-      if (i == 0) {
         RecordDroppedKeys(range_del_out_stats, &sub_compact->compaction_job_stats);
       }
       TEST_SYNC_POINT("CompactionJob::FinishCompactionOutputFile1");
@@ -1692,8 +1679,8 @@ Status CompactionJob::FinishCompactionOutputFile(
   return s;
 }
 
-Status CompactionJob::InstallCompactionResults(
-    const MutableCFOptions& mutable_cf_options) {
+Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_cf_options,
+                                  std::vector<ColumnFamilyData*> transforming_cfds) {
   assert(compact_);
 
   db_mutex_->AssertHeld();
@@ -1774,10 +1761,23 @@ Status CompactionJob::InstallCompactionResults(
                                  start_level, compaction->num_input_files(0)));
     }
   }
-
-  return versions_->LogAndApply(compaction->column_family_data(),
-                                mutable_cf_options, read_options, edit,
-                                db_mutex_, db_directory_);
+  
+  Status log_and_apply_status;
+  if (transforming_cfds.size() > 0) {
+    for (auto transforming_cfd : transforming_cfds) {
+      log_and_apply_status = versions_->LogAndApply(transforming_cfd,
+                                  mutable_cf_options, read_options, edit,
+                                  db_mutex_, db_directory_);
+      if (!log_and_apply_status.ok()) {
+        return log_and_apply_status;
+      }
+    }
+  } else {
+     log_and_apply_status = versions_->LogAndApply(compaction->column_family_data(),
+                                  mutable_cf_options, read_options, edit,
+                                  db_mutex_, db_directory_);
+  }
+  return log_and_apply_status;
 }
 
 void CompactionJob::RecordCompactionIOStats() {
@@ -2113,6 +2113,32 @@ void CompactionJob::LogCompaction() {
 std::string CompactionJob::GetTableFileName(uint64_t file_number) {
   return TableFileName(compact_->compaction->immutable_options()->cf_paths,
                        file_number, compact_->compaction->output_path_id());
+}
+
+void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData*>& output_cfds) {
+  ColumnFamilyData* cfd = compact_->compaction->column_family_data();
+  std::string input_column_family_name = cfd->GetName();
+  int index = input_column_family_name.find("_sys_cf");
+  std::string input_column_family_base_name = input_column_family_name.substr(0, index);
+
+  for (int i = 0; i < splits; i++) {
+    std::string output_column_family_name = input_column_family_base_name + "_sys_cf_" +
+                std::to_string(cfd->ioptions()->compacting_level_within_column_family_group + 1) +
+                "_" + std::to_string(i);
+    ColumnFamilyData* output_cf = versions_->GetColumnFamilySet()->GetColumnFamily(output_column_family_name);
+    output_cfds.push_back(output_cf);
+  }
+}
+
+int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
+  int splits;
+  int compacting_levels = cfd->ioptions()->compacting_column_family_num_levels;
+  if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-2)) != std::string::npos) {
+    splits = cfd->ioptions()->num_columns;
+  } else if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-1)) == std::string::npos) {
+    splits = 2;
+  }
+  return splits;
 }
 
 Env::IOPriority CompactionJob::GetRateLimiterPriority() {
