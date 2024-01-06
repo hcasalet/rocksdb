@@ -1712,6 +1712,13 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
 
   VersionEdit* const edit = compaction->edit();
   assert(edit);
+  
+  std::vector<VersionEdit*> edit_outs;
+  for (size_t i = 0; i < transforming_cfds.size(); i++) {
+    VersionEdit* edit_out = new VersionEdit();
+    assert(edit_out);
+    edit_outs.push_back(edit_out);
+  }
 
   // Add compaction inputs
   compaction->AddInputDeletions(edit);
@@ -1719,7 +1726,11 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
   std::unordered_map<uint64_t, BlobGarbageMeter::BlobStats> blob_total_garbage;
 
   for (const auto& sub_compact : compact_->sub_compact_states) {
-    sub_compact.AddOutputsEdit(edit);
+    if (transforming_cfds.size() > 0) {
+      sub_compact.AddOutputsEdits(edit_outs);
+    } else {
+      sub_compact.AddOutputsEdit(edit);
+    }
 
     for (const auto& blob : sub_compact.Current().GetBlobFileAdditions()) {
       edit->AddBlobFile(blob);
@@ -1764,9 +1775,15 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
   
   Status log_and_apply_status;
   if (transforming_cfds.size() > 0) {
-    for (auto transforming_cfd : transforming_cfds) {
-      log_and_apply_status = versions_->LogAndApply(transforming_cfd,
+    log_and_apply_status = versions_->LogAndApply(compaction->column_family_data(),
                                   mutable_cf_options, read_options, edit,
+                                  db_mutex_, db_directory_);
+    if (!log_and_apply_status.ok()) {
+      return log_and_apply_status;
+    }
+    for (size_t i = 0; i < transforming_cfds.size(); i++) {
+      log_and_apply_status = versions_->LogAndApply(transforming_cfds[i],
+                                  mutable_cf_options, read_options, edit_outs[i],
                                   db_mutex_, db_directory_);
       if (!log_and_apply_status.ok()) {
         return log_and_apply_status;

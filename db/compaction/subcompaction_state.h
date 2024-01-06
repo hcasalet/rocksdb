@@ -185,6 +185,21 @@ class SubcompactionState {
     }
   }
 
+  void AddOutputsEdits(std::vector<VersionEdit*> out_edits) const {
+    assert(out_edits.size() == compaction_outputs_.outputs_.size());
+    for (size_t i = 0; i < penultimate_level_outputs_.outputs_.size(); i++) {
+      for (const auto& file : penultimate_level_outputs_.outputs_[i]) {
+        out_edits[i]->AddFile(compaction->GetPenultimateLevel(), file.meta);
+      }
+    }
+
+    for (size_t i = 0; i < compaction_outputs_.outputs_.size(); i++) {
+      for (const auto& file : compaction_outputs_.outputs_[i]) {
+        out_edits[i]->AddFile(compaction->output_level(), file.meta);
+      }
+    }
+  }
+
   void Cleanup(Cache* cache);
 
   void AggregateCompactionStats(
