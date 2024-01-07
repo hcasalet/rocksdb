@@ -2148,7 +2148,7 @@ void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData
 }
 
 int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
-  int splits;
+  int splits = 1;
   int compacting_levels = cfd->ioptions()->compacting_column_family_num_levels;
   if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-2)) != std::string::npos) {
     splits = cfd->ioptions()->num_columns;

@@ -195,7 +195,7 @@ class SubcompactionState {
 
     for (size_t i = 0; i < compaction_outputs_.outputs_.size(); i++) {
       for (const auto& file : compaction_outputs_.outputs_[i]) {
-        out_edits[i]->AddFile(compaction->output_level(), file.meta);
+        out_edits[i]->AddFile(0, file.meta);
       }
     }
   }
