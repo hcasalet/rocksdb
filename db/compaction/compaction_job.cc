@@ -1228,12 +1228,12 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
 
   Status exec_status;
   int splits = 1;
-  std::vector<VectorIterator*> vec_iters;
+  //std::vector<VectorIterator*> vec_iters;
   std::vector<ColumnFamilyData*> output_cfds;
   if (transformer_ != nullptr) {
     splits = GetSplits(cfd);
     GetTransformingCfds(splits, output_cfds);
-    transformer_->Transform(input, &vec_iters, splits);
+    //transformer_->Transform(input, &vec_iters, splits);
   }
   
   input->SeekToFirst();
@@ -2148,7 +2148,7 @@ void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData
 }
 
 int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
-  int splits;
+  int splits = 1;
   int compacting_levels = cfd->ioptions()->compacting_column_family_num_levels;
   if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-2)) != std::string::npos) {
     splits = cfd->ioptions()->num_columns;
