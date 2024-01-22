@@ -362,7 +362,8 @@ Status CompactionOutputs::AddToOutput(
     const CompactionIterator& c_iter,
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func,
-    Transformer* transformer) {
+    Transformer* transformer,
+    bool write_both) {
   Status s;
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {
@@ -416,7 +417,7 @@ Status CompactionOutputs::AddToOutput(
   int output_cfds_size = static_cast<int>(c_iter.output_cfds().size());
   const ParsedInternalKey& ikey = c_iter.ikey();
   if (output_cfds_size > 0) {
-    transformer->Transform(value.data(), &output_values, output_cfds_size);
+    transformer->Transform(value.data(), &output_values, output_cfds_size, write_both);
   
     for (int i = 0; i < output_cfds_size; i++) {
       s = current_output(i).validator.Add(key, Slice(output_values[i]));

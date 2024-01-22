@@ -257,6 +257,10 @@ void CompactionJob::Prepare() {
   int splits = 1;
   if (transformer_ != nullptr) {
     splits = GetSplits(cfd);
+
+    if (db_options_.write_both) {
+      splits += 1;
+    }
   }
 
   write_hint_ = cfd->CalculateSSTWriteHint(c->output_level());
@@ -835,6 +839,11 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   if (transformer_ != nullptr) {
     int splits = GetSplits(cfd);
     GetTransformingCfds(splits, output_cfds);
+    if (db_options_.write_both) {
+      std::string extra_write_cf_name = cfd->GetName() + "_pure_storage";
+      ColumnFamilyData* extra_write_output_cf = versions_->GetColumnFamilySet()->GetColumnFamily(extra_write_cf_name);
+      output_cfds.push_back(extra_write_output_cf);
+    }
     output_level = 0;
 
     for (auto output_cfd : output_cfds) {
@@ -1228,12 +1237,16 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
 
   Status exec_status;
   int splits = 1;
-  //std::vector<VectorIterator*> vec_iters;
   std::vector<ColumnFamilyData*> output_cfds;
   if (transformer_ != nullptr) {
     splits = GetSplits(cfd);
     GetTransformingCfds(splits, output_cfds);
-    //transformer_->Transform(input, &vec_iters, splits);
+
+    if (db_options_.write_both) {
+      std::string extra_write_cf_name = cfd->GetName() + "_pure_storage";
+      ColumnFamilyData* extra_write_output_cf = versions_->GetColumnFamilySet()->GetColumnFamily(extra_write_cf_name);
+      output_cfds.push_back(extra_write_output_cf);
+    }
   }
   
   input->SeekToFirst();
@@ -1336,7 +1349,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     // and `close_file_func`.
     // TODO: it would be better to have the compaction file open/close moved
     // into `CompactionOutputs` which has the output file information.
-    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, transformer_);
+    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, transformer_, db_options_.write_both);
     if (!exec_status.ok()) {
       break;
     }

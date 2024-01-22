@@ -550,6 +550,9 @@ struct DBOptions {
   // Transformer transforms compaction outputs into the desired format
   std::shared_ptr<Transformer> transformer = nullptr;
 
+  // controls if we write both original and transformed data
+  bool write_both = false;
+
   // Limits internal file read/write bandwidth:
   //
   // - Flush requests write bandwidth at `Env::IOPriority::IO_HIGH`

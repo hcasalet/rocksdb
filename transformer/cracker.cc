@@ -55,7 +55,7 @@ void Cracker::Transform(InternalIterator* input_iter, std::vector<VectorIterator
     }
 }
 
-void Cracker::Transform(std::string input, std::vector<std::string>* outputs, int splits) {
+void Cracker::Transform(std::string input, std::vector<std::string>* outputs, int splits, bool extra_write) {
     data::Row row;
     row.ParseFromString(input);
     int group_size = row.columns_size()/splits;
@@ -73,6 +73,10 @@ void Cracker::Transform(std::string input, std::vector<std::string>* outputs, in
         std::string serializedRow;
         splittedRow.SerializeToString(&serializedRow);
         outputs->push_back(serializedRow);
+    }
+
+    if (extra_write) {
+        outputs->push_back(input);
     }
 }
 

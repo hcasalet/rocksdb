@@ -13,7 +13,7 @@
 namespace ROCKSDB_NAMESPACE {
 class SystemClock;
 
-struct ImmutableDBOptions {
+struct  ImmutableDBOptions {
   static const char* kName() { return "ImmutableDBOptions"; }
   ImmutableDBOptions();
   explicit ImmutableDBOptions(const DBOptions& options);
@@ -33,6 +33,7 @@ struct ImmutableDBOptions {
   std::shared_ptr<SstFileManager> sst_file_manager;
   std::shared_ptr<Logger> info_log;
   std::shared_ptr<Transformer> transformer;
+  bool write_both;
   InfoLogLevel info_log_level;
   int max_file_opening_threads;
   std::shared_ptr<Statistics> statistics;
