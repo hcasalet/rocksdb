@@ -635,6 +635,9 @@ static std::unordered_map<std::string, OptionTypeInfo>
           OptionVerificationType::kNormal, OptionTypeFlags::kNone}},  
         {"num_columns",
          {offsetof(struct ImmutableCFOptions, num_columns), OptionType::kInt,
+          OptionVerificationType::kNormal, OptionTypeFlags::kNone}},
+        {"translevel",
+         {offsetof(struct ImmutableCFOptions, translevel), OptionType::kString,
           OptionVerificationType::kNormal, OptionTypeFlags::kNone}},  
         {"bloom_locality",
          {offsetof(struct ImmutableCFOptions, bloom_locality),
@@ -955,6 +958,7 @@ ImmutableCFOptions::ImmutableCFOptions(const ColumnFamilyOptions& cf_options)
       compacting_column_family_num_levels(cf_options.compacting_column_family_num_levels),
       compacting_level_within_column_family_group(cf_options.compacting_level_within_column_family_group),
       num_columns(cf_options.num_columns),
+      translevel(cf_options.translevel),
       optimize_filters_for_hits(cf_options.optimize_filters_for_hits),
       force_consistency_checks(cf_options.force_consistency_checks),
       preclude_last_level_data_seconds(

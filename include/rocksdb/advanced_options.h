@@ -569,6 +569,9 @@ struct AdvancedColumnFamilyOptions {
   // Number of columns for this database
   int num_columns = 1;
 
+  // At which level(s) is transformation happening
+  std::string translevel = "all";
+
   // Soft limit on number of level-0 files. We start slowing down writes at this
   // point. A value <0 means that no writing slow down will be triggered by
   // number of files in level-0.
