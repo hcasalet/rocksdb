@@ -16,6 +16,7 @@
 #include <set>
 #include <utility>
 #include <vector>
+#include <ctype.h>
 
 #include "db/blob/blob_counting_iterator.h"
 #include "db/blob/blob_file_addition.h"
@@ -258,7 +259,7 @@ void CompactionJob::Prepare() {
   if (transformer_ != nullptr) {
     splits = GetSplits(cfd);
 
-    if (db_options_.write_both) {
+    if (splits > 1 && db_options_.write_both) {
       splits += 1;
     }
   }
@@ -2147,28 +2148,69 @@ std::string CompactionJob::GetTableFileName(uint64_t file_number) {
 
 void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData*>& output_cfds) {
   ColumnFamilyData* cfd = compact_->compaction->column_family_data();
-  std::string input_column_family_name = cfd->GetName();
-  int index = input_column_family_name.find("_sys_cf");
-  std::string input_column_family_base_name = input_column_family_name.substr(0, index);
 
-  for (int i = 0; i < splits; i++) {
-    std::string output_column_family_name = input_column_family_base_name + "_sys_cf_" +
-                std::to_string(cfd->ioptions()->compacting_level_within_column_family_group + 1) +
-                "_" + std::to_string(i);
-    ColumnFamilyData* output_cf = versions_->GetColumnFamilySet()->GetColumnFamily(output_column_family_name);
-    output_cfds.push_back(output_cf);
+  int split_size = 0; 
+  std::string cfname = cfd->GetName();
+  int parent_level = 0;
+
+  if (cfname.find("_sys_cf_") == std::string::npos) {
+    cfname += "_sys_cf";
+  } else {
+    size_t level = cfname.rfind("_level-");
+
+    if (level != std::string::npos) {
+      for(std::string::size_type i = level+7; i < cfname.size(); ++i) {
+        if (!isdigit(cfname[i])) {
+          break;
+        }
+        parent_level = parent_level * 10 + cfname[i] - '0';
+      }
+    }
+  }
+  
+  while (true) {
+    std::string child_cf_name = cfname + "_level-" + std::to_string(parent_level+1) + "-" + std::to_string(split_size);
+    ColumnFamilyData* childcf = versions_->GetColumnFamilySet()->GetColumnFamily(child_cf_name);
+    if (childcf == nullptr) {
+      break;
+    }
+    output_cfds.push_back(childcf);
+    split_size++;
   }
 }
 
 int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
-  int splits = 1;
-  int compacting_levels = cfd->ioptions()->compacting_column_family_num_levels;
-  if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-2)) != std::string::npos) {
-    splits = cfd->ioptions()->num_columns;
-  } else if (cfd->GetName().find("sys_cf_"+std::to_string(compacting_levels-1)) == std::string::npos) {
-    splits = 2;
+  int split_size = 0; 
+  std::string cfname = cfd->GetName();
+  int parent_level = 0;
+
+  if (cfname.find("_sys_cf_") == std::string::npos) {
+    cfname += "_sys_cf";
+  } else {
+    size_t level = cfname.rfind("_level-");
+
+    if (level != std::string::npos) {
+      for(std::string::size_type i = level+7; i < cfname.size(); ++i) {
+        if (!isdigit(cfname[i])) {
+          break;
+        }
+        parent_level = parent_level * 10 + cfname[i] - '0';
+      }
+    }
   }
-  return splits;
+  
+  while (true) {
+    std::string child_cf_name = cfname + "_level-" + std::to_string(parent_level+1) + "-" + std::to_string(split_size);
+    ColumnFamilyData* childcf = versions_->GetColumnFamilySet()->GetColumnFamily(child_cf_name);
+    if (childcf == nullptr) {
+      break;
+    }
+    split_size++;
+  }
+  
+  if (split_size > 0) {
+    return split_size;
+  } else return 1;
 }
 
 Env::IOPriority CompactionJob::GetRateLimiterPriority() {
