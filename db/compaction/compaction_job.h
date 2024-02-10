@@ -282,6 +282,8 @@ class CompactionJob {
 
   void GetTransformingCfds(int splits, std::vector<ColumnFamilyData*>& output_cfds);
 
+  ColumnFamilyData* GetWriteBothColumnFamily();
+
   int GetSplits(ColumnFamilyData* cfd);
 
   uint32_t job_id_;

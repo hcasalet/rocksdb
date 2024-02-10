@@ -841,9 +841,8 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
     int splits = GetSplits(cfd);
     GetTransformingCfds(splits, output_cfds);
     if (db_options_.write_both) {
-      std::string extra_write_cf_name = cfd->GetName() + "_pure_storage";
-      ColumnFamilyData* extra_write_output_cf = versions_->GetColumnFamilySet()->GetColumnFamily(extra_write_cf_name);
-      output_cfds.push_back(extra_write_output_cf);
+      ColumnFamilyData* write_both_output_cf = GetWriteBothColumnFamily();
+      output_cfds.push_back(write_both_output_cf);
     }
     output_level = 0;
 
@@ -1244,9 +1243,8 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     GetTransformingCfds(splits, output_cfds);
 
     if (db_options_.write_both) {
-      std::string extra_write_cf_name = cfd->GetName() + "_pure_storage";
-      ColumnFamilyData* extra_write_output_cf = versions_->GetColumnFamilySet()->GetColumnFamily(extra_write_cf_name);
-      output_cfds.push_back(extra_write_output_cf);
+      ColumnFamilyData* write_both_output_cf = GetWriteBothColumnFamily();
+      output_cfds.push_back(write_both_output_cf);
     }
   }
   
@@ -2177,6 +2175,32 @@ void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData
     output_cfds.push_back(childcf);
     split_size++;
   }
+}
+
+ColumnFamilyData* CompactionJob::GetWriteBothColumnFamily() {
+  ColumnFamilyData* cfd = compact_->compaction->column_family_data();
+  std::string cfname = cfd->GetName();
+  int parent_level = 0;
+
+  if (cfname.find("_sys_cf_") == std::string::npos) {
+    cfname += "_sys_cf";
+  } else {
+    size_t level = cfname.rfind("_level-");
+
+    if (level != std::string::npos) {
+      for(std::string::size_type i = level+7; i < cfname.size(); ++i) {
+        if (!isdigit(cfname[i])) {
+          break;
+        }
+        parent_level = parent_level * 10 + cfname[i] - '0';
+      }
+    }
+  }
+
+  std::string write_both_cf_name = cfname + "_level-" + std::to_string(parent_level+1) + "-pure_storage";
+  ColumnFamilyData* write_both_cf = versions_->GetColumnFamilySet()->GetColumnFamily(write_both_cf_name);
+
+  return write_both_cf;
 }
 
 int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
