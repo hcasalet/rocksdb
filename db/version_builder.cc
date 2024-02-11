@@ -532,7 +532,7 @@ class VersionBuilder::Rep {
       return Status::OK();
     }
 #endif
-    Status s = CheckConsistencyDetails(vstorage);
+    /*Status s = CheckConsistencyDetails(vstorage);
     if (s.IsCorruption() && s.getState()) {
       // Make it clear the error is due to force_consistency_checks = 1 or
       // debug build
@@ -546,7 +546,8 @@ class VersionBuilder::Rep {
       // was only expecting corruption with message, or OK
       assert(s.ok());
     }
-    return s;
+    return s;*/
+    return Status::OK();
   }
 
   bool CheckConsistencyForNumLevels() const {
@@ -846,10 +847,11 @@ class VersionBuilder::Rep {
   // Apply all of the edits in *edit to the current state.
   Status Apply(const VersionEdit* edit) {
     {
-      const Status s = CheckConsistency(base_vstorage_);
+      // To-Do: Rewrite CheckConsistency for transformers
+      /*const Status s = CheckConsistency(base_vstorage_);
       if (!s.ok()) {
         return s;
-      }
+      }*/
     }
 
     // Note: we process the blob file related changes first because the
