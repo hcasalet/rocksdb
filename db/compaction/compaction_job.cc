@@ -840,7 +840,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   if (transformer_ != nullptr) {
     int splits = GetSplits(cfd);
     GetTransformingCfds(splits, output_cfds);
-    if (db_options_.write_both) {
+    if (output_cfds.size() > 0 && db_options_.write_both) {
       ColumnFamilyData* write_both_output_cf = GetWriteBothColumnFamily();
       output_cfds.push_back(write_both_output_cf);
     }
@@ -1242,7 +1242,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     splits = GetSplits(cfd);
     GetTransformingCfds(splits, output_cfds);
 
-    if (db_options_.write_both) {
+    if (output_cfds.size() > 0 && db_options_.write_both) {
       ColumnFamilyData* write_both_output_cf = GetWriteBothColumnFamily();
       output_cfds.push_back(write_both_output_cf);
     }
@@ -1835,11 +1835,15 @@ void CompactionJob::RecordCompactionIOStats() {
 Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
                                                std::vector<ColumnFamilyData*> output_cfds,
                                                CompactionOutputs& outputs) {
+  ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
   assert(sub_compact != nullptr);
   if (transformer_ != nullptr) {
+    if (cfd->GetName() == "default") {
+      return Status::OK();
+    }
     assert(outputs.GetOutputsSize() == output_cfds.size());
   }
-  ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
+  
   int output_size = static_cast<int>(outputs.GetOutputsSize());
   Status s;
 

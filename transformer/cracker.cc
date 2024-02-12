@@ -75,7 +75,7 @@ void Cracker::Transform(std::string input, std::vector<std::string>* outputs, in
         outputs->push_back(serializedRow);
     }
 
-    if (extra_write) {
+    if (splits > 0 && extra_write) {
         outputs->push_back(input);
     }
 }
