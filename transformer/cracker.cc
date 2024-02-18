@@ -56,6 +56,10 @@ void Cracker::Transform(InternalIterator* input_iter, std::vector<VectorIterator
 }
 
 void Cracker::Transform(std::string input, std::vector<std::string>* outputs, int splits, bool extra_write) {
+    if (extra_write) {
+        splits = splits - 1;
+    }
+
     data::Row row;
     row.ParseFromString(input);
     int group_size = row.columns_size()/splits;
