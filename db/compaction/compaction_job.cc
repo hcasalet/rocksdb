@@ -1729,6 +1729,7 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
   for (size_t i = 0; i < transforming_cfds.size(); i++) {
     VersionEdit* edit_out = new VersionEdit();
     assert(edit_out);
+    edit_out->SetColumnFamily(transforming_cfds[i]->GetID());
     edit_outs.push_back(edit_out);
   }
 
