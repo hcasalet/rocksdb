@@ -862,6 +862,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
     io_status_ = versions_->io_status();
   }
 
+
   VersionStorageInfo::LevelSummaryStorage tmp;
   auto vstorage = cfd->current()->storage_info();
   const auto& stats = compaction_stats_.stats;
@@ -1741,12 +1742,18 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
   for (const auto& sub_compact : compact_->sub_compact_states) {
     if (transforming_cfds.size() > 0) {
       sub_compact.AddOutputsEdits(edit_outs);
+
+      int num = 0;
+      for (const auto& blob : sub_compact.Current().GetBlobFileAdditions()) {
+        edit_outs[num]->AddBlobFile(blob);
+        num++;
+      }
     } else {
       sub_compact.AddOutputsEdit(edit);
-    }
 
-    for (const auto& blob : sub_compact.Current().GetBlobFileAdditions()) {
-      edit->AddBlobFile(blob);
+      for (const auto& blob : sub_compact.Current().GetBlobFileAdditions()) {
+        edit->AddBlobFile(blob);
+      }
     }
 
     if (sub_compact.Current().GetBlobGarbageMeter()) {
@@ -1765,12 +1772,19 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
     }
   }
 
+  int num = 0;
   for (const auto& pair : blob_total_garbage) {
     const uint64_t blob_file_number = pair.first;
     const BlobGarbageMeter::BlobStats& stats = pair.second;
 
-    edit->AddBlobFileGarbage(blob_file_number, stats.GetCount(),
-                             stats.GetBytes());
+    if (transforming_cfds.size() > 0) {
+      edit_outs[num]->AddBlobFileGarbage(blob_file_number, stats.GetCount(),
+                                         stats.GetBytes());
+    } else {
+      edit->AddBlobFileGarbage(blob_file_number, stats.GetCount(),
+                               stats.GetBytes());
+    }
+    num++;
   }
 
   if ((compaction->compaction_reason() ==
