@@ -33,4 +33,12 @@ void Cracker::Transform(std::string input, std::vector<std::string>* outputs, in
     }
 }
 
+void Cracker::Store(std::vector<VersionEdit*> edits, std::vector<ColumnFamilyData*> cfds, std::vector<std::string>* outputs) {
+    return;
+}
+
+void Cracker::Delete(VersionEdit* edit, std::vector<CompactionInputFiles*>) {
+
+}
+
 }

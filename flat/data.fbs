@@ -1,0 +1,7 @@
+table Row {
+    columns:[string];
+}
+
+table FBData {
+    rows:[Row];
+}
