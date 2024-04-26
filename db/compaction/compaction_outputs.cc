@@ -439,6 +439,27 @@ Status CompactionOutputs::AddToOutput(
       s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
                                              ikey.type);
     }
+  } else if (transformer != nullptr) {
+    std::vector<std::string> output_value;
+    transformer->Transform(value.data(), &output_value, 1, false);
+    s = current_output(0).validator.Add(key, Slice(output_value[0]));
+    if (!s.ok()) {
+      return s;
+    }
+
+    builders_[0]->Add(key, Slice(output_value[0]));
+    stats_.num_output_records++;
+    current_output_file_size_ = builders_[0]->EstimatedFileSize();
+  
+    if (blob_garbage_meter_) {
+      s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_value[0]));
+    }
+    if (!s.ok()) {
+      return s;
+    }
+
+    s = current_output(0).meta.UpdateBoundaries(key, Slice(output_value[0]), ikey.sequence,
+                                               ikey.type);
   } else {
     s = current_output(0).validator.Add(key, value);
     if (!s.ok()) {

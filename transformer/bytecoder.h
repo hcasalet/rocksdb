@@ -3,7 +3,7 @@
 #include "flat/data_generated.h"
 
 namespace ROCKSDB_NAMESPACE {
-    Class Bytecoder : public Transformer {
+    class Bytecoder : public Transformer {
         public:
           Bytecoder() {};  
         private:

@@ -559,6 +559,7 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${FLATBUFFERS_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/flat)
 
 if(USE_COROUTINES)
   if(USE_FOLLY OR USE_FOLLY_LITE)
@@ -843,6 +844,7 @@ set(SOURCES
         trace_replay/trace_record.cc
         trace_replay/trace_replay.cc
         transformer/cracker.cc
+        transformer/bytecoder.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc
@@ -1104,16 +1106,17 @@ set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
 configure_file(util/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
-target_include_directories(${ROCKSDB_STATIC_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto)
+target_include_directories(
+  ${ROCKSDB_STATIC_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto ${CMAKE_SOURCE_DIR}/flat)
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
-  proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES})
+  proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY})
 
 set(ROCKSDB_BUILD_SHARED OFF)
 if(ROCKSDB_BUILD_SHARED)
   add_library(${ROCKSDB_SHARED_LIB} SHARED ${SOURCES} ${BUILD_VERSION_CC})
   target_include_directories(${ROCKSDB_SHARED_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto)
   target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE
-    proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES})
+    proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY})
 
   if(WIN32)
     set_target_properties(${ROCKSDB_SHARED_LIB} PROPERTIES

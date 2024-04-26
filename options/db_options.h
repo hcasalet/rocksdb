@@ -34,6 +34,7 @@ struct  ImmutableDBOptions {
   std::shared_ptr<Logger> info_log;
   std::shared_ptr<Transformer> transformer;
   bool write_both;
+  int transform_type;
   InfoLogLevel info_log_level;
   int max_file_opening_threads;
   std::shared_ptr<Statistics> statistics;

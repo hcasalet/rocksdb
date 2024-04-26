@@ -553,6 +553,11 @@ struct DBOptions {
   // controls if we write both original and transformed data
   bool write_both = false;
 
+  // transform_type
+  //  = 0 cracking
+  //  = 1 flat buffers
+  int transform_type = 0;
+
   // Limits internal file read/write bandwidth:
   //
   // - Flush requests write bandwidth at `Env::IOPriority::IO_HIGH`
