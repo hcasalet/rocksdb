@@ -439,7 +439,7 @@ Status CompactionOutputs::AddToOutput(
       s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
                                              ikey.type);
     }
-  } else if (transformer != nullptr) {
+  } else if (transformer != nullptr && compaction_->output_level() == 1) {
     std::vector<std::string> output_value;
     transformer->Transform(value.data(), &output_value, 1, false);
     s = current_output(0).validator.Add(key, Slice(output_value[0]));

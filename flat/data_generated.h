@@ -6,110 +6,101 @@
 
 #include "flatbuffers/flatbuffers.h"
 
-struct Row;
+struct FbRow;
 
-struct FBData;
-
-struct Row FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+struct FbRow FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_COLUMNS = 4
+    VT_NUMERICCOLS = 4,
+    VT_STRINGCOLS = 6
   };
-  const flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>> *columns() const {
-    return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>> *>(VT_COLUMNS);
+  const flatbuffers::Vector<uint64_t> *numericCols() const {
+    return GetPointer<const flatbuffers::Vector<uint64_t> *>(VT_NUMERICCOLS);
+  }
+  const flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>> *stringCols() const {
+    return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>> *>(VT_STRINGCOLS);
   }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyOffset(verifier, VT_COLUMNS) &&
-           verifier.VerifyVector(columns()) &&
-           verifier.VerifyVectorOfStrings(columns()) &&
+           VerifyOffset(verifier, VT_NUMERICCOLS) &&
+           verifier.VerifyVector(numericCols()) &&
+           VerifyOffset(verifier, VT_STRINGCOLS) &&
+           verifier.VerifyVector(stringCols()) &&
+           verifier.VerifyVectorOfStrings(stringCols()) &&
            verifier.EndTable();
   }
 };
 
-struct RowBuilder {
+struct FbRowBuilder {
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
-  void add_columns(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> columns) {
-    fbb_.AddOffset(Row::VT_COLUMNS, columns);
+  void add_numericCols(flatbuffers::Offset<flatbuffers::Vector<uint64_t>> numericCols) {
+    fbb_.AddOffset(FbRow::VT_NUMERICCOLS, numericCols);
   }
-  explicit RowBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+  void add_stringCols(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> stringCols) {
+    fbb_.AddOffset(FbRow::VT_STRINGCOLS, stringCols);
+  }
+  explicit FbRowBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  RowBuilder &operator=(const RowBuilder &);
-  flatbuffers::Offset<Row> Finish() {
+  FbRowBuilder &operator=(const FbRowBuilder &);
+  flatbuffers::Offset<FbRow> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<Row>(end);
+    auto o = flatbuffers::Offset<FbRow>(end);
     return o;
   }
 };
 
-inline flatbuffers::Offset<Row> CreateRow(
+inline flatbuffers::Offset<FbRow> CreateFbRow(
     flatbuffers::FlatBufferBuilder &_fbb,
-    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> columns = 0) {
-  RowBuilder builder_(_fbb);
-  builder_.add_columns(columns);
+    flatbuffers::Offset<flatbuffers::Vector<uint64_t>> numericCols = 0,
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> stringCols = 0) {
+  FbRowBuilder builder_(_fbb);
+  builder_.add_stringCols(stringCols);
+  builder_.add_numericCols(numericCols);
   return builder_.Finish();
 }
 
-inline flatbuffers::Offset<Row> CreateRowDirect(
+inline flatbuffers::Offset<FbRow> CreateFbRowDirect(
     flatbuffers::FlatBufferBuilder &_fbb,
-    const std::vector<flatbuffers::Offset<flatbuffers::String>> *columns = nullptr) {
-  auto columns__ = columns ? _fbb.CreateVector<flatbuffers::Offset<flatbuffers::String>>(*columns) : 0;
-  return CreateRow(
+    const std::vector<uint64_t> *numericCols = nullptr,
+    const std::vector<flatbuffers::Offset<flatbuffers::String>> *stringCols = nullptr) {
+  auto numericCols__ = numericCols ? _fbb.CreateVector<uint64_t>(*numericCols) : 0;
+  auto stringCols__ = stringCols ? _fbb.CreateVector<flatbuffers::Offset<flatbuffers::String>>(*stringCols) : 0;
+  return CreateFbRow(
       _fbb,
-      columns__);
+      numericCols__,
+      stringCols__);
 }
 
-struct FBData FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
-  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_ROWS = 4
-  };
-  const flatbuffers::Vector<flatbuffers::Offset<Row>> *rows() const {
-    return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<Row>> *>(VT_ROWS);
-  }
-  bool Verify(flatbuffers::Verifier &verifier) const {
-    return VerifyTableStart(verifier) &&
-           VerifyOffset(verifier, VT_ROWS) &&
-           verifier.VerifyVector(rows()) &&
-           verifier.VerifyVectorOfTables(rows()) &&
-           verifier.EndTable();
-  }
-};
-
-struct FBDataBuilder {
-  flatbuffers::FlatBufferBuilder &fbb_;
-  flatbuffers::uoffset_t start_;
-  void add_rows(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<Row>>> rows) {
-    fbb_.AddOffset(FBData::VT_ROWS, rows);
-  }
-  explicit FBDataBuilder(flatbuffers::FlatBufferBuilder &_fbb)
-        : fbb_(_fbb) {
-    start_ = fbb_.StartTable();
-  }
-  FBDataBuilder &operator=(const FBDataBuilder &);
-  flatbuffers::Offset<FBData> Finish() {
-    const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<FBData>(end);
-    return o;
-  }
-};
-
-inline flatbuffers::Offset<FBData> CreateFBData(
-    flatbuffers::FlatBufferBuilder &_fbb,
-    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<Row>>> rows = 0) {
-  FBDataBuilder builder_(_fbb);
-  builder_.add_rows(rows);
-  return builder_.Finish();
+inline const FbRow *GetFbRow(const void *buf) {
+  return flatbuffers::GetRoot<FbRow>(buf);
 }
 
-inline flatbuffers::Offset<FBData> CreateFBDataDirect(
-    flatbuffers::FlatBufferBuilder &_fbb,
-    const std::vector<flatbuffers::Offset<Row>> *rows = nullptr) {
-  auto rows__ = rows ? _fbb.CreateVector<flatbuffers::Offset<Row>>(*rows) : 0;
-  return CreateFBData(
-      _fbb,
-      rows__);
+inline const FbRow *GetSizePrefixedFbRow(const void *buf) {
+  return flatbuffers::GetSizePrefixedRoot<FbRow>(buf);
+}
+
+inline bool VerifyFbRowBuffer(
+    flatbuffers::Verifier &verifier) {
+  return verifier.VerifyBuffer<FbRow>(nullptr);
+}
+
+inline bool VerifySizePrefixedFbRowBuffer(
+    flatbuffers::Verifier &verifier) {
+  return verifier.VerifySizePrefixedBuffer<FbRow>(nullptr);
+}
+
+inline void FinishFbRowBuffer(
+    flatbuffers::FlatBufferBuilder &fbb,
+    flatbuffers::Offset<FbRow> root) {
+  fbb.Finish(root);
+}
+
+inline void FinishSizePrefixedFbRowBuffer(
+    flatbuffers::FlatBufferBuilder &fbb,
+    flatbuffers::Offset<FbRow> root) {
+  fbb.FinishSizePrefixed(root);
 }
 
 #endif  // FLATBUFFERS_GENERATED_DATA_H_

@@ -1,7 +1,6 @@
-table Row {
-    columns:[string];
+table FbRow {
+    numericCols:[uint64];
+    stringCols:[string];
 }
 
-table FBData {
-    rows:[Row];
-}
+root_type FbRow;
