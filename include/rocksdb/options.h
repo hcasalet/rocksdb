@@ -86,8 +86,12 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   ColumnFamilyOptions* OptimizeForPointLookup(uint64_t block_cache_size_mb);
 
   // Transform data format while doing compaction
-  ColumnFamilyOptions* AllowTransformationWhileCompacting(int levels, 
-                            int column_family_group_levels, int numColumns);
+  ColumnFamilyOptions* AllowTransformationWhileCompacting(int levels,
+                            int column_family_group_levels, int numColumns,
+                            int tranformType);
+
+  // Sets the transformation type
+  ColumnFamilyOptions* SetTransformType(int tranformType);
 
   // Set compacting level for a column family inside the compacting group
   ColumnFamilyOptions* SetCompactingLevelWithinColumnFamilyGroup(int compacting_level);
@@ -552,11 +556,6 @@ struct DBOptions {
 
   // controls if we write both original and transformed data
   bool write_both = false;
-
-  // transform_type
-  //  = 0 cracking
-  //  = 1 flat buffers
-  int transform_type = 0;
 
   // Limits internal file read/write bandwidth:
   //

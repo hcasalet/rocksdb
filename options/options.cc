@@ -64,6 +64,7 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       compacting_column_family_num_levels(options.compacting_column_family_num_levels),
       transform_while_compacting(options.transform_while_compacting),
       num_columns(options.num_columns),
+      transform_type(options.transform_type),
       translevel(options.translevel),
       level0_slowdown_writes_trigger(options.level0_slowdown_writes_trigger),
       level0_stop_writes_trigger(options.level0_stop_writes_trigger),
@@ -195,6 +196,7 @@ void ColumnFamilyOptions::Dump(Logger* log) const {
     ROCKS_LOG_HEADER(log, "            Options.compacting_column_family_num_levels: %d", compacting_column_family_num_levels);
     ROCKS_LOG_HEADER(log, "            Options.compacting_level_within_column_family_group: %d", compacting_level_within_column_family_group);
     ROCKS_LOG_HEADER(log, "            Options.num_columns: %d", num_columns);
+    ROCKS_LOG_HEADER(log, "            Options.transform_type: %d", transform_type);
     ROCKS_LOG_HEADER(log, "            Options.translevel: %s", translevel.c_str());
     ROCKS_LOG_HEADER(log, "       Options.min_write_buffer_number_to_merge: %d",
                      min_write_buffer_number_to_merge);
@@ -636,11 +638,18 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeForPointLookup(
   return this;
 }
 
-ColumnFamilyOptions* ColumnFamilyOptions::AllowTransformationWhileCompacting(int levels, int cf_levels, int numColumns) {
+ColumnFamilyOptions* ColumnFamilyOptions::AllowTransformationWhileCompacting(
+        int levels, int cf_levels, int numColumns, int transformType) {
   num_levels = levels;
   compacting_column_family_num_levels = cf_levels;
   transform_while_compacting = true;
   num_columns = numColumns;
+  transform_type = transformType;
+  return this;
+}
+
+ColumnFamilyOptions* ColumnFamilyOptions::SetTransformType(int transformType) {
+  transform_type = transformType;
   return this;
 }
 

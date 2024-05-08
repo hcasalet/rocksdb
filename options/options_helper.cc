@@ -302,6 +302,7 @@ void UpdateColumnFamilyOptions(const ImmutableCFOptions& ioptions,
   cf_opts->compacting_column_family_num_levels = ioptions.compacting_column_family_num_levels;
   cf_opts->compacting_level_within_column_family_group = ioptions.compacting_level_within_column_family_group;
   cf_opts->num_columns = ioptions.num_columns;
+  cf_opts->transform_type = ioptions.transform_type;
   cf_opts->translevel = ioptions.translevel;
   cf_opts->optimize_filters_for_hits = ioptions.optimize_filters_for_hits;
   cf_opts->force_consistency_checks = ioptions.force_consistency_checks;

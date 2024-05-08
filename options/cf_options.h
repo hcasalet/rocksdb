@@ -76,6 +76,8 @@ struct ImmutableCFOptions {
 
   int num_columns;
 
+  int transform_type;
+
   std::string translevel;
 
   bool optimize_filters_for_hits;

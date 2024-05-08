@@ -569,6 +569,13 @@ struct AdvancedColumnFamilyOptions {
   // Number of columns for this database
   int num_columns = 1;
 
+  // Transformation type
+  // value: 0 - no transformation, vanilla rocksdb
+  //        1 - column family splitting (cracking)
+  //        2 - column family splitting + protobuf->flatBuffers transformation
+  //        3 - protobuf->flatBuffers transformation
+  int transform_type = 0;
+
   // At which level(s) is transformation happening
   std::string translevel = "all";
 

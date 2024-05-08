@@ -257,16 +257,16 @@ void CompactionJob::Prepare() {
 
   int splits = 1;
   if (transformer_ != nullptr)  {
-    switch (db_options_.transform_type) {
-      case 0:
+    switch (cfd->ioptions()->transform_type) {
       case 1:
+      case 2:
         splits = GetSplits(cfd);
 
         if (splits > 1 && db_options_.write_both) {
           splits += 1;
         }
         break;
-      case 2:
+      case 3:
         break;
       default:
         break;    
@@ -847,18 +847,28 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   int output_level = compact_->compaction->output_level();
 
   std::vector<ColumnFamilyData*> output_cfds;
-  if (transformer_ != nullptr && db_options_.transform_type < 2) {
-    int splits = GetSplits(cfd);
-    GetTransformingCfds(splits, output_cfds);
-    if (output_cfds.size() > 0 && db_options_.write_both) {
-      ColumnFamilyData* write_both_output_cf = GetWriteBothColumnFamily();
-      output_cfds.push_back(write_both_output_cf);
-    }
-    output_level = 0;
+  if (transformer_ != nullptr) {
+    switch (cfd->ioptions()->transform_type) {
+      case 1:
+      case 2: {
+        int splits = GetSplits(cfd);
+        GetTransformingCfds(splits, output_cfds);
+        if (output_cfds.size() > 0 && db_options_.write_both) {
+          ColumnFamilyData* write_both_output_cf = GetWriteBothColumnFamily();
+          output_cfds.push_back(write_both_output_cf);
+        }
+        output_level = 0;
 
-    for (auto output_cfd : output_cfds) {
-      output_cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_,
+        for (auto output_cfd : output_cfds) {
+          output_cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_,
                                         compaction_stats_);
+        }
+        break;
+      }  
+      case 3:
+        break;
+      default:
+        break;
     }
   } else {
     cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_,
@@ -1250,9 +1260,9 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   int splits = 1;
   std::vector<ColumnFamilyData*> output_cfds;
   if (transformer_ != nullptr) {
-    switch (db_options_.transform_type) {
-      case 0:
+    switch (cfd->ioptions()->transform_type) {
       case 1:
+      case 2:
         splits = GetSplits(cfd);
         GetTransformingCfds(splits, output_cfds);
 
@@ -1261,7 +1271,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
           output_cfds.push_back(write_both_output_cf);
         }
         break;
-      case 2:
+      case 3:
         break;
       default:
         break;  
@@ -1873,15 +1883,15 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
   assert(sub_compact != nullptr);
   if (transformer_ != nullptr) {
-    switch (db_options_.transform_type) {
-      case 0:
+    switch (cfd->ioptions()->transform_type) {
       case 1:
+      case 2:
         if (cfd->GetName() == "default") {
           return Status::OK();
         }
         assert(outputs.GetOutputsSize() == output_cfds.size());
         break;
-      case 2:
+      case 3:
         break;
       default:
         break;
