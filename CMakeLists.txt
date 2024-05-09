@@ -845,7 +845,7 @@ set(SOURCES
         trace_replay/trace_replay.cc
         transformer/cracker.cc
         transformer/bytecoder.cc
-        transformer/bycracker.cc
+        transformer/bytecracker.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc
