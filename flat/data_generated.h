@@ -10,22 +10,15 @@ struct FbRow;
 
 struct FbRow FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_NUMERICCOLS = 4,
-    VT_STRINGCOLS = 6
+    VT_NUMERICCOLS = 4
   };
   const flatbuffers::Vector<uint64_t> *numericCols() const {
     return GetPointer<const flatbuffers::Vector<uint64_t> *>(VT_NUMERICCOLS);
-  }
-  const flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>> *stringCols() const {
-    return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>> *>(VT_STRINGCOLS);
   }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_NUMERICCOLS) &&
            verifier.VerifyVector(numericCols()) &&
-           VerifyOffset(verifier, VT_STRINGCOLS) &&
-           verifier.VerifyVector(stringCols()) &&
-           verifier.VerifyVectorOfStrings(stringCols()) &&
            verifier.EndTable();
   }
 };
@@ -35,9 +28,6 @@ struct FbRowBuilder {
   flatbuffers::uoffset_t start_;
   void add_numericCols(flatbuffers::Offset<flatbuffers::Vector<uint64_t>> numericCols) {
     fbb_.AddOffset(FbRow::VT_NUMERICCOLS, numericCols);
-  }
-  void add_stringCols(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> stringCols) {
-    fbb_.AddOffset(FbRow::VT_STRINGCOLS, stringCols);
   }
   explicit FbRowBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -53,24 +43,19 @@ struct FbRowBuilder {
 
 inline flatbuffers::Offset<FbRow> CreateFbRow(
     flatbuffers::FlatBufferBuilder &_fbb,
-    flatbuffers::Offset<flatbuffers::Vector<uint64_t>> numericCols = 0,
-    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> stringCols = 0) {
+    flatbuffers::Offset<flatbuffers::Vector<uint64_t>> numericCols = 0) {
   FbRowBuilder builder_(_fbb);
-  builder_.add_stringCols(stringCols);
   builder_.add_numericCols(numericCols);
   return builder_.Finish();
 }
 
 inline flatbuffers::Offset<FbRow> CreateFbRowDirect(
     flatbuffers::FlatBufferBuilder &_fbb,
-    const std::vector<uint64_t> *numericCols = nullptr,
-    const std::vector<flatbuffers::Offset<flatbuffers::String>> *stringCols = nullptr) {
+    const std::vector<uint64_t> *numericCols = nullptr) {
   auto numericCols__ = numericCols ? _fbb.CreateVector<uint64_t>(*numericCols) : 0;
-  auto stringCols__ = stringCols ? _fbb.CreateVector<flatbuffers::Offset<flatbuffers::String>>(*stringCols) : 0;
   return CreateFbRow(
       _fbb,
-      numericCols__,
-      stringCols__);
+      numericCols__);
 }
 
 inline const FbRow *GetFbRow(const void *buf) {

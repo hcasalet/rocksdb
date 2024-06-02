@@ -22,20 +22,13 @@ void Bytecracker::Transform(std::string input, std::vector<std::string>* outputs
         flatbuffers::FlatBufferBuilder builder;
         std::vector<uint64_t> numericCols;
         int half = (group_size+1)/2;
-        for (int j = 0; j < half; j++) {
+        for (int j = 0; j < group_size; j++) {
             uint64_t num = std::stoull(row.columns(i*group_size+j).value());
             numericCols.push_back(num);
         }
         auto numericVec = builder.CreateVector(numericCols);
 
-        std::vector<flatbuffers::Offset<flatbuffers::String>> stringCols;
-        for (int j = half; j < group_size; j++) {
-            auto str = builder.CreateString(row.columns(i*group_size+j).value());
-            stringCols.push_back(str);
-        }
-        auto stringVec = builder.CreateVector(stringCols);
-
-        auto fbRow = CreateFbRow(builder, numericVec, stringVec);
+        auto fbRow = CreateFbRow(builder, numericVec);
 
         builder.Finish(fbRow);
 

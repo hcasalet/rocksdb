@@ -1,6 +1,5 @@
 table FbRow {
     numericCols:[uint64];
-    stringCols:[string];
 }
 
 root_type FbRow;
