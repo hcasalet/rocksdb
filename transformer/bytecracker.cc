@@ -20,11 +20,11 @@ void Bytecracker::Transform(std::string input, std::vector<std::string>* outputs
    
     for (int i = 0; i < splits; i++) {
         flatbuffers::FlatBufferBuilder builder;
-        std::vector<uint64_t> numericCols;
-        int half = (group_size+1)/2;
+        std::vector<flatbuffers::Offset<NumericColumn>> numericCols;
         for (int j = 0; j < group_size; j++) {
-            uint64_t num = std::stoull(row.columns(i*group_size+j).value());
-            numericCols.push_back(num);
+            auto col_name = builder.CreateString(row.columns(i*group_size+j).name());
+            auto col = CreateNumericColumn(builder, col_name, std::stoull(row.columns(i*group_size+j).value()));
+            numericCols.push_back(col);
         }
         auto numericVec = builder.CreateVector(numericCols);
 

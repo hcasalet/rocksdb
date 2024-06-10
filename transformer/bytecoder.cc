@@ -8,15 +8,15 @@ void Bytecoder::Transform(std::string input, std::vector<std::string>* outputs, 
     // cracking and flat buffers transformation only both occurs for level 0 -> level 1
     data::Row row;
     row.ParseFromString(input);
-    int len = row.columns_size();
     flatbuffers::FlatBufferBuilder builder;
 
     // Add the columns as uint64s
-    std::vector<uint64_t> numericCols;
-    for (int i = 0; i < len; ++i) {
+    std::vector<flatbuffers::Offset<NumericColumn>> numericCols;
+    for (int i = 0; i < row.columns_size(); ++i) {
         try {
-            uint64_t num = std::stoull(row.columns(i).value());
-            numericCols.push_back(num);
+            auto col_name = builder.CreateString(row.columns(i).name());
+            auto col = CreateNumericColumn(builder, col_name, std::stoull(row.columns(i).value()));
+            numericCols.push_back(col);
         } catch (const std::invalid_argument& ia) {
             outputs->push_back(input);
             return;

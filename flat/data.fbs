@@ -1,5 +1,10 @@
+table NumericColumn {
+    name:string;
+    value:uint64;
+}
+
 table FbRow {
-    numericCols:[uint64];
+    numcols:[NumericColumn];
 }
 
 root_type FbRow;
