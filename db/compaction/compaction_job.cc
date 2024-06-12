@@ -2208,30 +2208,44 @@ void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData
   int split_size = 0; 
   std::string cfname = cfd->GetName();
   int parent_level = 0;
+  int parent_group = 0;
 
   if (cfname.find("_sys_cf_") == std::string::npos) {
     cfname += "_sys_cf";
   } else {
-    size_t level = cfname.rfind("_level-");
+    size_t group = cfname.rfind("_G");
+    if (group != std::string::npos) {
+      for(std::string::size_type i = group+2; i < cfname.size(); ++i) {
+        if (!isdigit(cfname[i])) {
+          break;
+        }
+        parent_group = parent_group * 10 + cfname[i] - '0';
+      }
+    }
 
+    size_t level = cfname.rfind("_L");
     if (level != std::string::npos) {
-      for(std::string::size_type i = level+7; i < cfname.size(); ++i) {
+      for(std::string::size_type i = level+2; i < cfname.size(); ++i) {
         if (!isdigit(cfname[i])) {
           break;
         }
         parent_level = parent_level * 10 + cfname[i] - '0';
       }
+
+      if (parent_level == 3) {
+        return;
+      }      
     }
+
+    cfname = cfname.substr(0, level);
   }
-  
-  while (true) {
-    std::string child_cf_name = cfname + "_level-" + std::to_string(parent_level+1) + "-" + std::to_string(split_size);
+
+  for (int i = 0; i < 2; i++) {
+    std::string child_cf_name = cfname + "_L" + std::to_string(parent_level+1) + "_G" + std::to_string(parent_group*2+i);
     ColumnFamilyData* childcf = versions_->GetColumnFamilySet()->GetColumnFamily(child_cf_name);
-    if (childcf == nullptr) {
-      break;
+    if (childcf != nullptr) {
+      output_cfds.push_back(childcf);
     }
-    output_cfds.push_back(childcf);
-    split_size++;
   }
 }
 
@@ -2265,29 +2279,40 @@ int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
   int split_size = 0; 
   std::string cfname = cfd->GetName();
   int parent_level = 0;
+  int parent_group = 0;
 
   if (cfname.find("_sys_cf_") == std::string::npos) {
     cfname += "_sys_cf";
   } else {
-    size_t level = cfname.rfind("_level-");
+    size_t group = cfname.rfind("_G");
+    if (group != std::string::npos) {
+      for(std::string::size_type i = group+2; i < cfname.size(); ++i) {
+        if (!isdigit(cfname[i])) {
+          break;
+        }
+        parent_group = parent_group * 10 + cfname[i] - '0';
+      }
+    }
 
+    size_t level = cfname.rfind("_L");
     if (level != std::string::npos) {
-      for(std::string::size_type i = level+7; i < cfname.size(); ++i) {
+      for(std::string::size_type i = level+2; i < cfname.size(); ++i) {
         if (!isdigit(cfname[i])) {
           break;
         }
         parent_level = parent_level * 10 + cfname[i] - '0';
       }
     }
+
+    cfname = cfname.substr(0, level);
   }
-  
-  while (true) {
-    std::string child_cf_name = cfname + "_level-" + std::to_string(parent_level+1) + "-" + std::to_string(split_size);
+
+  for (int i = 0; i < 2; i++) {
+    std::string child_cf_name = cfname + "_L" + std::to_string(parent_level+1) + "_G" + std::to_string(parent_group*2+i);
     ColumnFamilyData* childcf = versions_->GetColumnFamilySet()->GetColumnFamily(child_cf_name);
-    if (childcf == nullptr) {
-      break;
+    if (childcf != nullptr) {
+      split_size++;
     }
-    split_size++;
   }
   
   if (split_size > 0) {
