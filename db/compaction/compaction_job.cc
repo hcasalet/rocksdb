@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 #include <ctype.h>
+#include <cmath>
 
 #include "db/blob/blob_counting_iterator.h"
 #include "db/blob/blob_file_addition.h"
@@ -1374,12 +1375,18 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       RecordCompactionIOStats();
     }
 
+    // for the case of cracking+fb conversion, it happens only for the last level
+    bool extra_work = db_options_.write_both;
+    if (cfd->ioptions()->transform_type == 2 &&
+        c_iter->output_cfds().size() >= pow(2, cfd->ioptions()->compacting_column_family_num_levels-1)) {
+      extra_work = true;
+    }
     // Add current compaction_iterator key to target compaction output, if the
     // output file needs to be close or open, it will call the `open_file_func`
     // and `close_file_func`.
     // TODO: it would be better to have the compaction file open/close moved
     // into `CompactionOutputs` which has the output file information.
-    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, transformer_, db_options_.write_both);
+    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, transformer_, extra_work);
     if (!exec_status.ok()) {
       break;
     }
