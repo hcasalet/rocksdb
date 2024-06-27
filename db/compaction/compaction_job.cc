@@ -867,6 +867,8 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
         break;
       }  
       case 3:
+        cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_,
+                                              compaction_stats_);
         break;
       default:
         break;
