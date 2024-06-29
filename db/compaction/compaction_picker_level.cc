@@ -477,10 +477,12 @@ Compaction* LevelCompactionBuilder::PickCompaction() {
   // Pick up the first file to start compaction. It may have been extended
   // to a clean cut.
   SetupInitialFiles();
-  if (start_level_inputs_.empty()) {
+  // output_level_ will be zero if a concurrent level0 compaction is still
+  // going on, in which case we will not schedule another compaction
+  if (start_level_inputs_.empty() || output_level_ == 0) {
     return nullptr;
   }
-  assert(start_level_ >= 0 && output_level_ >= 0);
+  assert(start_level_ >= 0 && output_level_ > 0);
 
   // If it is a L0 -> base level compaction, we need to set up other L0
   // files if needed.
