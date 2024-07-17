@@ -253,8 +253,6 @@ void CompactionJob::Prepare() {
   auto* c = compact_->compaction;
   ColumnFamilyData* cfd = c->column_family_data();
   assert(cfd != nullptr);
-  assert(cfd->current()->storage_info()->NumLevelFiles(
-             compact_->compaction->level()) > 0);
 
   int splits = 1;
   if (transformer_ != nullptr)  {
@@ -266,13 +264,27 @@ void CompactionJob::Prepare() {
         if (splits > 1 && db_options_.write_both) {
           splits += 1;
         }
+
+        // help the internal cfds used in cracking to make sure that
+        // the input files are on level 0 
+        if (cfd->GetName().find("_sys_cf_") != std::string::npos) {
+          EnsureInputOnlyOnLevel0(cfd);
+          assert(cfd->current()->storage_info()->NumLevelFiles(0) > 0);
+        }
+
         break;
       case 3:
+        assert(cfd->current()->storage_info()->NumLevelFiles(
+             compact_->compaction->level()) > 0);
         break;
       default:
+        assert(cfd->current()->storage_info()->NumLevelFiles(
+             compact_->compaction->level()) > 0);
         break;    
     }
-    
+  } else {
+    assert(cfd->current()->storage_info()->NumLevelFiles(
+             compact_->compaction->level()) > 0);
   }
 
   write_hint_ = cfd->CalculateSSTWriteHint(c->output_level());
@@ -2327,6 +2339,15 @@ int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
   if (split_size > 0) {
     return split_size;
   } else return 1;
+}
+
+void CompactionJob::EnsureInputOnlyOnLevel0(ColumnFamilyData* cfd) {
+  VersionStorageInfo* vstorage_info = cfd->current()->storage_info();
+  for (int i = 1; i < cfd->NumberLevels(); i++) {
+    if (vstorage_info->NumLevelFiles(i) > 0) {
+      vstorage_info->Move2Level0(i);
+    }
+  }
 }
 
 Env::IOPriority CompactionJob::GetRateLimiterPriority() {

@@ -3953,6 +3953,17 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
   SchedulePendingCompaction(cfd);
   MaybeScheduleFlushOrCompaction();
 
+  // Need to check if we have any tranforming cfds that will need compaction
+  if (immutable_db_options_.transformer != nullptr) {
+    // schedule new compactions
+    for (auto* my_cfd : *versions_->GetColumnFamilySet()) {
+      if (my_cfd->GetName().find("_sys_cf_") != std::string::npos && my_cfd->NeedsCompaction()) {
+        SchedulePendingCompaction(my_cfd);
+        MaybeScheduleFlushOrCompaction();
+      }
+    }
+  }
+
   // Update max_total_in_memory_state_
   max_total_in_memory_state_ = max_total_in_memory_state_ - old_memtable_size +
                                mutable_cf_options.write_buffer_size *

@@ -698,6 +698,10 @@ class VersionBuilder::Rep {
 
     const int current_level = GetCurrentLevelForTableFile(file_number);
 
+    if (current_level == 0 && level != 0) {
+      level = 0;
+    }
+
     if (level != current_level) {
       if (level >= num_levels_) {
         has_invalid_levels_ = true;

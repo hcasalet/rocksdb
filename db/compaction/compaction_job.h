@@ -286,6 +286,10 @@ class CompactionJob {
 
   int GetSplits(ColumnFamilyData* cfd);
 
+  // The interal cfds used for cracking transformation are meant to only have files
+  // on level 0. This is to ensure that
+  void EnsureInputOnlyOnLevel0(ColumnFamilyData* cfd);
+
   uint32_t job_id_;
 
   // DBImpl state
