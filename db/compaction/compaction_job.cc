@@ -257,8 +257,8 @@ void CompactionJob::Prepare() {
   int splits = 1;
   if (transformer_ != nullptr)  {
     switch (cfd->ioptions()->transform_type) {
-      case 1:
-      case 2:
+      case 1:   // cracking
+      case 2:   // cracking + flatbuffers
         splits = GetSplits(cfd);
 
         if (splits > 1 && db_options_.write_both) {
@@ -273,7 +273,12 @@ void CompactionJob::Prepare() {
         }
 
         break;
-      case 3:
+      case 3:    // flatbuffers
+        assert(cfd->current()->storage_info()->NumLevelFiles(
+             compact_->compaction->level()) > 0);
+        break;
+      case 4:   // creating index
+        splits = GetIndexCFCount(cfd) + 1;
         assert(cfd->current()->storage_info()->NumLevelFiles(
              compact_->compaction->level()) > 0);
         break;
@@ -882,6 +887,8 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
         cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_,
                                               compaction_stats_);
         break;
+      case 4:
+        
       default:
         break;
     }
@@ -2270,6 +2277,22 @@ void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData
   }
 }
 
+void CompactionJob::GetIndexingCfds(std::vector<ColumnFamilyData*>& output_cfds) {
+  ColumnFamilyData* cfd = compact_->compaction->column_family_data();
+  std::string cfname = cfd->GetName();
+  int i = 0;
+
+  while (true) {
+    std::string indexcf_name = cfname + "_index_cf_" + std::to_string(i++);
+    ColumnFamilyData* indexcfd = versions_->GetColumnFamilySet()->GetColumnFamily(indexcf_name);
+    if (indexcfd != nullptr) {
+      output_cfds.push_back(indexcf);
+    } else {
+      break;
+    }
+  }
+}
+
 ColumnFamilyData* CompactionJob::GetWriteBothColumnFamily() {
   ColumnFamilyData* cfd = compact_->compaction->column_family_data();
   std::string cfname = cfd->GetName();
@@ -2339,6 +2362,24 @@ int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
   if (split_size > 0) {
     return split_size;
   } else return 1;
+}
+
+// A column family's index CFs are named in the convention of cfname_index_cf_[num]
+// where num starts at 0 and goes strictly increasingly
+int CompactionJob::GetIndexCFCount(ColumnFamilyData* cfd) {
+  std::string cfd_name = cfd->GetName();
+  int i = 0, num_indexcfs = 0;
+  while (true) {
+    std::string indexcf_name = cfd_name + "_index_cf_" + std::to_string(i++);
+    ColumnFamilyData* indexcf = versions_->GetColumnFamilySet()->GetColumnFamily(indexcf_name);
+    if (indexcf != nullptr) {
+      num_indexcfs++;
+    } else {
+      break;
+    }
+  }
+
+  return num_indexcfs;
 }
 
 void CompactionJob::EnsureInputOnlyOnLevel0(ColumnFamilyData* cfd) {
