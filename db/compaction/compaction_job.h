@@ -286,6 +286,10 @@ class CompactionJob {
 
   int GetSplits(ColumnFamilyData* cfd);
 
+  int GetIndexCFCount(ColumnFamilyData* cfd);
+
+  void GetIndexingCfds(std::vector<ColumnFamilyData*>& output_cfds);
+
   // The interal cfds used for cracking transformation are meant to only have files
   // on level 0. This is to ensure that
   void EnsureInputOnlyOnLevel0(ColumnFamilyData* cfd);

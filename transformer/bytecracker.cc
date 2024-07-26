@@ -3,7 +3,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Bytecracker::Transform(std::string input, std::vector<std::string>* outputs, int splits, bool extra_write)
+void Bytecracker::Transform(std::string input, std::vector<std::string>* outputs, const TransformerData& data)
 {
     if (splits <= 1) {
         outputs->push_back(input);

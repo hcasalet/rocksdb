@@ -3,7 +3,7 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Bytecoder::Transform(std::string input, std::vector<std::string>* outputs, int splits, bool extra_write)
+void Bytecoder::Transform(std::string input, std::vector<std::string>* outputs, const TransformerData& data)
 {
     // cracking and flat buffers transformation only both occurs for level 0 -> level 1
     data::Row row;

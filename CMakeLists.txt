@@ -846,6 +846,7 @@ set(SOURCES
         transformer/cracker.cc
         transformer/bytecoder.cc
         transformer/bytecracker.cc
+        transformer/indexer.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc

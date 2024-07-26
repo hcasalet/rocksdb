@@ -4,8 +4,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Cracker::Transform(std::string input, std::vector<std::string>* outputs, int splits, bool extra_write) {
-    if (extra_write) {
+void Cracker::Transform(std::string input, std::vector<std::string>* outputs, const TransformerData& data) {
+    int splits = data.splits;
+
+    if (data.extra_write) {
         splits = splits - 1;
     }
 
@@ -37,7 +39,7 @@ void Cracker::Transform(std::string input, std::vector<std::string>* outputs, in
         outputs->push_back(serializedRow);
     }
 
-    if (splits > 0 && extra_write) {
+    if (splits > 0 && data.extra_write) {
         outputs->push_back(input);
     }
 }
