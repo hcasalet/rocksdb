@@ -26,6 +26,7 @@
 #include "rocksdb/file_checksum.h"
 #include "rocksdb/listener.h"
 #include "rocksdb/sst_partitioner.h"
+#include "rocksdb/transformer.h"
 #include "rocksdb/types.h"
 #include "rocksdb/universal_compaction.h"
 #include "rocksdb/version.h"
@@ -88,10 +89,10 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // Transform data format while doing compaction
   ColumnFamilyOptions* AllowTransformationWhileCompacting(int levels,
                             int column_family_group_levels, int numColumns,
-                            int tranformType);
+                            TransformerType tranformType);
 
   // Sets the transformation type
-  ColumnFamilyOptions* SetTransformType(int tranformType);
+  ColumnFamilyOptions* SetTransformType(TransformerType tranformerType);
 
   // Set compacting level for a column family inside the compacting group
   ColumnFamilyOptions* SetCompactingLevelWithinColumnFamilyGroup(int compacting_level);

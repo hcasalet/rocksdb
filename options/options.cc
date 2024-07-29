@@ -64,7 +64,7 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       compacting_column_family_num_levels(options.compacting_column_family_num_levels),
       transform_while_compacting(options.transform_while_compacting),
       num_columns(options.num_columns),
-      transform_type(options.transform_type),
+      transformer_type(options.transformer_type),
       translevel(options.translevel),
       level0_slowdown_writes_trigger(options.level0_slowdown_writes_trigger),
       level0_stop_writes_trigger(options.level0_stop_writes_trigger),
@@ -196,7 +196,7 @@ void ColumnFamilyOptions::Dump(Logger* log) const {
     ROCKS_LOG_HEADER(log, "            Options.compacting_column_family_num_levels: %d", compacting_column_family_num_levels);
     ROCKS_LOG_HEADER(log, "            Options.compacting_level_within_column_family_group: %d", compacting_level_within_column_family_group);
     ROCKS_LOG_HEADER(log, "            Options.num_columns: %d", num_columns);
-    ROCKS_LOG_HEADER(log, "            Options.transform_type: %d", transform_type);
+    ROCKS_LOG_HEADER(log, "            Options.transform_type: %d", static_cast<int>(transformer_type));
     ROCKS_LOG_HEADER(log, "            Options.translevel: %s", translevel.c_str());
     ROCKS_LOG_HEADER(log, "       Options.min_write_buffer_number_to_merge: %d",
                      min_write_buffer_number_to_merge);
@@ -639,17 +639,17 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeForPointLookup(
 }
 
 ColumnFamilyOptions* ColumnFamilyOptions::AllowTransformationWhileCompacting(
-        int levels, int cf_levels, int numColumns, int transformType) {
+        int levels, int cf_levels, int numColumns, TransformerType transformerType) {
   num_levels = levels;
   compacting_column_family_num_levels = cf_levels;
   transform_while_compacting = true;
   num_columns = numColumns;
-  transform_type = transformType;
+  transformer_type = transformerType;
   return this;
 }
 
-ColumnFamilyOptions* ColumnFamilyOptions::SetTransformType(int transformType) {
-  transform_type = transformType;
+ColumnFamilyOptions* ColumnFamilyOptions::SetTransformType(TransformerType transformerType) {
+  transformer_type = transformerType;
   return this;
 }
 

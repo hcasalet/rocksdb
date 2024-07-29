@@ -14,6 +14,7 @@
 #include "rocksdb/compression_type.h"
 #include "rocksdb/memtablerep.h"
 #include "rocksdb/universal_compaction.h"
+#include "rocksdb/transformer.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -569,12 +570,8 @@ struct AdvancedColumnFamilyOptions {
   // Number of columns for this database
   int num_columns = 1;
 
-  // Transformation type
-  // value: 0 - no transformation, vanilla rocksdb
-  //        1 - column family splitting (cracking)
-  //        2 - column family splitting + protobuf->flatBuffers transformation
-  //        3 - protobuf->flatBuffers transformation
-  int transform_type = 0;
+  // Transformer type
+  TransformerType transformer_type = TransformerType::NOTRANSFORMATION;
 
   // At which level(s) is transformation happening
   std::string translevel = "all";

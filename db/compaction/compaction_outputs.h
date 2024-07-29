@@ -15,6 +15,7 @@
 #include "db/compaction/compaction_iterator.h"
 #include "db/internal_stats.h"
 #include "db/output_validator.h"
+#include "rocksdb/transformer.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -279,7 +280,7 @@ class CompactionOutputs {
                      const CompactionFileOpenFunc& open_file_func,
                      const CompactionFileCloseFunc& close_file_func,
                      Transformer* transformer,
-                     bool write_both);
+                     TransformerType transformer_types);
 
   // Close the current output. `open_file_func` is needed for creating new file
   // for range-dels only output file.

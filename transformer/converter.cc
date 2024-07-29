@@ -1,11 +1,18 @@
-#include "bytecoder.h"
+#include "converter.h"
 #include "columns.pb.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-void Bytecoder::Transform(std::string input, std::vector<std::string>* outputs, const TransformerData& data)
+void Converter::Transform(std::string input, std::vector<std::string>* outputs, const std::shared_ptr<TransformerData>& data)
 {
-    // cracking and flat buffers transformation only both occurs for level 0 -> level 1
+    auto converterData = std::dynamic_pointer_cast<ConverterData>(data);
+
+    switch (converterData->in_type) {
+        case ConverterInputType::PROTOBUF:
+            break;
+        default:
+            break;
+    }
     data::Row row;
     row.ParseFromString(input);
     flatbuffers::FlatBufferBuilder builder;
@@ -39,14 +46,6 @@ void Bytecoder::Transform(std::string input, std::vector<std::string>* outputs, 
     std::string s(reinterpret_cast<char*>(buf), size);
 
     outputs->push_back(s);
-    return;
-}
-
-void Bytecoder::Store(std::vector<VersionEdit*> edits, std::vector<ColumnFamilyData*> cfds, std::vector<std::string>* outputs) {
-    return;
-}
-
-void Bytecoder::Delete(VersionEdit* edit, std::vector<CompactionInputFiles*>) {
     return;
 }
 

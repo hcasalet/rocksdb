@@ -11,7 +11,9 @@
 #include "db/compaction/compaction_outputs.h"
 
 #include "db/builder.h"
-#include "transformer/transformer.h"
+#include "transformer/distributor.h"
+#include "transformer/converter.h"
+#include "transformer/augmenter.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -363,7 +365,7 @@ Status CompactionOutputs::AddToOutput(
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func,
     Transformer* transformer,
-    bool write_both) {
+    TransformerType transformer_type) {
   Status s;
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {
@@ -416,70 +418,92 @@ Status CompactionOutputs::AddToOutput(
   std::vector<std::string> output_values;
   int output_cfds_size = static_cast<int>(c_iter.output_cfds().size());
   const ParsedInternalKey& ikey = c_iter.ikey();
-  if (output_cfds_size > 0) {
-    transformer->Transform(value.data(), &output_values, output_cfds_size, write_both);
-  
-    for (int i = 0; i < output_cfds_size; i++) {
-      s = current_output(i).validator.Add(key, Slice(output_values[i]));
+
+  switch (to_underlying(transformer_type)) {
+    case to_underlying(TransformerType::NOTRANSFORMATION): {   // no transformations
+      s = current_output(0).validator.Add(key, value);
       if (!s.ok()) {
         return s;
       }
-      builders_[i]->Add(key, Slice(output_values[i]));
-    
+      builders_[0]->Add(key, value);
       stats_.num_output_records++;
-      current_output_file_size_ = builders_[i]->EstimatedFileSize();
+      current_output_file_size_ = builders_[0]->EstimatedFileSize();
   
       if (blob_garbage_meter_) {
-        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_values[i]));
+        s = blob_garbage_meter_->ProcessOutFlow(key, value);
       }
       if (!s.ok()) {
         return s;
       }
 
-      s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
-                                             ikey.type);
-    }
-  } else if (transformer != nullptr && compaction_->immutable_options()->transform_type == 3) {
-    std::vector<std::string> output_value;
-    transformer->Transform(value.data(), &output_value, 1, false);
-    s = current_output(0).validator.Add(key, Slice(output_value[0]));
-    if (!s.ok()) {
-      return s;
-    }
+      s = current_output(0).meta.UpdateBoundaries(key, value, ikey.sequence,
+                                                 ikey.type);
 
-    builders_[0]->Add(key, Slice(output_value[0]));
-    stats_.num_output_records++;
-    current_output_file_size_ = builders_[0]->EstimatedFileSize();
+      break;
+    }
+    case to_underlying(TransformerType::DISTRIBUTOR): 
+    case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
+      assert(output_cfds_size > 0);
+
+      std::shared_ptr<TransformerData> splittingData = 
+                std::make_shared<DistributorData>(output_cfds_size); 
+      transformer->Transform(value.data(), &output_values, splittingData);
   
-    if (blob_garbage_meter_) {
-      s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_value[0]));
-    }
-    if (!s.ok()) {
-      return s;
-    }
-
-    s = current_output(0).meta.UpdateBoundaries(key, Slice(output_value[0]), ikey.sequence,
-                                               ikey.type);
-  } else {
-    s = current_output(0).validator.Add(key, value);
-    if (!s.ok()) {
-      return s;
-    }
-    builders_[0]->Add(key, value);
-    stats_.num_output_records++;
-    current_output_file_size_ = builders_[0]->EstimatedFileSize();
+      for (int i = 0; i < output_cfds_size; i++) {
+        s = current_output(i).validator.Add(key, Slice(output_values[i]));
+        if (!s.ok()) {
+          return s;
+        }
+        builders_[i]->Add(key, Slice(output_values[i]));
+    
+        stats_.num_output_records++;
+        current_output_file_size_ = builders_[i]->EstimatedFileSize();
   
-    if (blob_garbage_meter_) {
-      s = blob_garbage_meter_->ProcessOutFlow(key, value);
-    }
-    if (!s.ok()) {
-      return s;
-    }
+        if (blob_garbage_meter_) {
+          s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_values[i]));
+        }
+        if (!s.ok()) {
+          return s;
+        }
 
-    s = current_output(0).meta.UpdateBoundaries(key, value, ikey.sequence,
-                                             ikey.type);
+        s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
+                                                    ikey.type);
+      }
+      break;
+    }
+    case to_underlying(TransformerType::CONVERTER): {
+      std::vector<std::string> output_value;
+      std::shared_ptr<TransformerData> convertingData =
+                std::make_shared<ConverterData>(ConverterInputType::PROTOBUF,
+                                                ConverterOutputType::FLATBUFFERS);
+      transformer->Transform(value.data(), &output_value, convertingData);
+      s = current_output(0).validator.Add(key, Slice(output_value[0]));
+      if (!s.ok()) {
+        return s;
+      }
+
+      builders_[0]->Add(key, Slice(output_value[0]));
+      stats_.num_output_records++;
+      current_output_file_size_ = builders_[0]->EstimatedFileSize();
+  
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_value[0]));
+      }
+      if (!s.ok()) {
+        return s;
+      }
+
+      s = current_output(0).meta.UpdateBoundaries(key, Slice(output_value[0]), ikey.sequence,
+                                                  ikey.type);
+      break;
+    }
+    case to_underlying(TransformerType::AUGMENTER): {
+      break;
+    }
+    default: {
+      break;
+    }
   }
-
   return s;
 }
 

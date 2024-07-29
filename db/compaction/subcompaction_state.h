@@ -215,7 +215,7 @@ class SubcompactionState {
                      const CompactionFileOpenFunc& open_file_func,
                      const CompactionFileCloseFunc& close_file_func,
                      Transformer* transformer,
-                     bool write_both);
+                     TransformerType transformer_type);
 
   // Close all compaction output files, both output_to_penultimate_level outputs
   // and normal outputs.

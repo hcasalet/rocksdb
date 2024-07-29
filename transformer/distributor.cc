@@ -1,15 +1,12 @@
 #include <iostream>
-#include "cracker.h"
+#include "distributor.h"
 #include "columns.pb.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-void Cracker::Transform(std::string input, std::vector<std::string>* outputs, const TransformerData& data) {
-    int splits = data.splits;
-
-    if (data.extra_write) {
-        splits = splits - 1;
-    }
+void Distributor::Transform(std::string input, std::vector<std::string>* outputs, const std::shared_ptr<TransformerData>& data) {
+    auto distributorData = std::dynamic_pointer_cast<DistributorData>(data);
+    int splits = distributorData->splits;
 
     data::Row row;
     row.ParseFromString(input);
@@ -38,18 +35,6 @@ void Cracker::Transform(std::string input, std::vector<std::string>* outputs, co
         splittedRow.SerializeToString(&serializedRow);
         outputs->push_back(serializedRow);
     }
-
-    if (splits > 0 && data.extra_write) {
-        outputs->push_back(input);
-    }
-}
-
-void Cracker::Store(std::vector<VersionEdit*> edits, std::vector<ColumnFamilyData*> cfds, std::vector<std::string>* outputs) {
-    return;
-}
-
-void Cracker::Delete(VersionEdit* edit, std::vector<CompactionInputFiles*>) {
-
 }
 
 }

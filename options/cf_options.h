@@ -76,7 +76,7 @@ struct ImmutableCFOptions {
 
   int num_columns;
 
-  int transform_type;
+  TransformerType transformer_type;
 
   std::string translevel;
 
