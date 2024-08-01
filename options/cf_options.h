@@ -68,17 +68,9 @@ struct ImmutableCFOptions {
 
   int num_levels;
 
-  bool transform_while_compacting;
-
-  int compacting_column_family_num_levels;
-
-  int compacting_level_within_column_family_group;
-
   int num_columns;
 
   TransformerType transformer_type;
-
-  std::string translevel;
 
   bool optimize_filters_for_hits;
 

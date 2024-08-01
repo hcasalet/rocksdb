@@ -65,7 +65,6 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       transform_while_compacting(options.transform_while_compacting),
       num_columns(options.num_columns),
       transformer_type(options.transformer_type),
-      translevel(options.translevel),
       level0_slowdown_writes_trigger(options.level0_slowdown_writes_trigger),
       level0_stop_writes_trigger(options.level0_stop_writes_trigger),
       target_file_size_base(options.target_file_size_base),
@@ -197,7 +196,6 @@ void ColumnFamilyOptions::Dump(Logger* log) const {
     ROCKS_LOG_HEADER(log, "            Options.compacting_level_within_column_family_group: %d", compacting_level_within_column_family_group);
     ROCKS_LOG_HEADER(log, "            Options.num_columns: %d", num_columns);
     ROCKS_LOG_HEADER(log, "            Options.transform_type: %d", static_cast<int>(transformer_type));
-    ROCKS_LOG_HEADER(log, "            Options.translevel: %s", translevel.c_str());
     ROCKS_LOG_HEADER(log, "       Options.min_write_buffer_number_to_merge: %d",
                      min_write_buffer_number_to_merge);
     ROCKS_LOG_HEADER(log, "    Options.max_write_buffer_number_to_maintain: %d",
@@ -638,17 +636,7 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeForPointLookup(
   return this;
 }
 
-ColumnFamilyOptions* ColumnFamilyOptions::AllowTransformationWhileCompacting(
-        int levels, int cf_levels, int numColumns, TransformerType transformerType) {
-  num_levels = levels;
-  compacting_column_family_num_levels = cf_levels;
-  transform_while_compacting = true;
-  num_columns = numColumns;
-  transformer_type = transformerType;
-  return this;
-}
-
-ColumnFamilyOptions* ColumnFamilyOptions::SetTransformType(TransformerType transformerType) {
+ColumnFamilyOptions* ColumnFamilyOptions::SetTransformerType(TransformerType transformerType) {
   transformer_type = transformerType;
   return this;
 }
@@ -699,12 +687,6 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeUniversalStyleCompaction(
   // universal style compaction
   compaction_style = kCompactionStyleUniversal;
   compaction_options_universal.compression_size_percent = 80;
-  return this;
-}
-
-ColumnFamilyOptions* ColumnFamilyOptions::SetCompactingLevelWithinColumnFamilyGroup(
-  int compacting_level) {
-  compacting_level_within_column_family_group = compacting_level;
   return this;
 }
 

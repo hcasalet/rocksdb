@@ -1110,11 +1110,6 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
 
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
 
-  if (cfd->ioptions()->compacting_level_within_column_family_group ==
-      cfd->ioptions()->compacting_column_family_num_levels - 1) {
-    return;
-  }
-
   // Create compaction filter and fail the compaction if
   // IgnoreSnapshots() = false because it is not supported anymore
   const CompactionFilter* compaction_filter =
