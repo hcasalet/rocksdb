@@ -218,7 +218,7 @@ class CompactionJob {
 
   CompactionJobStats* compaction_job_stats_;
 
-  Transformer* transformer_;
+  std::vector<Transformer*> transformers_;
 
  private:
   friend class CompactionJobTestBase;

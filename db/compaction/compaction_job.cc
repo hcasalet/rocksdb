@@ -158,7 +158,7 @@ CompactionJob::CompactionJob(
       bottommost_level_(false),
       write_hint_(Env::WLTH_NOT_SET),
       compaction_job_stats_(compaction_job_stats),
-      transformer_(db_options.transformer.get()),
+      transformers_(db_options.transformers),
       job_id_(job_id),
       dbname_(dbname),
       db_id_(db_id),
@@ -255,7 +255,7 @@ void CompactionJob::Prepare() {
   assert(cfd != nullptr);
 
   int splits = 1;
-  if (transformer_ != nullptr)  {
+  if (transformers_.size() > 0)  {
     switch (to_underlying(cfd->ioptions()->transformer_type)) {
       case to_underlying(TransformerType::DISTRIBUTOR):   // cracking
       case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): // cracking+conversion
@@ -852,7 +852,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   int output_level = compact_->compaction->output_level();
 
   std::vector<ColumnFamilyData*> output_cfds;
-  if (transformer_ != nullptr) {
+  if (transformers_.size() > 0) {
     switch (to_underlying(cfd->ioptions()->transformer_type)) {
       case to_underlying(TransformerType::DISTRIBUTOR):
       case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
@@ -1266,7 +1266,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   Status exec_status;
   int splits = 1;
   std::vector<ColumnFamilyData*> output_cfds;
-  if (transformer_ != nullptr) {
+  if (transformers_.size() > 0) {
     switch (to_underlying(cfd->ioptions()->transformer_type)) {
       case to_underlying(TransformerType::DISTRIBUTOR):
       case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER):
@@ -1386,7 +1386,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     // and `close_file_func`.
     // TODO: it would be better to have the compaction file open/close moved
     // into `CompactionOutputs` which has the output file information.
-    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, transformer_,
+    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, transformers_,
                               cfd->ioptions()->transformer_type);
     if (!exec_status.ok()) {
       break;
@@ -1567,7 +1567,7 @@ Status CompactionJob::FinishCompactionOutputFile(
     assert(output_number != 0);
 
     ColumnFamilyData* cfd;
-    if (transformer_ != nullptr && output_cfds.size() > 0) {
+    if (transformers_.size() > 0 && output_cfds.size() > 0) {
       cfd = output_cfds[i];
     } else {
       cfd = sub_compact->compaction->column_family_data();
@@ -1890,7 +1890,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
                                                CompactionOutputs& outputs) {
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
   assert(sub_compact != nullptr);
-  if (transformer_ != nullptr) {
+  if (transformers_.size() > 0) {
     if (cfd->GetName() == "default") {
       return Status::OK();
     }
@@ -1915,7 +1915,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
     uint64_t file_number = versions_->NewFileNumber();
     std::string fname = GetTableFileName(file_number);
     // Fire events.
-    if (transformer_ != nullptr && output_cfds.size() > 0) {
+    if (transformers_.size() > 0 && output_cfds.size() > 0) {
       cfd = output_cfds[i];
     }
     EventHelpers::NotifyTableFileCreationStarted(
@@ -2032,7 +2032,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         db_options_.stats, listeners, db_options_.file_checksum_gen_factory.get(),
         tmp_set.Contains(FileType::kTableFile), false), i);
 
-    if (transformer_ != nullptr && output_cfds.size() > 0 &&
+    if (transformers_.size() > 0 && output_cfds.size() > 0 &&
         (cfd->ioptions()->transformer_type == TransformerType::DISTRIBUTOR || 
         cfd->ioptions()->transformer_type == (TransformerType::DISTRIBUTOR | TransformerType::CONVERTER))) {
       TableBuilderOptions tboptions(

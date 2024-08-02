@@ -99,7 +99,7 @@ Status SubcompactionState::AddToOutput(
     const CompactionIterator& iter,
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func,
-    Transformer* transformer,
+    std::vector<Transformer*> transformers,
     TransformerType transformer_type) {
   // update target output first
   is_current_penultimate_level_ = iter.output_to_penultimate_level();
@@ -109,7 +109,7 @@ Status SubcompactionState::AddToOutput(
     has_penultimate_level_outputs_ = true;
   }
 
-  return Current().AddToOutput(iter, open_file_func, close_file_func, transformer, transformer_type);
+  return Current().AddToOutput(iter, open_file_func, close_file_func, transformers, transformer_type);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

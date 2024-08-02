@@ -364,7 +364,7 @@ Status CompactionOutputs::AddToOutput(
     const CompactionIterator& c_iter,
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func,
-    Transformer* transformer,
+    std::vector<Transformer*> transformers,
     TransformerType transformer_type) {
   Status s;
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
@@ -441,13 +441,41 @@ Status CompactionOutputs::AddToOutput(
 
       break;
     }
-    case to_underlying(TransformerType::DISTRIBUTOR): 
+    case to_underlying(TransformerType::DISTRIBUTOR): {
+      assert(output_cfds_size > 0);
+
+      std::shared_ptr<TransformerData> splittingData = 
+                std::make_shared<DistributorData>(output_cfds_size); 
+      transformers[0]->Transform(value.data(), &output_values, splittingData);
+  
+      for (int i = 0; i < output_cfds_size; i++) {
+        s = current_output(i).validator.Add(key, Slice(output_values[i]));
+        if (!s.ok()) {
+          return s;
+        }
+        builders_[i]->Add(key, Slice(output_values[i]));
+    
+        stats_.num_output_records++;
+        current_output_file_size_ = builders_[i]->EstimatedFileSize();
+  
+        if (blob_garbage_meter_) {
+          s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_values[i]));
+        }
+        if (!s.ok()) {
+          return s;
+        }
+
+        s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
+                                                    ikey.type);
+      }
+      break;
+    }
     case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
       assert(output_cfds_size > 0);
 
       std::shared_ptr<TransformerData> splittingData = 
                 std::make_shared<DistributorData>(output_cfds_size); 
-      transformer->Transform(value.data(), &output_values, splittingData);
+      transformers[0]->Transform(value.data(), &output_values, splittingData);
   
       for (int i = 0; i < output_cfds_size; i++) {
         s = current_output(i).validator.Add(key, Slice(output_values[i]));
@@ -476,7 +504,7 @@ Status CompactionOutputs::AddToOutput(
       std::shared_ptr<TransformerData> convertingData =
                 std::make_shared<ConverterData>(ConverterInputType::PROTOBUF,
                                                 ConverterOutputType::FLATBUFFERS);
-      transformer->Transform(value.data(), &output_value, convertingData);
+      transformers[0]->Transform(value.data(), &output_value, convertingData);
       s = current_output(0).validator.Add(key, Slice(output_value[0]));
       if (!s.ok()) {
         return s;

@@ -544,8 +544,9 @@ struct DBOptions {
   Env* env = Env::Default();
   Env* base_env = Env::Default();
 
-  // Transformer transforms compaction outputs into the desired format
-  std::shared_ptr<Transformer> transformer = nullptr;
+  // Transformers contains the transformers that transform compaction outputs 
+  // into the desired format
+  std::vector<Transformer*> transformers;
 
   // controls if we write both original and transformed data
   bool write_both = false;

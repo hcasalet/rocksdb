@@ -214,7 +214,7 @@ class SubcompactionState {
   Status AddToOutput(const CompactionIterator& iter,
                      const CompactionFileOpenFunc& open_file_func,
                      const CompactionFileCloseFunc& close_file_func,
-                     Transformer* transformer,
+                     std::vector<Transformer*> transformers,
                      TransformerType transformer_type);
 
   // Close all compaction output files, both output_to_penultimate_level outputs

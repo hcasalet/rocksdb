@@ -3954,7 +3954,7 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
   MaybeScheduleFlushOrCompaction();
 
   // Need to check if we have any tranforming cfds that will need compaction
-  if (immutable_db_options_.transformer != nullptr) {
+  if (immutable_db_options_.transformers.size() > 0) {
     // schedule new compactions
     for (auto* my_cfd : *versions_->GetColumnFamilySet()) {
       if (my_cfd->GetName().find("_sys_cf_") != std::string::npos && my_cfd->NeedsCompaction()) {

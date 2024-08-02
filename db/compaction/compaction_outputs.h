@@ -279,7 +279,7 @@ class CompactionOutputs {
   Status AddToOutput(const CompactionIterator& c_iter,
                      const CompactionFileOpenFunc& open_file_func,
                      const CompactionFileCloseFunc& close_file_func,
-                     Transformer* transformer,
+                     std::vector<Transformer*> transformers,
                      TransformerType transformer_types);
 
   // Close the current output. `open_file_func` is needed for creating new file
