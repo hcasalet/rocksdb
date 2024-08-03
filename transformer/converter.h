@@ -27,9 +27,14 @@ namespace ROCKSDB_NAMESPACE {
     public:
       Converter() {};
       ~Converter() {};
-    private:
+
       void Transform(std::string input,
                      std::vector<std::string>* outputs,
                      const std::shared_ptr<TransformerData>& data) override;
+      void Prepare() override;
+      void Retrieve(int position, std::map<std::string, std::string> output) override;
+
+    private:
+      std::vector<std::map<std::string, std::vector<std::string>>> stores_;
     };
 }

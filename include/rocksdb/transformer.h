@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <type_traits>
 
 #include "rocksdb/rocksdb_namespace.h"
@@ -65,6 +66,8 @@ class Transformer {
   virtual void Transform(std::string input,
                          std::vector<std::string>* outputs,
                          const std::shared_ptr<TransformerData>& data) = 0;
+  virtual void Prepare() = 0;
+  virtual void Retrieve(int position, std::map<std::string, std::string> output) = 0;
 };
 
 // Create a new Transformer that can be shared among multiple RocksDB instances

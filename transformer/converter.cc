@@ -53,4 +53,14 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
     return;
 }
 
+void Converter::Prepare() {
+    for (auto store : stores_) {
+        store.clear();
+    }
+}
+
+void Converter::Retrieve(int position, std::map<std::string, std::string> output) {
+    return;
+}
+
 }
