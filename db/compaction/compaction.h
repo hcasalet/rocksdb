@@ -202,6 +202,9 @@ class Compaction {
   // Add all inputs to this compaction as delete operations to *edit.
   void AddInputDeletions(VersionEdit* edit);
 
+  // Get all the input file levels
+  void GetInputFileLevels(std::set<int> levels);
+
   // Returns true if the available information we have guarantees that
   // the input "user_key" does not exist in any level beyond `output_level()`.
   bool KeyNotExistsBeyondOutputLevel(const Slice& user_key,

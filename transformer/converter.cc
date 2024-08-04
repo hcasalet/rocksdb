@@ -63,4 +63,8 @@ void Converter::Retrieve(int position, std::map<std::string, std::string> output
     return;
 }
 
+size_t Converter::GetStoreSize() {
+    return stores_.size();
+}
+
 }

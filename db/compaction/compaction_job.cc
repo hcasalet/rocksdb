@@ -18,6 +18,7 @@
 #include <vector>
 #include <ctype.h>
 #include <cmath>
+#include <typeinfo>
 
 #include "db/blob/blob_counting_iterator.h"
 #include "db/blob/blob_file_addition.h"
@@ -57,6 +58,9 @@
 #include "table/table_builder.h"
 #include "table/unique_id_impl.h"
 #include "test_util/sync_point.h"
+#include "transformer/augmenter.h"
+#include "transformer/converter.h"
+#include "transformer/distributor.h"
 #include "util/stop_watch.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -264,7 +268,7 @@ void CompactionJob::Prepare() {
       case to_underlying(TransformerType::CONVERTER):    // conversion
         break;
       case to_underlying(TransformerType::AUGMENTER):   // creating index
-        splits = GetIndexCFCount(cfd) + 1;
+        splits = GetDerivedCFCount(cfd) + 1;
         break;
       default:
         break;    
@@ -878,7 +882,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
         cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_,
                                         compaction_stats_);
         output_cfds.push_back(cfd);
-        GetIndexingCfds(output_cfds);
+        GetDerivedCfds(output_cfds);
         break;
       default:
         break;
@@ -1277,7 +1281,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
         break;
       case to_underlying(TransformerType::AUGMENTER):
         output_cfds.push_back(cfd);
-        GetIndexingCfds(output_cfds);
+        GetDerivedCfds(output_cfds);
         break;
       default: {
         break; 
@@ -1368,6 +1372,16 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       "CompactionJob::ProcessKeyValueCompaction()::Processing",
       reinterpret_cast<void*>(
           const_cast<Compaction*>(sub_compact->compaction)));
+
+  // Below compaction for every row of input will start. But before that,
+  // let's clear the AugmenterStore for Augmenter Transformation
+  if (transformers_.size() > 0 && 
+      (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER))) {
+    for (auto transformer : transformers_) {
+      transformer->Prepare();
+    }
+  }
+
   while (exec_status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
     // Invariant: c_iter.status() is guaranteed to be OK if c_iter->Valid()
     // returns true.
@@ -1399,6 +1413,26 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     c_iter->Next();
     if (c_iter->status().IsManualCompactionPaused()) {
       break;
+    }
+  }
+
+  // Compacting one record at a time is done. Now after that, we need to take care of 
+  // the Augmenting case.
+  if (transformers_.size() > 0 && 
+      (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER))) {
+    std::vector<std::map<std::string, std::string>> derived_outputs;
+    for (auto transformer : transformers_) {
+      if (typeid(transformer) == typeid(Augmenter)) {
+        size_t num_stores = transformer->GetStoreSize();
+        for (size_t i = 0; i < num_stores; i++) {
+          std::map<std::string, std::string> derived_output;
+          transformer->Retrieve(int(i), derived_output);
+          derived_outputs.push_back(derived_output);
+        }
+
+        exec_status = sub_compact->AddDerivedOutput(derived_outputs, open_file_func, close_file_func);
+        break;
+      }
     }
   }
 
@@ -1774,6 +1808,16 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
 
   // Add compaction inputs
   compaction->AddInputDeletions(edit);
+
+  // Delete derived files on the compacting level
+  std::vector<int> delete_derived_levels;
+  delete_derived_levels.push_back(compaction->output_level());
+
+  std::set<int> input_levels;
+  compaction->GetInputFileLevels(input_levels);
+  
+  delete_derived_levels.insert(delete_derived_levels.end(), input_levels.begin(), input_levels.end());
+  DeleteDerivedFiles(edit, delete_derived_levels);
 
   std::unordered_map<uint64_t, BlobGarbageMeter::BlobStats> blob_total_garbage;
 
@@ -2260,13 +2304,13 @@ void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData
   }
 }
 
-void CompactionJob::GetIndexingCfds(std::vector<ColumnFamilyData*>& output_cfds) {
+void CompactionJob::GetDerivedCfds(std::vector<ColumnFamilyData*>& output_cfds) {
   ColumnFamilyData* cfd = compact_->compaction->column_family_data();
   std::string cfname = cfd->GetName();
   int i = 0;
 
   while (true) {
-    std::string indexcf_name = cfname + "_index_cf_" + std::to_string(i++);
+    std::string indexcf_name = cfname + "_derived_cf_" + std::to_string(i++);
     ColumnFamilyData* indexcfd = versions_->GetColumnFamilySet()->GetColumnFamily(indexcf_name);
     if (indexcfd != nullptr) {
       output_cfds.push_back(indexcfd);
@@ -2349,11 +2393,11 @@ int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
 
 // A column family's index CFs are named in the convention of cfname_index_cf_[num]
 // where num starts at 0 and goes strictly increasingly
-int CompactionJob::GetIndexCFCount(ColumnFamilyData* cfd) {
+int CompactionJob::GetDerivedCFCount(ColumnFamilyData* cfd) {
   std::string cfd_name = cfd->GetName();
   int i = 0, num_indexcfs = 0;
   while (true) {
-    std::string indexcf_name = cfd_name + "_index_cf_" + std::to_string(i++);
+    std::string indexcf_name = cfd_name + "_derived_cf_" + std::to_string(i++);
     ColumnFamilyData* indexcf = versions_->GetColumnFamilySet()->GetColumnFamily(indexcf_name);
     if (indexcf != nullptr) {
       num_indexcfs++;
@@ -2370,6 +2414,23 @@ void CompactionJob::EnsureInputOnlyOnLevel0(ColumnFamilyData* cfd) {
   for (int i = 1; i < cfd->NumberLevels(); i++) {
     if (vstorage_info->NumLevelFiles(i) > 0) {
       vstorage_info->Move2Level0(i);
+    }
+  }
+}
+
+void CompactionJob::DeleteDerivedFiles(VersionEdit* edit, std::vector<int> levels) {
+  std::vector<ColumnFamilyData*> derived_cfds;
+  GetDerivedCfds(derived_cfds);
+
+  for (auto derived_cfd : derived_cfds) {
+    VersionStorageInfo* vstorage_info = derived_cfd->current()->storage_info();
+
+    for (auto level : levels) {
+      if (vstorage_info->NumLevelFiles(level) > 0) {
+        for (auto derived_file : vstorage_info->LevelFiles(level)) {
+          edit->DeleteFile(level, derived_file->fd.GetNumber());
+          }
+      }
     }
   }
 }

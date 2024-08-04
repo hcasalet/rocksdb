@@ -526,10 +526,52 @@ Status CompactionOutputs::AddToOutput(
       break;
     }
     case to_underlying(TransformerType::AUGMENTER): {
+      s = current_output(0).validator.Add(key, value);
+      if (!s.ok()) {
+        return s;
+      }
+      builders_[0]->Add(key, value);
+
+      stats_.num_output_records++;
+      current_output_file_size_ = builders_[0]->EstimatedFileSize();
+  
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(key, value);
+      }
+      if (!s.ok()) {
+        return s;
+      }
+
+      s = current_output(0).meta.UpdateBoundaries(key, value, ikey.sequence,
+                                                 ikey.type);
+
+      std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(key.data()); 
+      transformers[0]->Transform(value.data(), &output_values, augmentingData);
+
       break;
     }
     default: {
       break;
+    }
+  }
+  return s;
+}
+
+Status CompactionOutputs::AddDerivedOutput(
+    const std::vector<std::map<std::string, std::string>> derived_outputs,
+    const CompactionFileOpenFunc& open_file_func,
+    const CompactionFileCloseFunc& close_file_func) {
+  Status s;
+  for (size_t i = 0; i < derived_outputs.size(); i++) {
+    for (auto dout : derived_outputs[i]) {
+      s = current_output(i+1).validator.Add(Slice(dout.first), Slice(dout.second));
+      builders_[i+1]->Add(Slice(dout.first), Slice(dout.second));
+
+      stats_.num_output_records++;
+
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(Slice(dout.first), Slice(dout.second));
+      }
     }
   }
   return s;

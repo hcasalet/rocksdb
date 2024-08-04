@@ -4169,6 +4169,18 @@ void VersionStorageInfo::UpdateOldestSnapshot(SequenceNumber seqnum) {
   }
 }
 
+void VersionStorageInfo::Move2Level0(int level) {
+  assert(level > 0);
+  assert(files_[level].size() > 0);
+  size_t level0_orig_size = files_[0].size();
+  for (size_t pos = 0; pos < files_[level].size(); ++pos) {
+    const FileMetaData* const meta = files_[level][pos];
+    file_locations_[meta->fd.GetNumber()] = FileLocation(0, level0_orig_size++);
+  }
+  files_[0].insert(files_[0].end(), files_[level].begin(), files_[level].end());
+  files_[level].erase(files_[level].begin(), files_[level].end());
+}
+
 void VersionStorageInfo::ComputeBottommostFilesMarkedForCompaction() {
   bottommost_files_marked_for_compaction_.clear();
   bottommost_files_mark_threshold_ = kMaxSequenceNumber;

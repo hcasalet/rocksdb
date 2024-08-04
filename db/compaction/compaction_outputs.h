@@ -281,6 +281,11 @@ class CompactionOutputs {
                      const CompactionFileCloseFunc& close_file_func,
                      std::vector<Transformer*> transformers,
                      TransformerType transformer_types);
+  
+  // Add derived data to the output file
+  Status AddDerivedOutput(const std::vector<std::map<std::string, std::string>> derived_outputs,
+                         const CompactionFileOpenFunc& open_file_func,
+                         const CompactionFileCloseFunc& close_file_func);
 
   // Close the current output. `open_file_func` is needed for creating new file
   // for range-dels only output file.

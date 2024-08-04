@@ -524,6 +524,12 @@ void Compaction::AddInputDeletions(VersionEdit* out_edit) {
   }
 }
 
+void Compaction::GetInputFileLevels(std::set<int> levels) {
+  for (size_t which = 0; which < num_input_levels(); which++) {
+    levels.insert(level(which));
+  }
+}
+
 bool Compaction::KeyNotExistsBeyondOutputLevel(
     const Slice& user_key, std::vector<size_t>* level_ptrs) const {
   assert(input_version_ != nullptr);

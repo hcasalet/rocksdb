@@ -21,6 +21,7 @@ public:
                    const std::shared_ptr<TransformerData>& data) override;
     void Prepare() override;
     void Retrieve(int position, std::map<std::string, std::string> output) override;
+    size_t GetStoreSize() override;
 private:
   std::vector<std::map<std::string, std::vector<std::string>>> stores_;
 };

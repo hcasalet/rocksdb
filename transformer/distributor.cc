@@ -49,4 +49,8 @@ void Distributor::Retrieve(int position, std::map<std::string, std::string> outp
     return;
 }
 
+size_t Distributor::GetStoreSize() {
+    return stores_.size();
+}
+
 }

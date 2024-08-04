@@ -34,7 +34,7 @@ void Augmenter::Prepare() {
 }
 
 void Augmenter::Retrieve(int position, std::map<std::string, std::string> output) {
-    assert((size_t)position < stores_.size());
+    assert(size_t(position) < stores_.size());
 
     for (const auto& pair : stores_[position]) {
         std::ostringstream oss;
@@ -50,6 +50,10 @@ void Augmenter::Retrieve(int position, std::map<std::string, std::string> output
 
         output[pair.first] = oss.str();
     }
+}
+
+size_t Augmenter::GetStoreSize() {
+    return stores_.size();
 }
 
 }

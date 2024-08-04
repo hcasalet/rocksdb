@@ -112,4 +112,11 @@ Status SubcompactionState::AddToOutput(
   return Current().AddToOutput(iter, open_file_func, close_file_func, transformers, transformer_type);
 }
 
+Status SubcompactionState::AddDerivedOutput(
+    const std::vector<std::map<std::string, std::string>> derived_outputs,
+    const CompactionFileOpenFunc& open_file_func,
+    const CompactionFileCloseFunc& close_file_func) {
+  return Current().AddDerivedOutput(derived_outputs, open_file_func, close_file_func);
+}
+
 }  // namespace ROCKSDB_NAMESPACE
