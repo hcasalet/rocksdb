@@ -32,7 +32,7 @@
 # 3. cmake ..
 # 4. make -j
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/modules/")
 include(ReadVersion)
@@ -67,9 +67,10 @@ endif(CCACHE_FOUND)
 option(WITH_JEMALLOC "build with JeMalloc" OFF)
 option(WITH_LIBURING "build with liburing" ON)
 option(WITH_SNAPPY "build with SNAPPY" OFF)
-option(WITH_LZ4 "build with lz4" OFF)
+option(WITH_LZ4 "build with lz4" ON)
 option(WITH_ZLIB "build with zlib" OFF)
-option(WITH_ZSTD "build with zstd" OFF)
+option(WITH_ZSTD "build with zstd" ON)
+option(WITH_RE2 "build with re2" ON)
 option(WITH_WINDOWS_UTF8_FILENAMES "use UTF8 as characterset for opening files, regardles of the system code page" OFF)
 if (WITH_WINDOWS_UTF8_FILENAMES)
   add_definitions(-DROCKSDB_WINDOWS_UTF8_FILENAMES)
@@ -164,15 +165,31 @@ else()
 
   if(WITH_LZ4)
     find_package(lz4 REQUIRED)
+    if(lz4_FOUND)
+      set(lz4Alt_FOUND TRUE)
+    endif()
     add_definitions(-DLZ4)
     list(APPEND THIRDPARTY_LIBS lz4::lz4)
   endif()
 
   if(WITH_ZSTD)
     find_package(zstd REQUIRED)
+    if(zstd_FOUND)
+      set(zstdAlt_FOUND TRUE)
+    endif()
     add_definitions(-DZSTD)
     include_directories(${ZSTD_INCLUDE_DIR})
     list(APPEND THIRDPARTY_LIBS zstd::zstd)
+  endif()
+
+  if(WITH_RE2)
+    include_directories("/usr/include/re2")
+    set(RE2_LIBRARY "/usr/lib/x86_64-linux-gnu/libre2.so")
+    if(EXISTS "${RE2_LIBRARY}")
+      set(re2Alt_FOUND TRUE)
+      list(APPEND THIRDPARTY_LIBS ${RE2_LIBRARY})
+    endif()
+    add_definitions(-DRE2)
   endif()
 endif()
 
@@ -559,6 +576,7 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories("/usr/include")
 include_directories(${FLATBUFFERS_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/flat)
 
 if(USE_COROUTINES)
@@ -1106,18 +1124,20 @@ string(REGEX REPLACE "[^0-9: /-]+" "" GIT_DATE "${GIT_DATE}")
 set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
 configure_file(util/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
 
+find_package(Arrow REQUIRED)
+
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
 target_include_directories(
   ${ROCKSDB_STATIC_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto ${CMAKE_SOURCE_DIR}/flat)
-target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
-  proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY})
+target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE 
+  proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} Arrow::arrow_shared)
 
 set(ROCKSDB_BUILD_SHARED OFF)
 if(ROCKSDB_BUILD_SHARED)
   add_library(${ROCKSDB_SHARED_LIB} SHARED ${SOURCES} ${BUILD_VERSION_CC})
   target_include_directories(${ROCKSDB_SHARED_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto)
-  target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE
-    proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY})
+  target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE 
+    proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} Arrow::arrow_shared)
 
   if(WIN32)
     set_target_properties(${ROCKSDB_SHARED_LIB} PROPERTIES
