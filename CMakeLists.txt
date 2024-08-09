@@ -32,7 +32,7 @@
 # 3. cmake ..
 # 4. make -j
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake/modules/")
 include(ReadVersion)
@@ -559,6 +559,7 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories("/usr/include")
 include_directories(${FLATBUFFERS_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/flat)
 
 if(USE_COROUTINES)
@@ -1106,18 +1107,20 @@ string(REGEX REPLACE "[^0-9: /-]+" "" GIT_DATE "${GIT_DATE}")
 set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
 configure_file(util/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
 
+find_package(Arrow REQUIRED)
+
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
 target_include_directories(
   ${ROCKSDB_STATIC_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto ${CMAKE_SOURCE_DIR}/flat)
-target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE
-  proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY})
+target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE 
+  proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} Arrow::arrow-shared)
 
 set(ROCKSDB_BUILD_SHARED OFF)
 if(ROCKSDB_BUILD_SHARED)
   add_library(${ROCKSDB_SHARED_LIB} SHARED ${SOURCES} ${BUILD_VERSION_CC})
   target_include_directories(${ROCKSDB_SHARED_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto)
-  target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE
-    proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY})
+  target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE 
+    proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} Arrow::arrow-shared)
 
   if(WIN32)
     set_target_properties(${ROCKSDB_SHARED_LIB} PROPERTIES
