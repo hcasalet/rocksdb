@@ -267,6 +267,8 @@ class CompactionIterator {
 
   bool IsDeleteRangeSentinelKey() const { return is_range_del_; }
 
+  const Compaction* GetCompaction() const { return compaction_.get()->real_compaction(); }
+
  private:
   // Processes the input stream to find the next output
   void NextFromInput();

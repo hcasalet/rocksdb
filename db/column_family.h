@@ -539,6 +539,23 @@ class ColumnFamilyData {
   // of its files (if missing)
   void RecoverEpochNumbers();
 
+  // Support for data transformations
+  void SetSplits(uint32_t splits) { splits_ = splits; }
+
+  uint32_t GetSplits() { return splits_; }
+
+  void AddDestinationCfd(ColumnFamilyData* cfd) {
+    destination_cfds_.push_back(cfd);
+  }
+
+  uint32_t GetDestinationCfdSize() {
+    return destination_cfds_.size();
+  }
+
+  std::vector<ColumnFamilyData*> GetDestinationCfds() {
+    return destination_cfds_;
+  }
+
  private:
   friend class ColumnFamilySet;
   ColumnFamilyData(uint32_t id, const std::string& name,
@@ -598,6 +615,10 @@ class ColumnFamilyData {
   // be alive as long as client holds a reference)
   ColumnFamilyData* next_;
   ColumnFamilyData* prev_;
+
+  // support for data transformation
+  uint32_t splits_;
+  std::vector<ColumnFamilyData*> destination_cfds_;
 
   // This is the earliest log file number that contains data from this
   // Column Family. All earlier log files must be ignored and not

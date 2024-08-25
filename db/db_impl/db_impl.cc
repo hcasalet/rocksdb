@@ -13,6 +13,7 @@
 #include <alloca.h>
 #endif
 
+#include <iostream>
 #include <algorithm>
 #include <cinttypes>
 #include <cstdio>
@@ -3250,6 +3251,138 @@ Status DBImpl::CreateColumnFamilyImpl(const ColumnFamilyOptions& cf_options,
   return s;
 }
 
+Status DBImpl::AddTransformingDestinationCfds(const std::string& cf_name,
+                                  bool cracked, bool converted,
+                                  bool derived) {
+  return AddTransformingDestinationCfdsImpl(cf_name, cracked, converted, derived);
+}
+
+Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name, 
+              bool cracked, bool converted, bool derived) {
+  ColumnFamilySet* all_cfds = versions_->GetColumnFamilySet();
+  ColumnFamilyData* root_cfd = all_cfds->GetColumnFamily(cf_name);
+
+  if (cracked) {
+    int compacting_levels = root_cfd->ioptions()->num_levels;
+    std::queue<ColumnFamilyData*> cfd_list;
+    cfd_list.push(root_cfd);
+    int src_level = 0;
+
+    while (true) {
+      size_t queue_size = cfd_list.size();
+      for (size_t i = 0; i < queue_size; i++) {
+        ColumnFamilyData* src_cfd = cfd_list.front();
+        std::string src_cf_name = src_cfd->GetName();
+
+        if (src_level == compacting_levels - 1) {
+          if (converted && src_cf_name.find("_converted_cf") == std::string::npos) {
+            std::string converted_cf_name = src_cf_name + "_converted_cf";
+            ColumnFamilyData* converted_cf = all_cfds->GetColumnFamily(converted_cf_name);
+            if (converted_cf != nullptr) {
+              src_cfd->AddDestinationCfd(converted_cf);
+              if (derived) {
+                cfd_list.push(converted_cf);
+              }
+            }
+          } else if (derived) {
+            int derived_cf_numbered = 0;
+            while (true) {
+              std::string derived_cf_name = src_cf_name + "_derived_cf_" + std::to_string(derived_cf_numbered);
+              ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
+              if (derived_cf == nullptr) {
+                break;
+              }
+              src_cfd->AddDestinationCfd(derived_cf);
+              derived_cf_numbered++;
+            }
+          }
+          cfd_list.pop();
+          continue;
+        }
+
+        int src_group = 0;
+        size_t group = src_cf_name.rfind("_G");
+        if (group != std::string::npos) {
+          for(std::string::size_type g = group+2; g < src_cf_name.size(); ++g) {
+            if (!isdigit(src_cf_name[g])) {
+              break;
+            }
+            src_group = src_group * 10 + src_cf_name[g] - '0';
+          }
+        }
+
+        std::string dest_cf_name_1 = cf_name + "_sys_cf_L" + std::to_string(src_level+1) + "_G" + std::to_string(src_group*2);
+        ColumnFamilyData* dest_cfd_1 = all_cfds->GetColumnFamily(dest_cf_name_1);
+        if (dest_cfd_1 != nullptr) {
+          src_cfd->AddDestinationCfd(dest_cfd_1);
+          cfd_list.push(dest_cfd_1);
+        }
+
+        std::string dest_cf_name_2 = cf_name + "_sys_cf_L" + std::to_string(src_level+1) + "_G" + std::to_string(src_group*2+1);
+        ColumnFamilyData* dest_cfd_2 = all_cfds->GetColumnFamily(dest_cf_name_2);
+        if (dest_cfd_2 != nullptr) {
+          src_cfd->AddDestinationCfd(dest_cfd_2);
+          cfd_list.push(dest_cfd_2);
+        }
+
+        if (derived) {
+          int derived_cf_numbered = 0;
+          while (true) {
+            std::string derived_cf_name = src_cf_name + "_derived_cf_" + std::to_string(derived_cf_numbered);
+            ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
+            if (derived_cf == nullptr) {
+              break;
+            }
+            src_cfd->AddDestinationCfd(derived_cf);
+            derived_cf_numbered++;
+          }
+        }
+
+        src_cfd->SetSplits(src_cfd->GetDestinationCfdSize());
+        cfd_list.pop();
+      }
+
+      if (cfd_list.empty()) {
+        break;
+      }
+      src_level++;
+    }
+  } else {
+    if (converted) {
+      std::string converted_cf_name = cf_name + "_converted_cf";
+      ColumnFamilyData* converted_cf = all_cfds->GetColumnFamily(converted_cf_name);
+      if (converted_cf != nullptr) {
+        root_cfd->AddDestinationCfd(converted_cf);
+      }
+    }
+
+    if (derived) {
+      int derived_cf_numbered = 0;
+      while (true) {
+        std::string derived_cf_name = cf_name + "_derived_cf_" + std::to_string(derived_cf_numbered);
+        ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
+        if (derived_cf == nullptr) {
+          break;
+        }
+        root_cfd->AddDestinationCfd(derived_cf);
+        derived_cf_numbered++;
+      }
+    }
+  }
+  return Status::OK();
+}
+
+Status DBImpl::DisplayTransformingDestinationCfds() {
+  for (auto cfd : *versions_->GetColumnFamilySet()) {
+    std::cout << "source cfd: " << cfd->GetName() << " ---- destination cfds: ";
+    for (auto dest_cfd : cfd->GetDestinationCfds()) {
+      std::cout << dest_cfd->GetName() << " .. ";
+    }
+    std::cout << std::endl;   
+  }
+  return Status::OK();
+}
+
 Status DBImpl::DropColumnFamily(ColumnFamilyHandle* column_family) {
   assert(column_family != nullptr);
   Status s = DropColumnFamilyImpl(column_family);
@@ -4709,6 +4842,16 @@ Status DB::DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) {
   return Status::OK();
 }
 
+Status DB::AddTransformingDestinationCfds(const std::string& cf_name,
+                                        bool cracked, bool converted,
+                                        bool derived) {
+  return Status::NotSupported("");
+}
+
+Status DB::DisplayTransformingDestinationCfds() {
+  return Status::NotSupported("");
+}
+
 DB::~DB() {}
 
 Status DBImpl::Close() {
@@ -6151,6 +6294,10 @@ void DBImpl::RecordSeqnoToTimeMapping() {
                    " -> %" PRIu64,
                    seqno, unix_time);
   }
+}
+
+ColumnFamilyData* DBImpl::GetColumnFamilyDataByName(const std::string& cf_name) {
+  return versions_->GetColumnFamilySet()->GetColumnFamily(cf_name);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

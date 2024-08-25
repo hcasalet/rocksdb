@@ -396,6 +396,14 @@ class DB {
   // a DB.
   virtual Status DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family);
 
+  // Add destination cfs for data transformation cases
+  virtual Status AddTransformingDestinationCfds(const std::string& cf_name,
+                                              bool cracked, bool converted,
+                                              bool derived);
+  
+  // Display the transforming destination cfds for debugging purpose
+  virtual Status DisplayTransformingDestinationCfds();
+
   // Set the database entry for "key" to "value".
   // If "key" already exists, it will be overwritten.
   // Returns OK on success, and a non-OK status on error.

@@ -325,6 +325,12 @@ class DBImpl : public DB {
   virtual Status DropColumnFamilies(
       const std::vector<ColumnFamilyHandle*>& column_families) override;
 
+  virtual Status AddTransformingDestinationCfds(const std::string& cf_name,
+                                              bool cracked, bool converted,
+                                              bool derived) override;
+  
+  virtual Status DisplayTransformingDestinationCfds() override;
+
   // Returns false if key doesn't exist in the database and true if it may.
   // If value_found is not passed in as null, then return the value if found in
   // memory. On return, if value was found, then value_found will be set to true
@@ -1802,6 +1808,12 @@ class DBImpl : public DB {
                                 ColumnFamilyHandle** handle);
 
   Status DropColumnFamilyImpl(ColumnFamilyHandle* column_family);
+
+  Status AddTransformingDestinationCfdsImpl(const std::string& cf_name,
+                                        bool cracked, bool converted,
+                                        bool derived);
+  
+  //Status DisplayTransformingDestinationCfdsImpl();
 
   // Delete any unneeded files and stale in-memory entries.
   void DeleteObsoleteFiles();

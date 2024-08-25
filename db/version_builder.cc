@@ -702,7 +702,7 @@ class VersionBuilder::Rep {
       level = 0;
     }
 
-    if (level != current_level) {
+    if (level != current_level && level != 0) {
       if (level >= num_levels_) {
         has_invalid_levels_ = true;
       }

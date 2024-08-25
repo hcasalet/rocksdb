@@ -265,6 +265,11 @@ void CompactionJob::Prepare() {
       case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): // cracking+conversion
         splits = GetSplits(cfd);
         break;
+      case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::AUGMENTER):
+      case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER | TransformerType::AUGMENTER):
+        splits = GetSplits(cfd);
+        splits += GetDerivedCFCount(cfd);
+        break;
       case to_underlying(TransformerType::CONVERTER):    // conversion
         break;
       case to_underlying(TransformerType::AUGMENTER):   // creating index
