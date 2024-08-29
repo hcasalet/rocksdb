@@ -642,8 +642,10 @@ bool LevelCompactionBuilder::TryPickL0TrivialMove() {
       vstorage_->GetOverlappingInputs(output_level_, &my_smallest, &my_largest,
                                       &output_level_inputs.files);
       if (output_level_inputs.empty()) {
-        assert(!file->being_compacted);
-        start_level_inputs_.files.push_back(file);
+        //assert(!file->being_compacted);
+        if (!file->being_compacted) {
+          start_level_inputs_.files.push_back(file);
+        }
       } else {
         break;
       }

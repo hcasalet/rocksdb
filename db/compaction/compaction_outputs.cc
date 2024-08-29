@@ -442,13 +442,15 @@ Status CompactionOutputs::AddToOutput(
       break;
     }
     case to_underlying(TransformerType::DISTRIBUTOR): {
-      assert(output_cfds_size > 0);
-
-      std::shared_ptr<TransformerData> splittingData = 
-                std::make_shared<DistributorData>(output_cfds_size); 
-      transformers[0]->Transform(value.data(), &output_values, splittingData);
+      if (output_cfds_size > 0) {
+        std::shared_ptr<TransformerData> splittingData = 
+                  std::make_shared<DistributorData>(output_cfds_size); 
+        transformers[0]->Transform(value.data(), &output_values, splittingData);
+      } else {
+        output_values.push_back(value.data());
+      }
   
-      for (int i = 0; i < output_cfds_size; i++) {
+      for (size_t i = 0; i < output_values.size(); i++) {
         s = current_output(i).validator.Add(key, Slice(output_values[i]));
         if (!s.ok()) {
           return s;

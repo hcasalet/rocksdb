@@ -34,6 +34,8 @@ class CompactionState {
 
   explicit CompactionState(Compaction* c) : compaction(c) {}
 
+  Compaction* GetCompaction() { return compaction; }
+
   Slice SmallestUserKey();
 
   Slice LargestUserKey();

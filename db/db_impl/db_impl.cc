@@ -3286,6 +3286,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
             }
           } else if (derived) {
             int derived_cf_numbered = 0;
+            src_cfd->AddDestinationCfd(src_cfd);
             while (true) {
               std::string derived_cf_name = src_cf_name + "_derived_cf_" + std::to_string(derived_cf_numbered);
               ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
@@ -3327,6 +3328,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
 
         if (derived) {
           int derived_cf_numbered = 0;
+          src_cfd->AddDestinationCfd(src_cfd);
           while (true) {
             std::string derived_cf_name = src_cf_name + "_derived_cf_" + std::to_string(derived_cf_numbered);
             ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
@@ -3338,7 +3340,6 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
           }
         }
 
-        src_cfd->SetSplits(src_cfd->GetDestinationCfdSize());
         cfd_list.pop();
       }
 
@@ -3357,6 +3358,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
     }
 
     if (derived) {
+      root_cfd->AddDestinationCfd(root_cfd);
       int derived_cf_numbered = 0;
       while (true) {
         std::string derived_cf_name = cf_name + "_derived_cf_" + std::to_string(derived_cf_numbered);
@@ -3369,6 +3371,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
       }
     }
   }
+  destination_cfds_computed_ = true;
   return Status::OK();
 }
 

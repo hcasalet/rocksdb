@@ -3921,6 +3921,11 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
     const MutableCFOptions& mutable_cf_options) {
   mutex_.AssertHeld();
 
+  if (to_underlying(cfd->ioptions()->transformer_type) != to_underlying(TransformerType::NOTRANSFORMATION) && 
+  !destination_cfds_computed_) {
+    return;
+  }
+
   // Update max_total_in_memory_state_
   size_t old_memtable_size = 0;
   auto* old_sv = cfd->GetSuperVersion();

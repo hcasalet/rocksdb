@@ -1344,6 +1344,9 @@ class DBImpl : public DB {
   // Default: true
   const bool batch_per_txn_;
 
+  // Whether column families' destination cfds are computed
+  bool destination_cfds_computed_;
+
   // Each flush or compaction gets its own job id. this counter makes sure
   // they're unique
   std::atomic<int> next_job_id_;
