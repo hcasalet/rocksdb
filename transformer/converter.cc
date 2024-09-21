@@ -1,5 +1,9 @@
 #include "converter.h"
 #include "columns.pb.h"
+/*#include <json/json.h>*/
+#include "json.hpp"
+
+using json = nlohmann::json;
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -43,6 +47,11 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
             std::string s(reinterpret_cast<char*>(buf), size);
             outputs->push_back(s);
 
+            break;
+        }
+        case ConverterInputType::JSON: {
+            json reader = json::parse(input);
+            
             break;
         }
         default: {
