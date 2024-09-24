@@ -842,15 +842,18 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
 
   //std::vector<ColumnFamilyData*> output_cfds;
   if (transformers_.size() == 0 ||
+      to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::NOTRANSFORMATION) ||
       to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::AUGMENTER) ||
       (to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::DISTRIBUTOR) &&
           cfd->GetDestinationCfdSize() == 1) ||
-      (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_converted_cf") != std::string::npos)) {
+      (to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER) &&
+          cfd->GetDestinationCfdSize() == 1) ||
+      (cfd->GetAllDestinationCfds().size() == 1 && cfd->GetDestinationCfds(output_level)[0]->GetName().find("_converted_cf") != std::string::npos)) {
     cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_, compaction_stats_);
   }
 
   if (status.ok()) {
-    status = InstallCompactionResults(mutable_cf_options, cfd->GetDestinationCfds());
+    status = InstallCompactionResults(mutable_cf_options, cfd->GetDestinationCfds(output_level));
   }
   if (!versions_->io_status().ok()) {
     io_status_ = versions_->io_status();
@@ -1270,8 +1273,9 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
                    : kMaxSequenceNumber;
 
   std::shared_ptr<CompactionIterator> c_iter;
+
   c_iter = std::make_shared<CompactionIterator>(
-    input, cfd->GetDestinationCfds(), cfd->user_comparator(), &merge,
+    input, cfd->GetDestinationCfds(sub_compact->compaction->output_level()), cfd->user_comparator(), &merge,
     versions_->LastSequence(), &existing_snapshots_, earliest_write_conflict_snapshot_, job_snapshot_seq, snapshot_checker_, env_, ShouldReportDetailedTime(env_, stats_),
     /*expect_valid_internal_key=*/true, range_del_agg.get(),
     blob_file_builder.get(), db_options_.allow_data_in_errors,
@@ -1534,8 +1538,8 @@ Status CompactionJob::FinishCompactionOutputFile(
     assert(output_number != 0);
 
     ColumnFamilyData* cfd;
-    if (transformers_.size() > 0 && sub_compact->compaction->column_family_data()->GetDestinationCfds().size() > 0) {
-      cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i];
+    if (transformers_.size() > 0 && sub_compact->compaction->column_family_data()->GetDestinationCfds(sub_compact->compaction->output_level()).size() > 0) {
+      cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds(sub_compact->compaction->output_level())[i];
     } else {
       cfd = sub_compact->compaction->column_family_data();
     }
@@ -1892,8 +1896,8 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
     std::string fname = GetTableFileName(file_number);
     // Fire events.
     ColumnFamilyData* dest_cfd;
-    if (transformers_.size() > 0 && cfd->GetDestinationCfds().size() > 0) {
-      dest_cfd = cfd->GetDestinationCfds()[i];
+    if (transformers_.size() > 0 && cfd->GetDestinationCfds(sub_compact->compaction->output_level()).size() > 0) {
+      dest_cfd = cfd->GetDestinationCfds(sub_compact->compaction->output_level())[i];
     } else {
       dest_cfd = cfd;
     }
@@ -2011,9 +2015,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         db_options_.stats, listeners, db_options_.file_checksum_gen_factory.get(),
         tmp_set.Contains(FileType::kTableFile), false), i);
 
-    if (transformers_.size() > 0 && sub_compact->compaction->column_family_data()->GetDestinationCfdSize() > 0 &&
-        (cfd->ioptions()->transformer_type == TransformerType::DISTRIBUTOR || 
-        cfd->ioptions()->transformer_type == (TransformerType::DISTRIBUTOR | TransformerType::CONVERTER))) {
+    if (cfd->ioptions()->transformer_type != TransformerType::NOTRANSFORMATION) {
       TableBuilderOptions tboptions(
         *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
         cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),

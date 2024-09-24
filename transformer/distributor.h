@@ -2,13 +2,22 @@
 
 #include <memory>
 #include "rocksdb/transformer.h"
+#include "flat/data_generated.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+enum class DistributorValueType {
+  JSON,
+  PROTOBUF,
+  FLATBUFFERS
+};
 
 class DistributorData : public TransformerData {
   public:
     int splits;
-    DistributorData(int num_splits) : splits(num_splits) {}
+    DistributorValueType vtype;
+    DistributorData(int num_splits, DistributorValueType v_type) : 
+      splits(num_splits), vtype(v_type) {}
 };
 
 class Distributor : public Transformer {

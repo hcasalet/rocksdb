@@ -551,7 +551,20 @@ class ColumnFamilyData {
     return destination_cfds_.size();
   }
 
-  std::vector<ColumnFamilyData*> GetDestinationCfds() {
+  std::vector<ColumnFamilyData*> GetDestinationCfds(int level) {
+    std::vector<ColumnFamilyData*> destcfds;
+    for (auto destcfd : destination_cfds_) {
+      if (destcfd->GetName().find("_derived_cf_") == std::string::npos ||
+          destcfd->GetName().find("_derived_cf_L0") != std::string::npos) {
+        destcfds.push_back(destcfd);
+      } else if (destcfd->GetName().find("_derived_cf_L"+std::to_string(level)+"_") != std::string::npos) {
+        destcfds.push_back(destcfd);
+      }
+    }
+    return destcfds;
+  }
+
+  std::vector<ColumnFamilyData*> GetAllDestinationCfds() {
     return destination_cfds_;
   }
 

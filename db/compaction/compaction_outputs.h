@@ -316,7 +316,7 @@ class CompactionOutputs {
   // It's caller's responsibility to make sure it's not empty.
   Output& current_output(int pos) {
     assert(outputs_.size() > size_t(pos));
-    assert(!outputs_[pos].empty());
+    //assert(!outputs_[pos].empty());
     return outputs_[pos].back();
   }
 

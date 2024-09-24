@@ -1,6 +1,5 @@
 #include "converter.h"
 #include "columns.pb.h"
-/*#include <json/json.h>*/
 #include "json.hpp"
 
 using json = nlohmann::json;
@@ -11,6 +10,11 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
 {
     auto converterData = std::dynamic_pointer_cast<ConverterData>(data);
 
+    size_t end = input.find_last_not_of(" \t\n\r\0");
+    if (end != std::string::npos) {
+        input = input.substr(0, end+1);
+    }
+ 
     switch (converterData->in_type) {
         case ConverterInputType::PROTOBUF: {
             data::Row row;
@@ -22,14 +26,20 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
             std::vector<flatbuffers::Offset<NumericColumn>> numericCols;
             for (int i = 0; i < row.columns_size(); ++i) {
                 try {
-                    auto col_name = builder.CreateString(row.columns(i).name());
-                    auto col = CreateNumericColumn(builder, col_name, std::stoull(row.columns(i).value()));
+                    const std::string& col_name_str = row.columns(i).name();
+                    const std::string& value_str = row.columns(i).value();
+                    if (col_name_str.empty() || value_str.empty()) {
+                        //std::cerr << "Empty column name or value encountered at index: " << i << std::endl;
+                        continue;  // Skip this column if either is empty
+                    }
+                    auto col_name = builder.CreateString(col_name_str);
+                    auto col = CreateNumericColumn(builder, col_name, std::stoull(value_str));
                     numericCols.push_back(col);
                 } catch (const std::invalid_argument& ia) {
-                    outputs->push_back(input);
+                    std::cerr << "Catching invalid argument exception: " << ia.what() << std::endl;
                     return;
                 } catch (const std::out_of_range& orr) {
-                    outputs->push_back(input);
+                    std::cerr << "Catching out of range exception: " << orr.what() << std::endl;
                     return;
                 }
             }
@@ -51,7 +61,10 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
         }
         case ConverterInputType::JSON: {
             json reader = json::parse(input);
-            
+            /**
+             * Todo: Need to figure out how to compact data once it is 
+             *       converted to Arrow format before we proceed.
+             */
             break;
         }
         default: {

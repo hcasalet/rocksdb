@@ -10,14 +10,14 @@
 namespace ROCKSDB_NAMESPACE {
 
 /*
- * There are basically 3 types of tranformations during compaction: 
- * 1 -- Splitting data from row-wise to column-wise. This results in the split data
- *      getting written into level 0 of different column families, and the 
- *      compacting column faily deleted. This is the distributor type.
- * 2 -- Converting data from one format to another, for instance, from json format
+ * There are basically 3 types of tranformations during compaction:
+ * 1 -- Converting data from one format to another, for instance, from json format
  *      to flat buffers. There is no column family change. The converted data is
  *      written into the compacting column family on a lower level. This is the 
  *      converter type.
+ * 2 -- Splitting data from row-wise to column-wise. This results in the split data
+ *      getting written into level 0 of different column families, and the 
+ *      compacting column faily deleted. This is the distributor type.
  * 3 -- Deriving new data such as creating an index on the orignal data. This results
  *      in the derived data getting written into the augmented column families, and 
  *      the original data into the compacting column family. This is the augmenter type.
@@ -27,21 +27,21 @@ namespace ROCKSDB_NAMESPACE {
  * unique result. This allows us to support algebraic operations on the transformer types. 
  * We have the following values for transformation types:
  * 
- *   1  -- distributor only
- *   4  -- converter only
- *   5  -- distributor+converter
+ *   1  -- converter only
+ *   4  -- distributor only
+ *   5  -- converter+distributor
  *   7  -- augmenter only
- *   8  -- distributor+augmenter
- *   11 -- converter+augmenter
- *   12 -- distributor+converter+augmenter
+ *   8  -- converter+augmenter
+ *   11 -- distributor+augmenter     (not supported yet)
+ *   12 -- distributor+converter+augmenter (not supported yet)
  * 
 */
 
 enum class TransformerType {
   NOTRANSFORMATION = 0,
-  DISTRIBUTOR = 1 << 0,     // 1
-  CONVERTER   = 1 << 1,     // 2
-  AUGMENTER   = 1 << 2      // 4
+  DISTRIBUTOR      = 1 << 0,     // 1
+  CONVERTER        = 1 << 1,     // 2
+  AUGMENTER        = 1 << 2      // 4
 };
 
 constexpr TransformerType operator|(TransformerType lhs, TransformerType rhs) {

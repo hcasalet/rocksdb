@@ -444,7 +444,7 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::DISTRIBUTOR): {
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size); 
+                  std::make_shared<DistributorData>(output_cfds_size, DistributorValueType::PROTOBUF); 
         transformers[0]->Transform(value.data(), &output_values, splittingData);
       } else {
         output_values.push_back(value.data());
@@ -473,57 +473,72 @@ Status CompactionOutputs::AddToOutput(
       break;
     }
     case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
-      assert(output_cfds_size > 0);
+      if (output_cfds_size > 0) {
+        std::shared_ptr<TransformerData> splittingData = 
+                  std::make_shared<DistributorData>(output_cfds_size, DistributorValueType::PROTOBUF);
+        transformers[0]->Transform(value.data(), &output_values, splittingData);
 
-      std::shared_ptr<TransformerData> splittingData = 
-                std::make_shared<DistributorData>(output_cfds_size); 
-      transformers[0]->Transform(value.data(), &output_values, splittingData);
-  
-      for (int i = 0; i < output_cfds_size; i++) {
-        s = current_output(i).validator.Add(key, Slice(output_values[i]));
-        if (!s.ok()) {
-          return s;
+        std::shared_ptr<TransformerData> convertingData =
+              std::make_shared<ConverterData>(ConverterInputType::PROTOBUF,
+                                              ConverterOutputType::FLATBUFFERS);
+        std::vector<std::string> output_converted_values;
+        for (auto ovalue : output_values) {
+          std::vector<std::string> ovalues;
+          transformers[1]->Transform(ovalue, &ovalues, convertingData);
+          output_converted_values.push_back(ovalues[0]);
         }
-        builders_[i]->Add(key, Slice(output_values[i]));
-    
-        stats_.num_output_records++;
-        current_output_file_size_ = builders_[i]->EstimatedFileSize();
-  
-        if (blob_garbage_meter_) {
-          s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_values[i]));
-        }
-        if (!s.ok()) {
-          return s;
-        }
-
-        s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
-                                                    ikey.type);
+        output_values = output_converted_values;
+      } else {
+        output_values.push_back(value.data());
       }
+  
+      if (static_cast<int>(output_values.size()) == output_cfds_size) {
+        for (int i = 0; i < output_cfds_size; i++) {
+          s = current_output(i).validator.Add(key, Slice(output_values[i]));
+          if (!s.ok()) {
+            return s;
+          }
+          builders_[i]->Add(key, Slice(output_values[i]));
+    
+          stats_.num_output_records++;
+          current_output_file_size_ = builders_[i]->EstimatedFileSize();
+  
+          if (blob_garbage_meter_) {
+            s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_values[i]));
+          }
+          if (!s.ok()) {
+            return s;
+          }
+
+          s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
+                                                      ikey.type);
+        }
+      }
+      
       break;
     }
     case to_underlying(TransformerType::CONVERTER): {
-      std::vector<std::string> output_value;
       std::shared_ptr<TransformerData> convertingData =
                 std::make_shared<ConverterData>(ConverterInputType::PROTOBUF,
                                                 ConverterOutputType::FLATBUFFERS);
-      transformers[0]->Transform(value.data(), &output_value, convertingData);
-      s = current_output(0).validator.Add(key, Slice(output_value[0]));
+      transformers[0]->Transform(value.data(), &output_values, convertingData);
+      s = current_output(0).validator.Add(key, Slice(output_values[0]));
       if (!s.ok()) {
         return s;
       }
 
-      builders_[0]->Add(key, Slice(output_value[0]));
+      builders_[0]->Add(key, Slice(output_values[0]));
       stats_.num_output_records++;
       current_output_file_size_ = builders_[0]->EstimatedFileSize();
   
       if (blob_garbage_meter_) {
-        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_value[0]));
+        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_values[0]));
       }
       if (!s.ok()) {
         return s;
       }
 
-      s = current_output(0).meta.UpdateBoundaries(key, Slice(output_value[0]), ikey.sequence,
+      s = current_output(0).meta.UpdateBoundaries(key, Slice(output_values[0]), ikey.sequence,
                                                   ikey.type);
       break;
     }
@@ -551,6 +566,35 @@ Status CompactionOutputs::AddToOutput(
       transformers[0]->Transform(value.data(), &output_values, augmentingData);
 
       break;
+    }
+    case to_underlying(TransformerType::CONVERTER | TransformerType::AUGMENTER): {
+      assert(output_cfds_size > 0);
+
+      std::vector<std::string> output_converted_values;
+      std::shared_ptr<TransformerData> convertingData = std::make_shared<ConverterData>(
+                                  ConverterInputType::PROTOBUF, ConverterOutputType::FLATBUFFERS);
+      transformers[0]->Transform(value.data(), &output_converted_values, convertingData);
+
+      s = current_output(0).validator.Add(key, Slice(output_converted_values[0]));
+      if (!s.ok()) {
+        return s;
+      }
+      builders_[0]->Add(key, output_converted_values[0]);
+      stats_.num_output_records++;
+      current_output_file_size_ = builders_[0]->EstimatedFileSize();
+  
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_converted_values[0]));
+      }
+      if (!s.ok()) {
+        return s;
+      }
+
+      s = current_output(0).meta.UpdateBoundaries(key, Slice(output_converted_values[0]), ikey.sequence,
+                                                  ikey.type);
+
+      std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(key.data()); 
+      transformers[1]->Transform(output_converted_values[0], &output_values, augmentingData);
     }
     default: {
       break;

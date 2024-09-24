@@ -3962,7 +3962,9 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
   if (immutable_db_options_.transformers.size() > 0) {
     // schedule new compactions
     for (auto* my_cfd : *versions_->GetColumnFamilySet()) {
-      if (my_cfd->GetName().find("_sys_cf_") != std::string::npos && my_cfd->NeedsCompaction()) {
+      if (((my_cfd->GetName().find("_sys_cf_") != std::string::npos ||
+           my_cfd->GetName().find("_converted_cf") != std::string::npos) && 
+           my_cfd->GetName().find("_derived_cf") == std::string::npos) && my_cfd->NeedsCompaction()) {
         SchedulePendingCompaction(my_cfd);
         MaybeScheduleFlushOrCompaction();
       }
