@@ -9,6 +9,8 @@
 
 #include "db/compaction/compaction_job.h"
 
+#include <iostream>
+
 #include <algorithm>
 #include <cinttypes>
 #include <memory>
@@ -1318,6 +1320,20 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   if (transformers_.size() > 0 && 
       (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER))) {
     transformers_[transformers_.size()-1]->Prepare();
+    std::vector<ColumnFamilyData*> derivedCfds = cfd->GetDestinationCfds(sub_compact->compaction->output_level());
+    for (auto dcfd : derivedCfds) {
+      if (dcfd->GetName().find("_derived_cf") != std::string::npos) {
+        VersionEdit edit;
+        edit.SetColumnFamily(dcfd->GetID());
+        auto* dvstorage = dcfd->current()->storage_info();
+        int dvstorage_levels = dvstorage->num_levels();
+        for (int i = 0; i < dvstorage_levels; i++) {
+          for (const auto& f : dvstorage->LevelFiles(i)) {
+            edit.DeleteFile(i, f->fd.GetNumber());
+          }
+        }
+      }
+    }
   }
 
   while (exec_status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
@@ -1362,6 +1378,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     for (auto transformer : transformers_) {
       if (typeid(transformer) == typeid(Augmenter)) {
         size_t num_stores = transformer->GetStoreSize();
+        std::cout << "Debug ::::: num_stores: " << num_stores << std::endl;
         for (size_t i = 0; i < num_stores; i++) {
           std::map<std::string, std::string> derived_output;
           transformer->Retrieve(int(i), derived_output);
