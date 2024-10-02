@@ -1894,7 +1894,9 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
     switch (to_underlying(cfd->ioptions()->transformer_type)) {
       case to_underlying(TransformerType::DISTRIBUTOR):
       case to_underlying(TransformerType::AUGMENTER):
-        assert(outputs.GetOutputsSize() == cfd->GetDestinationCfdSize());
+        if (outputs.GetOutputsSize() < cfd->GetDestinationCfdSize()) {
+          return Status::Aborted("Compaction at the beginning aborted");
+        }
         break;
       case to_underlying(TransformerType::CONVERTER):
         break;

@@ -3601,6 +3601,11 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                        &earliest_write_conflict_snapshot, &snapshot_checker);
     assert(is_snapshot_supported_ || snapshots_.empty());
 
+    if (to_underlying(c->column_family_data()->ioptions()->transformer_type) != 
+        to_underlying(TransformerType::NOTRANSFORMATION) && !destination_cfds_computed_) {
+      return Status::Aborted();
+    }
+
     CompactionJob compaction_job(
         job_context->job_id, c.get(), immutable_db_options_,
         mutable_db_options_, file_options_for_compaction_, versions_.get(),
@@ -3921,11 +3926,6 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
     const MutableCFOptions& mutable_cf_options) {
   mutex_.AssertHeld();
 
-  if (to_underlying(cfd->ioptions()->transformer_type) != to_underlying(TransformerType::NOTRANSFORMATION) && 
-  !destination_cfds_computed_) {
-    return;
-  }
-
   // Update max_total_in_memory_state_
   size_t old_memtable_size = 0;
   auto* old_sv = cfd->GetSuperVersion();
@@ -3951,6 +3951,11 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
           bottommost_files_mark_threshold_,
           my_cfd->current()->storage_info()->bottommost_files_mark_threshold());
     }
+  }
+
+  if (to_underlying(cfd->ioptions()->transformer_type) != to_underlying(TransformerType::NOTRANSFORMATION) && 
+      !destination_cfds_computed_) {
+    return;
   }
 
   // Whenever we install new SuperVersion, we might need to issue new flushes or
