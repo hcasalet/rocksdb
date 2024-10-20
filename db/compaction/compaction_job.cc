@@ -855,7 +855,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   }
 
   if (status.ok()) {
-    status = InstallCompactionResults(mutable_cf_options, cfd->GetDestinationCfds(output_level));
+    status = InstallCompactionResults(mutable_cf_options, cfd->GetDestinationCfds(output_level), cfd);
   }
   if (!versions_->io_status().ok()) {
     io_status_ = versions_->io_status();
@@ -1320,7 +1320,8 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   if (transformers_.size() > 0 && 
       (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER))) {
     transformers_[transformers_.size()-1]->Prepare();
-    std::vector<ColumnFamilyData*> derivedCfds = cfd->GetDestinationCfds(sub_compact->compaction->output_level());
+    std::vector<ColumnFamilyData*> derivedCfds;
+    GetDerivedCfds(derivedCfds, sub_compact->compaction->output_level());
     for (auto dcfd : derivedCfds) {
       if (dcfd->GetName().find("_derived_cf") != std::string::npos) {
         VersionEdit edit;
@@ -1719,7 +1720,8 @@ Status CompactionJob::FinishCompactionOutputFile(
 }
 
 Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_cf_options,
-                                  std::vector<ColumnFamilyData*> transforming_cfds) {
+                                  std::vector<ColumnFamilyData*> transforming_cfds,
+                                  ColumnFamilyData* compacting_cfd) {
   assert(compact_);
 
   db_mutex_->AssertHeld();
@@ -1753,13 +1755,27 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
   assert(edit);
   
   std::vector<VersionEdit*> edit_outs;
-  for (size_t i = 0; i < transforming_cfds.size(); i++) {
-    VersionEdit* edit_out = new VersionEdit();
-    assert(edit_out);
-    edit_out->SetColumnFamily(transforming_cfds[i]->GetID());
-    edit_outs.push_back(edit_out);
+  if (compacting_cfd->ioptions()->transformer_type == TransformerType::AUGMENTER) {
+    std::vector<ColumnFamilyData*> derived_cfds;
+    GetDerivedCfds(derived_cfds, compaction->output_level());
+    for (auto derived_cfd : derived_cfds) {
+      VersionEdit* edit_out = new VersionEdit();
+      edit_out->SetColumnFamily(derived_cfd->GetID());
+      edit_outs.push_back(edit_out);
+    }
+  } else {
+    for (size_t i = 0; i < transforming_cfds.size(); i++) {
+      if (transforming_cfds[i]->GetName() != compacting_cfd->GetName()) {
+        VersionEdit* edit_out = new VersionEdit();
+        assert(edit_out);
+        edit_out->SetColumnFamily(transforming_cfds[i]->GetID());
+        edit_outs.push_back(edit_out);
+      } else {
+        edit_outs.push_back(edit);
+      }
+    }
   }
-
+  
   // Add compaction inputs
   compaction->AddInputDeletions(edit);
 
@@ -1845,17 +1861,28 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
       return log_and_apply_status;
     }
     for (size_t i = 0; i < transforming_cfds.size(); i++) {
-      log_and_apply_status = versions_->LogAndApply(transforming_cfds[i],
-                                  mutable_cf_options, read_options, edit_outs[i],
-                                  db_mutex_, db_directory_);
-      if (!log_and_apply_status.ok()) {
-        return log_and_apply_status;
+      if (transforming_cfds[i]->GetName() != compacting_cfd->GetName()) {
+        log_and_apply_status = versions_->LogAndApply(transforming_cfds[i],
+                                mutable_cf_options, read_options, edit_outs[i],
+                                db_mutex_, db_directory_);
+        if (!log_and_apply_status.ok()) {
+          return log_and_apply_status;
+        }
       }
     }
   } else {
      log_and_apply_status = versions_->LogAndApply(compaction->column_family_data(),
                                   mutable_cf_options, read_options, edit,
                                   db_mutex_, db_directory_);
+    if (compacting_cfd->ioptions()->transformer_type == TransformerType::AUGMENTER) {
+      std::vector<ColumnFamilyData*> derived_cfds;
+      GetDerivedCfds(derived_cfds, compaction->output_level());
+      for (size_t i = 0; i < derived_cfds.size(); i++) {
+        log_and_apply_status = versions_->LogAndApply(derived_cfds[i],
+                                mutable_cf_options, read_options, edit_outs[i],
+                                db_mutex_, db_directory_);
+      }
+    }
   }
   return log_and_apply_status;
 }
@@ -2034,7 +2061,8 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         db_options_.stats, listeners, db_options_.file_checksum_gen_factory.get(),
         tmp_set.Contains(FileType::kTableFile), false), i);
 
-    if (cfd->ioptions()->transformer_type != TransformerType::NOTRANSFORMATION) {
+    if (cfd->ioptions()->transformer_type != TransformerType::NOTRANSFORMATION && 
+        cfd->ioptions()->transformer_type != TransformerType::AUGMENTER) {
       TableBuilderOptions tboptions(
         *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
         cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),
@@ -2260,13 +2288,13 @@ void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData
   }
 }
 
-void CompactionJob::GetDerivedCfds(std::vector<ColumnFamilyData*>& output_cfds) {
+void CompactionJob::GetDerivedCfds(std::vector<ColumnFamilyData*>& output_cfds, int level) {
   ColumnFamilyData* cfd = compact_->compaction->column_family_data();
   std::string cfname = cfd->GetName();
   int i = 0;
 
   while (true) {
-    std::string indexcf_name = cfname + "_derived_cf_" + std::to_string(i++);
+    std::string indexcf_name = cfname + "_derived_cf_L" + std::to_string(level) + "_" + std::to_string(i++);
     ColumnFamilyData* indexcfd = versions_->GetColumnFamilySet()->GetColumnFamily(indexcf_name);
     if (indexcfd != nullptr) {
       output_cfds.push_back(indexcfd);
@@ -2375,20 +2403,21 @@ void CompactionJob::EnsureInputOnlyOnLevel0(ColumnFamilyData* cfd) {
 }
 
 void CompactionJob::DeleteDerivedFiles(VersionEdit* edit, std::vector<int> levels) {
-  std::vector<ColumnFamilyData*> derived_cfds;
-  GetDerivedCfds(derived_cfds);
+  for (auto level : levels) {
+    std::vector<ColumnFamilyData*> derived_cfds;
+    GetDerivedCfds(derived_cfds, level);
 
-  for (auto derived_cfd : derived_cfds) {
-    VersionStorageInfo* vstorage_info = derived_cfd->current()->storage_info();
+    for (auto derived_cfd : derived_cfds) {
+      VersionStorageInfo* vstorage_info = derived_cfd->current()->storage_info();
 
-    for (auto level : levels) {
       if (vstorage_info->NumLevelFiles(level) > 0) {
         for (auto derived_file : vstorage_info->LevelFiles(level)) {
           edit->DeleteFile(level, derived_file->fd.GetNumber());
-          }
+        }
       }
     }
   }
+  
 }
 
 Env::IOPriority CompactionJob::GetRateLimiterPriority() {

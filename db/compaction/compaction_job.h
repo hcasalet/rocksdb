@@ -263,7 +263,8 @@ class CompactionJob {
                                     const Slice* comp_start_user_key,
                                     const Slice* comp_end_user_key);
   Status InstallCompactionResults(const MutableCFOptions& mutable_cf_options,
-                                  std::vector<ColumnFamilyData*> transforming_cfds);
+                                  std::vector<ColumnFamilyData*> transforming_cfds,
+                                  ColumnFamilyData* compacting_cfd);
   Status OpenCompactionOutputFile(SubcompactionState* sub_compact,
                                   CompactionOutputs& outputs);
   void UpdateCompactionJobStats(
@@ -286,7 +287,7 @@ class CompactionJob {
 
   int GetDerivedCFCount(ColumnFamilyData* cfd);
 
-  void GetDerivedCfds(std::vector<ColumnFamilyData*>& output_cfds);
+  void GetDerivedCfds(std::vector<ColumnFamilyData*>& output_cfds, int level);
 
   // The interal cfds used for cracking transformation are meant to only have files
   // on level 0. This is to ensure that
