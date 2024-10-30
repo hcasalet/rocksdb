@@ -1,10 +1,22 @@
-table NumericColumn {
-    name:string;
-    value:uint32;
-}
+namespace rocksdb;
 
 table FbRow {
-    numcols:[NumericColumn];
+    field0:uint32;
+    field1:uint32;
+    field2:uint32;
+    field3:uint32;
+    field4:uint32;
+    field5:uint32;
+    field6:uint32;
+    field7:uint32;
+    field8:string;
+    field9:string;
+    field10:string;
+    field11:string;
+    field12:string;
+    field13:string;
+    field14:string;
+    field15:string;
 }
 
 root_type FbRow;

@@ -1,8 +1,6 @@
+#include <nlohmann/json.hpp>
 #include "converter.h"
 #include "columns.pb.h"
-#include "json.hpp"
-
-using json = nlohmann::json;
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -22,33 +20,27 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
 
             flatbuffers::FlatBufferBuilder builder;
 
-            // Add the columns as uint64s
-            std::vector<flatbuffers::Offset<NumericColumn>> numericCols;
-            for (int i = 0; i < row.columns_size(); ++i) {
-                try {
-                    const std::string& col_name_str = row.columns(i).name();
-                    const std::string& value_str = row.columns(i).value();
-                    if (col_name_str.empty() || value_str.empty()) {
-                        //std::cerr << "Empty column name or value encountered at index: " << i << std::endl;
-                        continue;  // Skip this column if either is empty
-                    }
-                    auto col_name = builder.CreateString(col_name_str);
-                    auto col = CreateNumericColumn(builder, col_name, std::stoull(value_str));
-                    numericCols.push_back(col);
-                } catch (const std::invalid_argument& ia) {
-                    std::cerr << "Catching invalid argument exception: " << ia.what() << std::endl;
-                    return;
-                } catch (const std::out_of_range& orr) {
-                    std::cerr << "Catching out of range exception: " << orr.what() << std::endl;
-                    return;
-                }
-            }
+            auto field8 = builder.CreateString(row.columns(8).value());
+            auto field9 = builder.CreateString(row.columns(9).value());
+            auto field10 = builder.CreateString(row.columns(10).value());
+            auto field11 = builder.CreateString(row.columns(11).value());
+            auto field12 = builder.CreateString(row.columns(12).value());
+            auto field13 = builder.CreateString(row.columns(13).value());
+            auto field14 = builder.CreateString(row.columns(14).value());
+            auto field15 = builder.CreateString(row.columns(15).value());
 
-            // Add vectors to the builder
-            auto numericVec = builder.CreateVector(numericCols);
-
-            // Create the FbRow object
-            auto fbRow = CreateFbRow(builder, numericVec);
+            auto fbRow = rocksdb::CreateFbRow(
+                builder,
+                std::stoi(row.columns(0).value()),
+                std::stoi(row.columns(1).value()),
+                std::stoi(row.columns(2).value()),
+                std::stoi(row.columns(3).value()),
+                std::stoi(row.columns(4).value()),
+                std::stoi(row.columns(5).value()),
+                std::stoi(row.columns(6).value()),
+                std::stoi(row.columns(7).value()),
+                field8, field9, field10, field11, field12, field13, field14, field15
+            );
 
             builder.Finish(fbRow);
 
@@ -60,11 +52,38 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
             break;
         }
         case ConverterInputType::JSON: {
-            json reader = json::parse(input);
-            /**
-             * Todo: Need to figure out how to compact data once it is 
-             *       converted to Arrow format before we proceed.
-             */
+            nlohmann::json parsedJson = nlohmann::json::parse(input);
+            flatbuffers::FlatBufferBuilder builder;
+
+            auto field8 = builder.CreateString(parsedJson["field8"].get<std::string>());
+            auto field9 = builder.CreateString(parsedJson["field9"].get<std::string>());
+            auto field10 = builder.CreateString(parsedJson["field10"].get<std::string>());
+            auto field11 = builder.CreateString(parsedJson["field11"].get<std::string>());
+            auto field12 = builder.CreateString(parsedJson["field12"].get<std::string>());
+            auto field13 = builder.CreateString(parsedJson["field13"].get<std::string>());
+            auto field14 = builder.CreateString(parsedJson["field14"].get<std::string>());
+            auto field15 = builder.CreateString(parsedJson["field15"].get<std::string>());
+
+            auto fbRow = rocksdb::CreateFbRow(
+                builder,
+                parsedJson["field0"].get<int>(),
+                parsedJson["field1"].get<int>(),
+                parsedJson["field2"].get<int>(),
+                parsedJson["field3"].get<int>(),
+                parsedJson["field4"].get<int>(),
+                parsedJson["field5"].get<int>(),
+                parsedJson["field6"].get<int>(),
+                parsedJson["field7"].get<int>(),
+                field8, field9, field10, field11, field12, field13, field14, field15
+            );
+
+            builder.Finish(fbRow);
+
+            uint8_t *buf = builder.GetBufferPointer();
+            int size = builder.GetSize();
+            std::string s(reinterpret_cast<char*>(buf), size);
+            outputs->push_back(s);
+
             break;
         }
         default: {

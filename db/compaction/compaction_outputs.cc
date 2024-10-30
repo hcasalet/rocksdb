@@ -444,10 +444,10 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::DISTRIBUTOR): {
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, DistributorValueType::PROTOBUF); 
-        transformers[0]->Transform(value.data(), &output_values, splittingData);
+                  std::make_shared<DistributorData>(output_cfds_size, DistributorValueType::JSON); 
+        transformers[0]->Transform(value.ToString(), &output_values, splittingData);
       } else {
-        output_values.push_back(value.data());
+        output_values.push_back(value.ToString());
       }
   
       for (size_t i = 0; i < output_values.size(); i++) {
@@ -475,11 +475,11 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, DistributorValueType::PROTOBUF);
-        transformers[0]->Transform(value.data(), &output_values, splittingData);
+                  std::make_shared<DistributorData>(output_cfds_size, DistributorValueType::JSON);
+        transformers[0]->Transform(value.ToString(), &output_values, splittingData);
 
         std::shared_ptr<TransformerData> convertingData =
-              std::make_shared<ConverterData>(ConverterInputType::PROTOBUF,
+              std::make_shared<ConverterData>(ConverterInputType::JSON,
                                               ConverterOutputType::FLATBUFFERS);
         std::vector<std::string> output_converted_values;
         for (auto ovalue : output_values) {
@@ -519,9 +519,9 @@ Status CompactionOutputs::AddToOutput(
     }
     case to_underlying(TransformerType::CONVERTER): {
       std::shared_ptr<TransformerData> convertingData =
-                std::make_shared<ConverterData>(ConverterInputType::PROTOBUF,
+                std::make_shared<ConverterData>(ConverterInputType::JSON,
                                                 ConverterOutputType::FLATBUFFERS);
-      transformers[0]->Transform(value.data(), &output_values, convertingData);
+      transformers[0]->Transform(value.ToString(), &output_values, convertingData);
       s = current_output(0).validator.Add(key, Slice(output_values[0]));
       if (!s.ok()) {
         return s;
@@ -563,7 +563,7 @@ Status CompactionOutputs::AddToOutput(
                                                  ikey.type);
 
       std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(key.data()); 
-      transformers[0]->Transform(value.data(), &output_values, augmentingData);
+      transformers[0]->Transform(value.ToString(), &output_values, augmentingData);
 
       break;
     }
@@ -572,7 +572,7 @@ Status CompactionOutputs::AddToOutput(
 
       std::vector<std::string> output_converted_values;
       std::shared_ptr<TransformerData> convertingData = std::make_shared<ConverterData>(
-                                  ConverterInputType::PROTOBUF, ConverterOutputType::FLATBUFFERS);
+                                  ConverterInputType::JSON, ConverterOutputType::FLATBUFFERS);
       transformers[0]->Transform(value.data(), &output_converted_values, convertingData);
 
       s = current_output(0).validator.Add(key, Slice(output_converted_values[0]));

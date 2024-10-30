@@ -1,4 +1,5 @@
 #include <sstream>
+#include <nlohmann/json.hpp>
 #include "augmenter.h"
 #include "columns.pb.h"
 
@@ -7,14 +8,18 @@ namespace ROCKSDB_NAMESPACE {
 void Augmenter::Transform(std::string input, std::vector<std::string>* outputs, const std::shared_ptr<TransformerData>& data) {
     auto augmenterData = std::dynamic_pointer_cast<AugmenterData>(data);
 
-    data::Row row;
-    row.ParseFromString(input);
+    nlohmann::json parsedJson = nlohmann::json::parse(input);
+
+    //data::Row row;
+    //row.ParseFromString(input);
 
     for (size_t i = 0; i < derivers_.size(); i++) {
         std::vector<std::string> inputs;
         for (auto pos : derivers_[i]->positions) {
-            assert(pos < row.columns_size());
-            inputs.push_back(row.columns(pos).value());
+            //assert(pos < row.columns_size());
+            assert(pos < int(parsedJson.size()));
+            //inputs.push_back(row.columns(pos).value());
+            inputs.push_back(std::to_string(parsedJson["field"+std::to_string(pos)].get<int>()));
         }
 
         std::string derived = derivers_[i]->derive(inputs);
