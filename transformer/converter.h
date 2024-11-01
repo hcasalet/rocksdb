@@ -17,9 +17,9 @@ namespace ROCKSDB_NAMESPACE {
 
   class ConverterData : public TransformerData {
     public:
-      ConverterInputType in_type;
-      ConverterOutputType out_type;
-      ConverterData(ConverterInputType intype, ConverterOutputType outtype) :
+      InputOutputDataType in_type;
+      InputOutputDataType out_type;
+      ConverterData(InputOutputDataType intype, InputOutputDataType outtype) :
         in_type(intype), out_type(outtype) {}
   };
 

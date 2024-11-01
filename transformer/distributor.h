@@ -6,17 +6,11 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-enum class DistributorValueType {
-  JSON,
-  PROTOBUF,
-  FLATBUFFERS
-};
-
 class DistributorData : public TransformerData {
   public:
     int splits;
-    DistributorValueType vtype;
-    DistributorData(int num_splits, DistributorValueType v_type) : 
+    InputOutputDataType vtype;
+    DistributorData(int num_splits, InputOutputDataType v_type) : 
       splits(num_splits), vtype(v_type) {}
 };
 

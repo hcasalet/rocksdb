@@ -14,7 +14,7 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
     }
  
     switch (converterData->in_type) {
-        case ConverterInputType::PROTOBUF: {
+        case InputOutputDataType::PROTOBUF: {
             data::Row row;
             row.ParseFromString(input);
 
@@ -51,7 +51,7 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
 
             break;
         }
-        case ConverterInputType::JSON: {
+        case InputOutputDataType::JSON: {
             nlohmann::json parsedJson = nlohmann::json::parse(input);
             flatbuffers::FlatBufferBuilder builder;
 
@@ -87,6 +87,7 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
             break;
         }
         default: {
+            outputs->push_back(input);
             break;
         }
     }

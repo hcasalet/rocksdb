@@ -573,6 +573,10 @@ struct AdvancedColumnFamilyOptions {
   // Transformer type
   TransformerType transformer_type = TransformerType::NOTRANSFORMATION;
 
+  // InputOutputData types
+  InputOutputDataType input_data_type = InputOutputDataType::UNKNOWN;
+  InputOutputDataType output_data_type = InputOutputDataType::UNKNOWN;
+
   // Soft limit on number of level-0 files. We start slowing down writes at this
   // point. A value <0 means that no writing slow down will be triggered by
   // number of files in level-0.

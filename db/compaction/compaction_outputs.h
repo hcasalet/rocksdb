@@ -280,7 +280,9 @@ class CompactionOutputs {
                      const CompactionFileOpenFunc& open_file_func,
                      const CompactionFileCloseFunc& close_file_func,
                      std::vector<Transformer*> transformers,
-                     TransformerType transformer_types);
+                     TransformerType transformer_types,
+                     InputOutputDataType inputDataType,
+                     InputOutputDataType outputDataType);
   
   // Add derived data to the output file
   Status AddDerivedOutput(const std::vector<std::map<std::string, std::string>> derived_outputs,

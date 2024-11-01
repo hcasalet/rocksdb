@@ -10,10 +10,10 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
 {
     auto distributorData = std::dynamic_pointer_cast<DistributorData>(data);
     int splits = distributorData->splits;
-    DistributorValueType vtype = distributorData->vtype;
+    InputOutputDataType vtype = distributorData->vtype;
 
     switch (vtype) {
-        case DistributorValueType::PROTOBUF: {
+        case InputOutputDataType::PROTOBUF: {
             data::Row row;
             row.ParseFromString(input);
             int group_size = row.columns_size()/splits;
@@ -45,14 +45,14 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
 
             break;
         }
-        case DistributorValueType::FLATBUFFERS: {
+        case InputOutputDataType::FLATBUFFERS: {
             /**
              * not implemented
              */
             
             break;
         }
-        case DistributorValueType::JSON: {
+        case InputOutputDataType::JSON: {
             nlohmann::json parsedJson = nlohmann::json::parse(input);
             int group_size = parsedJson.size()/splits;
             if (group_size < 1) {
@@ -75,6 +75,10 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
                 outputs->push_back(jsonData.dump());
             }
             
+            break;
+        }
+        default: {
+            outputs->push_back(input);
             break;
         }
     }

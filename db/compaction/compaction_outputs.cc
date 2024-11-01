@@ -365,7 +365,9 @@ Status CompactionOutputs::AddToOutput(
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func,
     std::vector<Transformer*> transformers,
-    TransformerType transformer_type) {
+    TransformerType transformer_type, 
+    InputOutputDataType inputDataType,
+    InputOutputDataType outputDataType) {
   Status s;
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {
@@ -444,7 +446,7 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::DISTRIBUTOR): {
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, DistributorValueType::JSON); 
+                  std::make_shared<DistributorData>(output_cfds_size, inputDataType); 
         transformers[0]->Transform(value.ToString(), &output_values, splittingData);
       } else {
         output_values.push_back(value.ToString());
@@ -475,12 +477,12 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, DistributorValueType::JSON);
+                  std::make_shared<DistributorData>(output_cfds_size, inputDataType);
         transformers[0]->Transform(value.ToString(), &output_values, splittingData);
 
         std::shared_ptr<TransformerData> convertingData =
-              std::make_shared<ConverterData>(ConverterInputType::JSON,
-                                              ConverterOutputType::FLATBUFFERS);
+              std::make_shared<ConverterData>(InputOutputDataType::JSON,
+                                              InputOutputDataType::FLATBUFFERS);
         std::vector<std::string> output_converted_values;
         for (auto ovalue : output_values) {
           std::vector<std::string> ovalues;
@@ -519,8 +521,7 @@ Status CompactionOutputs::AddToOutput(
     }
     case to_underlying(TransformerType::CONVERTER): {
       std::shared_ptr<TransformerData> convertingData =
-                std::make_shared<ConverterData>(ConverterInputType::JSON,
-                                                ConverterOutputType::FLATBUFFERS);
+                std::make_shared<ConverterData>(inputDataType, outputDataType);
       transformers[0]->Transform(value.ToString(), &output_values, convertingData);
       s = current_output(0).validator.Add(key, Slice(output_values[0]));
       if (!s.ok()) {
@@ -572,7 +573,7 @@ Status CompactionOutputs::AddToOutput(
 
       std::vector<std::string> output_converted_values;
       std::shared_ptr<TransformerData> convertingData = std::make_shared<ConverterData>(
-                                  ConverterInputType::JSON, ConverterOutputType::FLATBUFFERS);
+                                  inputDataType, outputDataType);
       transformers[0]->Transform(value.data(), &output_converted_values, convertingData);
 
       s = current_output(0).validator.Add(key, Slice(output_converted_values[0]));

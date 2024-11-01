@@ -215,7 +215,9 @@ class SubcompactionState {
                      const CompactionFileOpenFunc& open_file_func,
                      const CompactionFileCloseFunc& close_file_func,
                      std::vector<Transformer*> transformers,
-                     TransformerType transformer_type);
+                     TransformerType transformer_type,
+                     InputOutputDataType inputDataType,
+                     InputOutputDataType outputDataType);
 
   // Add derived output
   Status AddDerivedOutput(const std::vector<std::map<std::string, std::string>> derived_outputs,

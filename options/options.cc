@@ -65,6 +65,8 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       transform_while_compacting(options.transform_while_compacting),
       num_columns(options.num_columns),
       transformer_type(options.transformer_type),
+      input_data_type(options.input_data_type),
+      output_data_type(options.output_data_type),
       level0_slowdown_writes_trigger(options.level0_slowdown_writes_trigger),
       level0_stop_writes_trigger(options.level0_stop_writes_trigger),
       target_file_size_base(options.target_file_size_base),
@@ -196,6 +198,8 @@ void ColumnFamilyOptions::Dump(Logger* log) const {
     ROCKS_LOG_HEADER(log, "            Options.compacting_level_within_column_family_group: %d", compacting_level_within_column_family_group);
     ROCKS_LOG_HEADER(log, "            Options.num_columns: %d", num_columns);
     ROCKS_LOG_HEADER(log, "            Options.transform_type: %d", static_cast<int>(transformer_type));
+    ROCKS_LOG_HEADER(log, "            Options.input_data_type: %d", static_cast<int>(input_data_type));
+    ROCKS_LOG_HEADER(log, "            Options.output_data_type: %d", static_cast<int>(output_data_type));
     ROCKS_LOG_HEADER(log, "       Options.min_write_buffer_number_to_merge: %d",
                      min_write_buffer_number_to_merge);
     ROCKS_LOG_HEADER(log, "    Options.max_write_buffer_number_to_maintain: %d",
@@ -638,6 +642,14 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeForPointLookup(
 
 ColumnFamilyOptions* ColumnFamilyOptions::SetTransformerType(TransformerType transformerType) {
   transformer_type = transformerType;
+  return this;
+}
+
+ColumnFamilyOptions* ColumnFamilyOptions::SetInputOutputDataType(InputOutputDataType inputDataType,
+                                                                 InputOutputDataType outputDataType)
+{
+  input_data_type = inputDataType;
+  output_data_type = outputDataType;
   return this;
 }
 

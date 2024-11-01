@@ -72,6 +72,10 @@ struct ImmutableCFOptions {
 
   TransformerType transformer_type;
 
+  InputOutputDataType input_data_type;
+
+  InputOutputDataType output_data_type;
+
   bool optimize_filters_for_hits;
 
   bool force_consistency_checks;

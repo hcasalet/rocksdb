@@ -4,6 +4,7 @@
 #include <vector>
 #include <map>
 #include <type_traits>
+#include <memory>
 
 #include "rocksdb/rocksdb_namespace.h"
 
@@ -42,6 +43,13 @@ enum class TransformerType {
   DISTRIBUTOR      = 1 << 0,     // 1
   CONVERTER        = 1 << 1,     // 2
   AUGMENTER        = 1 << 2      // 4
+};
+
+enum class InputOutputDataType {
+  UNKNOWN          = 0,
+  JSON             = 1 << 0,
+  PROTOBUF         = 1 << 1,
+  FLATBUFFERS      = 1 << 2
 };
 
 constexpr TransformerType operator|(TransformerType lhs, TransformerType rhs) {
