@@ -1,0 +1,8 @@
+namespace rocksdb;
+
+table FbColStr {
+    col0:string;
+    col1:string;
+}
+
+root_type FbColStr;

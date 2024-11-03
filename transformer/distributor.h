@@ -2,7 +2,6 @@
 
 #include <memory>
 #include "rocksdb/transformer.h"
-#include "flat/data_generated.h"
 
 namespace ROCKSDB_NAMESPACE {
 
