@@ -481,8 +481,8 @@ Status CompactionOutputs::AddToOutput(
         transformers[0]->Transform(value.ToString(), &output_values, splittingData);
 
         std::shared_ptr<TransformerData> convertingData =
-              std::make_shared<ConverterData>(InputOutputDataType::JSON,
-                                              InputOutputDataType::FLATBUFFERS);
+              std::make_shared<ConverterData>(inputDataType, outputDataType);
+
         std::vector<std::string> output_converted_values;
         for (auto ovalue : output_values) {
           std::vector<std::string> ovalues;
