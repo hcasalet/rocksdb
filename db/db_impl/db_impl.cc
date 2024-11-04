@@ -3325,38 +3325,20 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
         root_cfd->AddDestinationCfd(converted_cf);
 
         if (derived) {
-          int derived_cf_numbered = 0;
-          while (true) {
-            std::string derived_cf_name = cf_name_prefix + "_L0" + "_" + std::to_string(derived_cf_numbered);
-            ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
-            if (derived_cf == nullptr) {
-              break;
-            }
+          std::string derived_cf_name = cf_name_prefix + "_index_cf";
+          ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
+          if (derived_cf != nullptr) {
             root_cfd->AddDestinationCfd(derived_cf);
-            derived_cf_numbered++;
           }
         }
-
-        root_cfd = converted_cf;
       }
     }
 
     if (derived) {
       root_cfd->AddDestinationCfd(root_cfd);
-      int derived_level = 1;
-      while (derived_level < root_cfd->ioptions()->num_levels) {
-        int derived_cf_numbered = 0;
-        while (true) {
-          std::string derived_cf_name = cf_name_prefix + "_derived_cf_L" + std::to_string(derived_level) + "_" + std::to_string(derived_cf_numbered);
-          ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
-          if (derived_cf == nullptr) {
-            break;
-          }
-          root_cfd->AddDestinationCfd(derived_cf);
-          derived_cf_numbered++;
-        }
-        derived_level++;
-      }
+      std::string derived_cf_name = cf_name_prefix + "_index_cf";
+      ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
+      root_cfd->AddDestinationCfd(derived_cf);
     }
   } 
 
