@@ -608,7 +608,17 @@ Status CompactionOutputs::AddDerivedOutput(
     const std::vector<std::map<std::string, std::string>> derived_outputs,
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func) {
+
   Status s;
+
+  // Open output file if necessary
+  if (!HasBuilder()) {
+    s = open_file_func(*this);
+    if (!s.ok()) {
+      return s;
+    }
+  }
+
   for (size_t i = 0; i < derived_outputs.size(); i++) {
     for (auto dout : derived_outputs[i]) {
       s = current_output(i+1).validator.Add(Slice(dout.first), Slice(dout.second));

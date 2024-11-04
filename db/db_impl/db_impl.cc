@@ -3367,13 +3367,10 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
 Status DBImpl::DisplayTransformingDestinationCfds() {
   for (auto cfd : *versions_->GetColumnFamilySet()) {
     std::cout << "source cfd: " << cfd->GetName() << " ---- destination cfds: " << std::endl;
-    for (int level = 0; level < cfd->ioptions()->num_levels; level++) {
-      std::cout << "level " << level << ": ";
-      for (auto dest_cfd : cfd->GetDestinationCfds(level)) {
+      for (auto dest_cfd : cfd->GetDestinationCfds()) {
         std::cout << dest_cfd->GetName() << " .. ";
       }
       std::cout << std::endl; 
-    }  
   }
   return Status::OK();
 }

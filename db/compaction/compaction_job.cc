@@ -850,12 +850,12 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
           cfd->GetDestinationCfdSize() == 1) ||
       (to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER) &&
           cfd->GetDestinationCfdSize() == 1) ||
-      (cfd->GetAllDestinationCfds().size() == 1 && cfd->GetDestinationCfds(output_level)[0]->GetName().find("_converted_cf") != std::string::npos)) {
+      (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_converted_cf") != std::string::npos)) {
     cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_, compaction_stats_);
   }
 
   if (status.ok()) {
-    status = InstallCompactionResults(mutable_cf_options, cfd->GetDestinationCfds(output_level), cfd);
+    status = InstallCompactionResults(mutable_cf_options, cfd->GetDestinationCfds(), cfd);
   }
   if (!versions_->io_status().ok()) {
     io_status_ = versions_->io_status();
@@ -1277,7 +1277,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   std::shared_ptr<CompactionIterator> c_iter;
 
   c_iter = std::make_shared<CompactionIterator>(
-    input, cfd->GetDestinationCfds(sub_compact->compaction->output_level()), cfd->user_comparator(), &merge,
+    input, cfd->GetDestinationCfds(), cfd->user_comparator(), &merge,
     versions_->LastSequence(), &existing_snapshots_, earliest_write_conflict_snapshot_, job_snapshot_seq, snapshot_checker_, env_, ShouldReportDetailedTime(env_, stats_),
     /*expect_valid_internal_key=*/true, range_del_agg.get(),
     blob_file_builder.get(), db_options_.allow_data_in_errors,
@@ -1380,7 +1380,6 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     for (auto transformer : transformers_) {
       if (typeid(transformer) == typeid(Augmenter)) {
         size_t num_stores = transformer->GetStoreSize();
-        std::cout << "Debug ::::: num_stores: " << num_stores << std::endl;
         for (size_t i = 0; i < num_stores; i++) {
           std::map<std::string, std::string> derived_output;
           transformer->Retrieve(int(i), derived_output);
@@ -1557,8 +1556,8 @@ Status CompactionJob::FinishCompactionOutputFile(
     assert(output_number != 0);
 
     ColumnFamilyData* cfd;
-    if (transformers_.size() > 0 && sub_compact->compaction->column_family_data()->GetDestinationCfds(sub_compact->compaction->output_level()).size() > 0) {
-      cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds(sub_compact->compaction->output_level())[i];
+    if (transformers_.size() > 0 && sub_compact->compaction->column_family_data()->GetDestinationCfds().size() > 0) {
+      cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i];
     } else {
       cfd = sub_compact->compaction->column_family_data();
     }
@@ -1943,8 +1942,8 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
     std::string fname = GetTableFileName(file_number);
     // Fire events.
     ColumnFamilyData* dest_cfd;
-    if (transformers_.size() > 0 && cfd->GetDestinationCfds(sub_compact->compaction->output_level()).size() > 0) {
-      dest_cfd = cfd->GetDestinationCfds(sub_compact->compaction->output_level())[i];
+    if (transformers_.size() > 0 && cfd->GetDestinationCfds().size() > 0) {
+      dest_cfd = cfd->GetDestinationCfds()[i];
     } else {
       dest_cfd = cfd;
     }
