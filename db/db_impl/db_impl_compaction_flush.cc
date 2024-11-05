@@ -3971,8 +3971,9 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
     for (auto* my_cfd : *versions_->GetColumnFamilySet()) {
       if (((my_cfd->GetName().find("_sys_cf_") != std::string::npos ||
            my_cfd->GetName().find("_converted_cf") != std::string::npos ||
-           my_cfd->GetName().find("_index_cf") != std::string::npos) && 
-           my_cfd->GetName().find("_derived_cf") == std::string::npos) && my_cfd->NeedsCompaction()) {
+           my_cfd->GetName().find("_indexed_data_cf") != std::string::npos ||
+           my_cfd->GetName().find("_secondary_index_cf") != std::string::npos)) &&
+          my_cfd->NeedsCompaction()) {
         SchedulePendingCompaction(my_cfd);
         MaybeScheduleFlushOrCompaction();
       }

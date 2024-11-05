@@ -605,32 +605,47 @@ Status CompactionOutputs::AddToOutput(
 }
 
 Status CompactionOutputs::AddDerivedOutput(
-    const std::vector<std::map<std::string, std::string>> derived_outputs,
+    std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func) {
-
   Status s;
 
-  // Open output file if necessary
-  if (!HasBuilder()) {
-    s = open_file_func(*this);
-    if (!s.ok()) {
-      return s;
-    }
-  }
-
   for (size_t i = 0; i < derived_outputs.size(); i++) {
+    std::sort(derived_outputs[i].begin(), derived_outputs[i].end());
+
+    int sequence_number = 1;
     for (auto dout : derived_outputs[i]) {
-      s = current_output(i+1).validator.Add(Slice(dout.first), Slice(dout.second));
-      builders_[i+1]->Add(Slice(dout.first), Slice(dout.second));
+      rocksdb::InternalKey internal_key(dout.first, sequence_number, rocksdb::kTypeValue);
+      rocksdb::Slice encoded_key = internal_key.Encode();
+      rocksdb::Slice value = Slice(dout.second);
+
+      builders_[i + 1]->Add(encoded_key, value);
+      s = current_output(i+1).validator.Add(encoded_key, value);
+      if (!s.ok()) {
+        return s;
+      }
 
       stats_.num_output_records++;
 
       if (blob_garbage_meter_) {
         s = blob_garbage_meter_->ProcessOutFlow(Slice(dout.first), Slice(dout.second));
       }
+      if (!s.ok()) {
+        return s;
+      }
+
+      ParsedInternalKey ikey;
+      ParseInternalKey(encoded_key, &ikey, false);  // Parse key to get sequence and type
+
+      s = current_output(i+1).meta.UpdateBoundaries(encoded_key, value, ikey.sequence, ikey.type);
+      if (!s.ok()) {
+        return s;
+      }
+
+      sequence_number++;
     }
   }
+
   return s;
 }
 

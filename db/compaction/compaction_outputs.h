@@ -285,7 +285,7 @@ class CompactionOutputs {
                      InputOutputDataType outputDataType);
   
   // Add derived data to the output file
-  Status AddDerivedOutput(const std::vector<std::map<std::string, std::string>> derived_outputs,
+  Status AddDerivedOutput(std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,
                          const CompactionFileOpenFunc& open_file_func,
                          const CompactionFileCloseFunc& close_file_func);
 

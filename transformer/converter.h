@@ -34,7 +34,7 @@ namespace ROCKSDB_NAMESPACE {
                      std::vector<std::string>* outputs,
                      const std::shared_ptr<TransformerData>& data) override;
       void Prepare() override;
-      void Retrieve(int position, std::map<std::string, std::string> output) override;
+      void Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) override;
       size_t GetStoreSize() override;
 
     private:

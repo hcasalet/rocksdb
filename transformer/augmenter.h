@@ -31,24 +31,19 @@ class Augmenter : public Transformer
 {
   public:
     Augmenter(std::vector<DeriveFuncData*>& derivers)
-        : derivers_(derivers) {
-          for (size_t i = 0; i < derivers.size(); i++) {
-            std::map<std::string, std::vector<std::string>> st;
-            stores_.push_back(st);
-          }
-        };
+        : derivers_(derivers) {};
     ~Augmenter() {};
 
     void Transform(std::string input,
                    std::vector<std::string>* outputs,
                    const std::shared_ptr<TransformerData>& data) override;
     void Prepare() override;
-    void Retrieve(int position, std::map<std::string, std::string> output) override;
+    void Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) override;
     size_t GetStoreSize() override;
 
   private:
     std::vector<DeriveFuncData*> derivers_;
-    std::vector<std::map<std::string, std::vector<std::string>>> stores_;
+    std::map<std::string, std::vector<std::string>> store_;
 };
 
 }

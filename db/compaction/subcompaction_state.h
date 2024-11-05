@@ -220,7 +220,7 @@ class SubcompactionState {
                      InputOutputDataType outputDataType);
 
   // Add derived output
-  Status AddDerivedOutput(const std::vector<std::map<std::string, std::string>> derived_outputs,
+  Status AddDerivedOutput(const std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,
                           const CompactionFileOpenFunc& open_file_func,
                           const CompactionFileCloseFunc& close_file_func);
 

@@ -75,7 +75,7 @@ class Transformer {
                          std::vector<std::string>* outputs,
                          const std::shared_ptr<TransformerData>& data) = 0;
   virtual void Prepare() = 0;
-  virtual void Retrieve(int position, std::map<std::string, std::string> output) = 0;
+  virtual void Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) = 0;
   virtual size_t GetStoreSize() = 0;
 };
 

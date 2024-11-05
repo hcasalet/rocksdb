@@ -1278,7 +1278,8 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
 
   c_iter = std::make_shared<CompactionIterator>(
     input, cfd->GetDestinationCfds(), cfd->user_comparator(), &merge,
-    versions_->LastSequence(), &existing_snapshots_, earliest_write_conflict_snapshot_, job_snapshot_seq, snapshot_checker_, env_, ShouldReportDetailedTime(env_, stats_),
+    versions_->LastSequence(), &existing_snapshots_, earliest_write_conflict_snapshot_,
+    job_snapshot_seq, snapshot_checker_, env_, ShouldReportDetailedTime(env_, stats_),
     /*expect_valid_internal_key=*/true, range_del_agg.get(),
     blob_file_builder.get(), db_options_.allow_data_in_errors,
     db_options_.enforce_single_del_contracts, manual_compaction_canceled_,
@@ -1360,21 +1361,22 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   // Compacting one record at a time is done. Now after that, we need to take care of 
   // the Augmenting case.
   if (transformers_.size() > 0 && 
-      (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER))) {
-    std::vector<std::map<std::string, std::string>> derived_outputs;
-    for (auto transformer : transformers_) {
-      if (typeid(transformer) == typeid(Augmenter)) {
-        size_t num_stores = transformer->GetStoreSize();
-        for (size_t i = 0; i < num_stores; i++) {
-          std::map<std::string, std::string> derived_output;
-          transformer->Retrieve(int(i), derived_output);
+      (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER)) &&
+      cfd->GetName().find("_index") == std::string::npos) {
+    std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs;
+    //for (auto transformer : transformers_) {
+      //if (dynamic_cast<Augmenter*>(transformer)) {
+        //size_t num_stores = transformer->GetStoreSize();
+        //for (size_t i = 0; i < num_stores; i++) {
+          std::vector<std::pair<std::string, std::string>> derived_output;
+          transformers_[0]->Retrieve(0, derived_output);
           derived_outputs.push_back(derived_output);
-        }
+        //}
 
         exec_status = sub_compact->AddDerivedOutput(derived_outputs, open_file_func, close_file_func);
-        break;
-      }
-    }
+        //break;
+      //}
+    //}
   }
 
   sub_compact->compaction_job_stats.num_blobs_read =

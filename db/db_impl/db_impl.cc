@@ -3335,10 +3335,17 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
     }
 
     if (derived) {
-      root_cfd->AddDestinationCfd(root_cfd);
-      std::string derived_cf_name = cf_name_prefix + "_index_cf";
-      ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
-      root_cfd->AddDestinationCfd(derived_cf);
+      std::string data_cf_name = cf_name_prefix + "_indexed_data_cf";
+      ColumnFamilyData* data_cf = all_cfds->GetColumnFamily(data_cf_name);
+      if (data_cf != nullptr) {
+        root_cfd->AddDestinationCfd(data_cf);
+      }
+
+      std::string index_cf_name = cf_name_prefix + "_secondary_index_cf";
+      ColumnFamilyData* index_cf = all_cfds->GetColumnFamily(index_cf_name);
+      if (index_cf != nullptr) {
+        root_cfd->AddDestinationCfd(index_cf);
+      }
     }
   } 
 

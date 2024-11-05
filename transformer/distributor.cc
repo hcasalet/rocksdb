@@ -90,7 +90,7 @@ void Distributor::Prepare() {
     }
 }
 
-void Distributor::Retrieve(int position, std::map<std::string, std::string> output) {
+void Distributor::Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) {
     return;
 }
 

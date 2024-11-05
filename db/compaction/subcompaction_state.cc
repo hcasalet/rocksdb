@@ -116,7 +116,7 @@ Status SubcompactionState::AddToOutput(
 }
 
 Status SubcompactionState::AddDerivedOutput(
-    const std::vector<std::map<std::string, std::string>> derived_outputs,
+    const std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func) {
   return Current().AddDerivedOutput(derived_outputs, open_file_func, close_file_func);
