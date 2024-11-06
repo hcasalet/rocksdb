@@ -45,6 +45,34 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
 
             break;
         }
+        case InputOutputDataType::PROTO64: {
+            data::WideRow64 row;
+            row.ParseFromString(input);
+            int group_size = row.col64_size()/splits;
+            if (group_size < 1) {
+                group_size = 1;
+                splits = row.col64_size();
+            }
+
+            for (int i = 0; i < splits; i++) {
+                data::WideRow64 splittedRow;
+              
+                for (int j = 0; j < group_size; j++) {
+                    splittedRow.add_col64(row.col64(i*group_size+j));
+                }
+
+                // any leftovers gets added to the last collection
+                for (int j = 0; j < row.col64_size()-splits*group_size; j++) {
+                    splittedRow.add_col64(row.col64(splits*group_size+j));
+                }
+             
+                std::string serializedRow;
+                splittedRow.SerializeToString(&serializedRow);
+                outputs->push_back(serializedRow);
+            }
+
+            break;
+        }
         case InputOutputDataType::FLATBUFFERS: {
             /**
              * not implemented

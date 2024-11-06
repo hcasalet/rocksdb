@@ -3292,7 +3292,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
           }
         }
 
-        std::string dest_cf_name_1 = cf_name_prefix + "_sys_cf_L" + std::to_string(src_level+1) + "_G" + std::to_string(src_group*2);
+        std::string dest_cf_name_1 = cf_name_prefix + "_sys_cf_L" + std::to_string(src_level+1) + "_G" + std::to_string(src_group*3);
         ColumnFamilyData* dest_cfd_1 = all_cfds->GetColumnFamily(dest_cf_name_1);
         if (dest_cfd_1 != nullptr) {
           src_cfd->AddDestinationCfd(dest_cfd_1);
@@ -3301,12 +3301,21 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
           }
         }
 
-        std::string dest_cf_name_2 = cf_name_prefix + "_sys_cf_L" + std::to_string(src_level+1) + "_G" + std::to_string(src_group*2+1);
+        std::string dest_cf_name_2 = cf_name_prefix + "_sys_cf_L" + std::to_string(src_level+1) + "_G" + std::to_string(src_group*3+1);
         ColumnFamilyData* dest_cfd_2 = all_cfds->GetColumnFamily(dest_cf_name_2);
         if (dest_cfd_2 != nullptr) {
           src_cfd->AddDestinationCfd(dest_cfd_2);
           if (src_level < compacting_levels - 3) {
             cfd_list.push(dest_cfd_2);
+          }
+        }
+
+        std::string dest_cf_name_3 = cf_name_prefix + "_sys_cf_L" + std::to_string(src_level+1) + "_G" + std::to_string(src_group*3+2);
+        ColumnFamilyData* dest_cfd_3 = all_cfds->GetColumnFamily(dest_cf_name_3);
+        if (dest_cfd_3 != nullptr) {
+          src_cfd->AddDestinationCfd(dest_cfd_3);
+          if (src_level < compacting_levels - 3) {
+            cfd_list.push(dest_cfd_3);
           }
         }
         
