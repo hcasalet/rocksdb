@@ -2,8 +2,8 @@
 #include "flatbuffers/flatbuffers.h"
 #include "rocksdb/transformer.h"
 #include "flat/row_generated.h"
-#include "flat/column_num_generated.h"
-#include "flat/column_str_generated.h"
+#include "flat/row_num_generated.h"
+#include "flat/row_str_generated.h"
 
 namespace ROCKSDB_NAMESPACE {
 

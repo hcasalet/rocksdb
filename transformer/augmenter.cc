@@ -10,7 +10,7 @@ void Augmenter::Transform(std::string input, std::vector<std::string>* outputs, 
     //nlohmann::json parsedJson = nlohmann::json::parse(input);
     data::Row row;
     row.ParseFromString(input);
-    store_[row.columns(0).value()].push_back(augmenterData->row_key);
+    store_[row.columns(0)].push_back(augmenterData->row_key);
 
     //for (size_t i = 0; i < derivers_.size(); i++) {
     /*std::vector<std::string> inputs;

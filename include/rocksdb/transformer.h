@@ -49,8 +49,7 @@ enum class InputOutputDataType {
   UNKNOWN          = 0,
   JSON             = 1 << 0,
   PROTOBUF         = 1 << 1,
-  FLATBUFFERS      = 1 << 2,
-  PROTO64          = 1 << 3
+  FLATBUFFERS      = 1 << 2
 };
 
 constexpr TransformerType operator|(TransformerType lhs, TransformerType rhs) {

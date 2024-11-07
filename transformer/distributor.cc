@@ -26,44 +26,12 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
                 data::Row splittedRow;
               
                 for (int j = 0; j < group_size; j++) {
-                    data::Column* newColumn = splittedRow.add_columns();
-                    newColumn->set_name(row.columns(i*group_size+j).name());
-                    newColumn->set_value(row.columns(i*group_size+j).value());
+                    splittedRow.add_columns(row.columns(i*group_size+j));
                 }
 
                 // any leftovers gets added to the last collection
                 for (int j = 0; j < row.columns_size()-splits*group_size; j++) {
-                    data::Column* newColumn = splittedRow.add_columns();
-                    newColumn->set_name(row.columns(splits*group_size+j).name());
-                    newColumn->set_value(row.columns(splits*group_size+j).value());
-                }
-             
-                std::string serializedRow;
-                splittedRow.SerializeToString(&serializedRow);
-                outputs->push_back(serializedRow);
-            }
-
-            break;
-        }
-        case InputOutputDataType::PROTO64: {
-            data::WideRow64 row;
-            row.ParseFromString(input);
-            int group_size = row.col64_size()/splits;
-            if (group_size < 1) {
-                group_size = 1;
-                splits = row.col64_size();
-            }
-
-            for (int i = 0; i < splits; i++) {
-                data::WideRow64 splittedRow;
-              
-                for (int j = 0; j < group_size; j++) {
-                    splittedRow.add_col64(row.col64(i*group_size+j));
-                }
-
-                // any leftovers gets added to the last collection
-                for (int j = 0; j < row.col64_size()-splits*group_size; j++) {
-                    splittedRow.add_col64(row.col64(splits*group_size+j));
+                    splittedRow.add_columns(row.columns(splits*group_size+j));
                 }
              
                 std::string serializedRow;

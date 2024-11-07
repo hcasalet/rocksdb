@@ -1,3 +1,5 @@
+#include <cstdint>  // For int32_t
+
 #include <nlohmann/json.hpp>
 #include "converter.h"
 #include "columns.pb.h"
@@ -18,67 +20,17 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
             data::Row row;
             row.ParseFromString(input);
 
-            int oputtype = 0;
-            if (row.columns_size() > 0 && row.columns_size() < 16) {
-                int strorint = std::stoi(row.columns(0).name().substr(5));
-                if (strorint >= 8) {
-                    oputtype = 1;
-                } else {
-                    oputtype = 2;
-                }
-            }
-
             flatbuffers::FlatBufferBuilder builder;
-
-            switch (oputtype) {
-                case 0: {
-                    auto field8 = builder.CreateString(row.columns(8).value());
-                    auto field9 = builder.CreateString(row.columns(9).value());
-                    auto field10 = builder.CreateString(row.columns(10).value());
-                    auto field11 = builder.CreateString(row.columns(11).value());
-                    auto field12 = builder.CreateString(row.columns(12).value());
-                    auto field13 = builder.CreateString(row.columns(13).value());
-                    auto field14 = builder.CreateString(row.columns(14).value());
-                    auto field15 = builder.CreateString(row.columns(15).value());
-
-                    auto fbRow = rocksdb::CreateFbRow(
-                        builder,
-                        std::stoi(row.columns(0).value()),
-                        std::stoi(row.columns(1).value()),
-                        std::stoi(row.columns(2).value()),
-                        std::stoi(row.columns(3).value()),
-                        std::stoi(row.columns(4).value()),
-                        std::stoi(row.columns(5).value()),
-                        std::stoi(row.columns(6).value()),
-                        std::stoi(row.columns(7).value()),
-                        field8, field9, field10, field11, field12, field13, field14, field15
-                    );
-
-                    builder.Finish(fbRow);
-                    break;
-                }
-                case 1: {
-                    auto col0 = builder.CreateString(row.columns(0).value());
-                    auto col1 = builder.CreateString(row.columns(1).value());
-
-                    auto fbColStr = rocksdb::CreateFbColStr(
-                        builder, col0, col1
-                    );
-
-                    builder.Finish(fbColStr);
-                    break;
-                }
-                case 2: {
-                    auto fbColNum = rocksdb::CreateFbColNum(
-                        builder,
-                        std::stoi(row.columns(0).value()),
-                        std::stoi(row.columns(1).value())
-                    );
-
-                    builder.Finish(fbColNum);
-                    break;
-                }
+            std::vector<int32_t> numvals;
+            for (int i = 0; i < row.columns_size(); i++) {
+                numvals.push_back(std::stoi(row.columns(i)));
             }
+
+            auto num_vector = builder.CreateVector(numvals);
+
+            auto fb_row_num = rocksdb::CreateFbRowNum(builder, num_vector);
+
+            builder.Finish(fb_row_num);
 
             uint8_t *buf = builder.GetBufferPointer();
             int size = builder.GetSize();
