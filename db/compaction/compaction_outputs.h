@@ -282,7 +282,8 @@ class CompactionOutputs {
                      std::vector<Transformer*> transformers,
                      TransformerType transformer_types,
                      InputOutputDataType inputDataType,
-                     InputOutputDataType outputDataType);
+                     InputOutputDataType outputDataType,
+                     int columnDataType);
   
   // Add derived data to the output file
   Status AddDerivedOutput(std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,

@@ -570,6 +570,9 @@ struct AdvancedColumnFamilyOptions {
   // Number of columns for this database
   int num_columns = 1;
 
+  // Column data type is by default valued 0 (mixed)
+  int column_data_type = 0;
+
   // Transformer type
   TransformerType transformer_type = TransformerType::NOTRANSFORMATION;
 

@@ -367,7 +367,8 @@ Status CompactionOutputs::AddToOutput(
     std::vector<Transformer*> transformers,
     TransformerType transformer_type, 
     InputOutputDataType inputDataType,
-    InputOutputDataType outputDataType) {
+    InputOutputDataType outputDataType,
+    int columnDataType) {
   Status s;
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {
@@ -481,7 +482,7 @@ Status CompactionOutputs::AddToOutput(
         transformers[0]->Transform(value.ToString(), &output_values, splittingData);
 
         std::shared_ptr<TransformerData> convertingData =
-              std::make_shared<ConverterData>(inputDataType, outputDataType);
+              std::make_shared<ConverterData>(inputDataType, outputDataType, columnDataType);
 
         std::vector<std::string> output_converted_values;
         for (auto ovalue : output_values) {
@@ -521,7 +522,7 @@ Status CompactionOutputs::AddToOutput(
     }
     case to_underlying(TransformerType::CONVERTER): {
       std::shared_ptr<TransformerData> convertingData =
-                std::make_shared<ConverterData>(inputDataType, outputDataType);
+                std::make_shared<ConverterData>(inputDataType, outputDataType, columnDataType);
       transformers[0]->Transform(value.ToString(), &output_values, convertingData);
       s = current_output(0).validator.Add(key, Slice(output_values[0]));
       if (!s.ok()) {
@@ -573,7 +574,7 @@ Status CompactionOutputs::AddToOutput(
 
       std::vector<std::string> output_converted_values;
       std::shared_ptr<TransformerData> convertingData = std::make_shared<ConverterData>(
-                                  inputDataType, outputDataType);
+                                  inputDataType, outputDataType, columnDataType);
       transformers[0]->Transform(value.data(), &output_converted_values, convertingData);
 
       s = current_output(0).validator.Add(key, Slice(output_converted_values[0]));

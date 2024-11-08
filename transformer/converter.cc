@@ -21,17 +21,44 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
             row.ParseFromString(input);
 
             flatbuffers::FlatBufferBuilder builder;
-            std::vector<int32_t> numvals;
-            for (int i = 0; i < row.columns_size(); i++) {
-                numvals.push_back(std::stoi(row.columns(i)));
+            if (converterData->column_data_type == 1) {
+                std::vector<int32_t> numvals;
+                for (int i = 0; i < row.columns_size(); i++) {
+                    numvals.push_back(std::stoi(row.columns(i)));
+                }
+
+                auto num_vector = builder.CreateVector(numvals);
+                auto fb_row_num = rocksdb::CreateFbRowNum(builder, num_vector);
+
+                builder.Finish(fb_row_num);
+            } else if (converterData->column_data_type == 2) {
+                std::vector<flatbuffers::Offset<flatbuffers::String>> string_vector;
+                for (int i = 0; i < row.columns_size(); i++) {
+                    string_vector.push_back(builder.CreateString(row.columns(i)));
+                }
+
+                auto col_vector = builder.CreateVector(string_vector);
+                auto fb_row_str = rocksdb::CreateFbRowStr(builder, col_vector);
+
+                builder.Finish(fb_row_str);
+            } else {
+                std::vector<int32_t> numvals;
+                std::vector<flatbuffers::Offset<flatbuffers::String>> string_vector;
+                for (int i = 0; i < row.columns_size(); i++) {
+                    if (i < row.columns_size()/2) {
+                        numvals.push_back(std::stoi(row.columns(i)));
+                    } else {
+                        string_vector.push_back(builder.CreateString(row.columns(i)));
+                    }
+                }
+
+                auto num_vector = builder.CreateVector(numvals);
+                auto col_vector = builder.CreateVector(string_vector);
+                auto fb_row = rocksdb::CreateFbRow(builder, num_vector, col_vector);
+
+                builder.Finish(fb_row);
             }
-
-            auto num_vector = builder.CreateVector(numvals);
-
-            auto fb_row_num = rocksdb::CreateFbRowNum(builder, num_vector);
-
-            builder.Finish(fb_row_num);
-
+            
             uint8_t *buf = builder.GetBufferPointer();
             int size = builder.GetSize();
             std::string s(reinterpret_cast<char*>(buf), size);
@@ -43,28 +70,31 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
             nlohmann::json parsedJson = nlohmann::json::parse(input);
             flatbuffers::FlatBufferBuilder builder;
 
-            auto field8 = builder.CreateString(parsedJson["field8"].get<std::string>());
-            auto field9 = builder.CreateString(parsedJson["field9"].get<std::string>());
-            auto field10 = builder.CreateString(parsedJson["field10"].get<std::string>());
-            auto field11 = builder.CreateString(parsedJson["field11"].get<std::string>());
-            auto field12 = builder.CreateString(parsedJson["field12"].get<std::string>());
-            auto field13 = builder.CreateString(parsedJson["field13"].get<std::string>());
-            auto field14 = builder.CreateString(parsedJson["field14"].get<std::string>());
-            auto field15 = builder.CreateString(parsedJson["field15"].get<std::string>());
+            std::vector<int32_t> numvals;
+            numvals.push_back(parsedJson["field0"].get<int>());
+            numvals.push_back(parsedJson["field1"].get<int>());
+            numvals.push_back(parsedJson["field2"].get<int>());
+            numvals.push_back(parsedJson["field3"].get<int>());
+            numvals.push_back(parsedJson["field4"].get<int>());
+            numvals.push_back(parsedJson["field5"].get<int>());
+            numvals.push_back(parsedJson["field6"].get<int>());
+            numvals.push_back(parsedJson["field7"].get<int>());
+            auto num_vector = builder.CreateVector(numvals);
+
+            std::vector<flatbuffers::Offset<flatbuffers::String>> strvals;
+            strvals.push_back(builder.CreateString(parsedJson["field8"].get<std::string>()));
+            strvals.push_back(builder.CreateString(parsedJson["field9"].get<std::string>()));
+            strvals.push_back(builder.CreateString(parsedJson["field10"].get<std::string>()));
+            strvals.push_back(builder.CreateString(parsedJson["field11"].get<std::string>()));
+            strvals.push_back(builder.CreateString(parsedJson["field12"].get<std::string>()));
+            strvals.push_back(builder.CreateString(parsedJson["field13"].get<std::string>()));
+            strvals.push_back(builder.CreateString(parsedJson["field14"].get<std::string>()));
+            strvals.push_back(builder.CreateString(parsedJson["field15"].get<std::string>()));
+            auto col_vector = builder.CreateVector(strvals);
 
             auto fbRow = rocksdb::CreateFbRow(
-                builder,
-                parsedJson["field0"].get<int>(),
-                parsedJson["field1"].get<int>(),
-                parsedJson["field2"].get<int>(),
-                parsedJson["field3"].get<int>(),
-                parsedJson["field4"].get<int>(),
-                parsedJson["field5"].get<int>(),
-                parsedJson["field6"].get<int>(),
-                parsedJson["field7"].get<int>(),
-                field8, field9, field10, field11, field12, field13, field14, field15
+                builder, num_vector, col_vector
             );
-
             builder.Finish(fbRow);
 
             uint8_t *buf = builder.GetBufferPointer();

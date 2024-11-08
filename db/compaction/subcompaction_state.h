@@ -217,7 +217,8 @@ class SubcompactionState {
                      std::vector<Transformer*> transformers,
                      TransformerType transformer_type,
                      InputOutputDataType inputDataType,
-                     InputOutputDataType outputDataType);
+                     InputOutputDataType outputDataType,
+                     int columnDataType);
 
   // Add derived output
   Status AddDerivedOutput(const std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,

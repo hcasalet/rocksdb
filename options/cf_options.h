@@ -70,6 +70,8 @@ struct ImmutableCFOptions {
 
   int num_columns;
 
+  int column_data_type; // 0 - default; 1 - numeric only; 2 - strings only
+
   TransformerType transformer_type;
 
   InputOutputDataType input_data_type;

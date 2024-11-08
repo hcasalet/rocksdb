@@ -12,97 +12,22 @@ struct FbRow;
 
 struct FbRow FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_FIELD0 = 4,
-    VT_FIELD1 = 6,
-    VT_FIELD2 = 8,
-    VT_FIELD3 = 10,
-    VT_FIELD4 = 12,
-    VT_FIELD5 = 14,
-    VT_FIELD6 = 16,
-    VT_FIELD7 = 18,
-    VT_FIELD8 = 20,
-    VT_FIELD9 = 22,
-    VT_FIELD10 = 24,
-    VT_FIELD11 = 26,
-    VT_FIELD12 = 28,
-    VT_FIELD13 = 30,
-    VT_FIELD14 = 32,
-    VT_FIELD15 = 34
+    VT_NUMCOLS = 4,
+    VT_STRCOLS = 6
   };
-  uint32_t field0() const {
-    return GetField<uint32_t>(VT_FIELD0, 0);
+  const flatbuffers::Vector<int32_t> *numcols() const {
+    return GetPointer<const flatbuffers::Vector<int32_t> *>(VT_NUMCOLS);
   }
-  uint32_t field1() const {
-    return GetField<uint32_t>(VT_FIELD1, 0);
-  }
-  uint32_t field2() const {
-    return GetField<uint32_t>(VT_FIELD2, 0);
-  }
-  uint32_t field3() const {
-    return GetField<uint32_t>(VT_FIELD3, 0);
-  }
-  uint32_t field4() const {
-    return GetField<uint32_t>(VT_FIELD4, 0);
-  }
-  uint32_t field5() const {
-    return GetField<uint32_t>(VT_FIELD5, 0);
-  }
-  uint32_t field6() const {
-    return GetField<uint32_t>(VT_FIELD6, 0);
-  }
-  uint32_t field7() const {
-    return GetField<uint32_t>(VT_FIELD7, 0);
-  }
-  const flatbuffers::String *field8() const {
-    return GetPointer<const flatbuffers::String *>(VT_FIELD8);
-  }
-  const flatbuffers::String *field9() const {
-    return GetPointer<const flatbuffers::String *>(VT_FIELD9);
-  }
-  const flatbuffers::String *field10() const {
-    return GetPointer<const flatbuffers::String *>(VT_FIELD10);
-  }
-  const flatbuffers::String *field11() const {
-    return GetPointer<const flatbuffers::String *>(VT_FIELD11);
-  }
-  const flatbuffers::String *field12() const {
-    return GetPointer<const flatbuffers::String *>(VT_FIELD12);
-  }
-  const flatbuffers::String *field13() const {
-    return GetPointer<const flatbuffers::String *>(VT_FIELD13);
-  }
-  const flatbuffers::String *field14() const {
-    return GetPointer<const flatbuffers::String *>(VT_FIELD14);
-  }
-  const flatbuffers::String *field15() const {
-    return GetPointer<const flatbuffers::String *>(VT_FIELD15);
+  const flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>> *strcols() const {
+    return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>> *>(VT_STRCOLS);
   }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<uint32_t>(verifier, VT_FIELD0) &&
-           VerifyField<uint32_t>(verifier, VT_FIELD1) &&
-           VerifyField<uint32_t>(verifier, VT_FIELD2) &&
-           VerifyField<uint32_t>(verifier, VT_FIELD3) &&
-           VerifyField<uint32_t>(verifier, VT_FIELD4) &&
-           VerifyField<uint32_t>(verifier, VT_FIELD5) &&
-           VerifyField<uint32_t>(verifier, VT_FIELD6) &&
-           VerifyField<uint32_t>(verifier, VT_FIELD7) &&
-           VerifyOffset(verifier, VT_FIELD8) &&
-           verifier.VerifyString(field8()) &&
-           VerifyOffset(verifier, VT_FIELD9) &&
-           verifier.VerifyString(field9()) &&
-           VerifyOffset(verifier, VT_FIELD10) &&
-           verifier.VerifyString(field10()) &&
-           VerifyOffset(verifier, VT_FIELD11) &&
-           verifier.VerifyString(field11()) &&
-           VerifyOffset(verifier, VT_FIELD12) &&
-           verifier.VerifyString(field12()) &&
-           VerifyOffset(verifier, VT_FIELD13) &&
-           verifier.VerifyString(field13()) &&
-           VerifyOffset(verifier, VT_FIELD14) &&
-           verifier.VerifyString(field14()) &&
-           VerifyOffset(verifier, VT_FIELD15) &&
-           verifier.VerifyString(field15()) &&
+           VerifyOffset(verifier, VT_NUMCOLS) &&
+           verifier.VerifyVector(numcols()) &&
+           VerifyOffset(verifier, VT_STRCOLS) &&
+           verifier.VerifyVector(strcols()) &&
+           verifier.VerifyVectorOfStrings(strcols()) &&
            verifier.EndTable();
   }
 };
@@ -110,53 +35,11 @@ struct FbRow FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
 struct FbRowBuilder {
   flatbuffers::FlatBufferBuilder &fbb_;
   flatbuffers::uoffset_t start_;
-  void add_field0(uint32_t field0) {
-    fbb_.AddElement<uint32_t>(FbRow::VT_FIELD0, field0, 0);
+  void add_numcols(flatbuffers::Offset<flatbuffers::Vector<int32_t>> numcols) {
+    fbb_.AddOffset(FbRow::VT_NUMCOLS, numcols);
   }
-  void add_field1(uint32_t field1) {
-    fbb_.AddElement<uint32_t>(FbRow::VT_FIELD1, field1, 0);
-  }
-  void add_field2(uint32_t field2) {
-    fbb_.AddElement<uint32_t>(FbRow::VT_FIELD2, field2, 0);
-  }
-  void add_field3(uint32_t field3) {
-    fbb_.AddElement<uint32_t>(FbRow::VT_FIELD3, field3, 0);
-  }
-  void add_field4(uint32_t field4) {
-    fbb_.AddElement<uint32_t>(FbRow::VT_FIELD4, field4, 0);
-  }
-  void add_field5(uint32_t field5) {
-    fbb_.AddElement<uint32_t>(FbRow::VT_FIELD5, field5, 0);
-  }
-  void add_field6(uint32_t field6) {
-    fbb_.AddElement<uint32_t>(FbRow::VT_FIELD6, field6, 0);
-  }
-  void add_field7(uint32_t field7) {
-    fbb_.AddElement<uint32_t>(FbRow::VT_FIELD7, field7, 0);
-  }
-  void add_field8(flatbuffers::Offset<flatbuffers::String> field8) {
-    fbb_.AddOffset(FbRow::VT_FIELD8, field8);
-  }
-  void add_field9(flatbuffers::Offset<flatbuffers::String> field9) {
-    fbb_.AddOffset(FbRow::VT_FIELD9, field9);
-  }
-  void add_field10(flatbuffers::Offset<flatbuffers::String> field10) {
-    fbb_.AddOffset(FbRow::VT_FIELD10, field10);
-  }
-  void add_field11(flatbuffers::Offset<flatbuffers::String> field11) {
-    fbb_.AddOffset(FbRow::VT_FIELD11, field11);
-  }
-  void add_field12(flatbuffers::Offset<flatbuffers::String> field12) {
-    fbb_.AddOffset(FbRow::VT_FIELD12, field12);
-  }
-  void add_field13(flatbuffers::Offset<flatbuffers::String> field13) {
-    fbb_.AddOffset(FbRow::VT_FIELD13, field13);
-  }
-  void add_field14(flatbuffers::Offset<flatbuffers::String> field14) {
-    fbb_.AddOffset(FbRow::VT_FIELD14, field14);
-  }
-  void add_field15(flatbuffers::Offset<flatbuffers::String> field15) {
-    fbb_.AddOffset(FbRow::VT_FIELD15, field15);
+  void add_strcols(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> strcols) {
+    fbb_.AddOffset(FbRow::VT_STRCOLS, strcols);
   }
   explicit FbRowBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -172,86 +55,24 @@ struct FbRowBuilder {
 
 inline flatbuffers::Offset<FbRow> CreateFbRow(
     flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t field0 = 0,
-    uint32_t field1 = 0,
-    uint32_t field2 = 0,
-    uint32_t field3 = 0,
-    uint32_t field4 = 0,
-    uint32_t field5 = 0,
-    uint32_t field6 = 0,
-    uint32_t field7 = 0,
-    flatbuffers::Offset<flatbuffers::String> field8 = 0,
-    flatbuffers::Offset<flatbuffers::String> field9 = 0,
-    flatbuffers::Offset<flatbuffers::String> field10 = 0,
-    flatbuffers::Offset<flatbuffers::String> field11 = 0,
-    flatbuffers::Offset<flatbuffers::String> field12 = 0,
-    flatbuffers::Offset<flatbuffers::String> field13 = 0,
-    flatbuffers::Offset<flatbuffers::String> field14 = 0,
-    flatbuffers::Offset<flatbuffers::String> field15 = 0) {
+    flatbuffers::Offset<flatbuffers::Vector<int32_t>> numcols = 0,
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> strcols = 0) {
   FbRowBuilder builder_(_fbb);
-  builder_.add_field15(field15);
-  builder_.add_field14(field14);
-  builder_.add_field13(field13);
-  builder_.add_field12(field12);
-  builder_.add_field11(field11);
-  builder_.add_field10(field10);
-  builder_.add_field9(field9);
-  builder_.add_field8(field8);
-  builder_.add_field7(field7);
-  builder_.add_field6(field6);
-  builder_.add_field5(field5);
-  builder_.add_field4(field4);
-  builder_.add_field3(field3);
-  builder_.add_field2(field2);
-  builder_.add_field1(field1);
-  builder_.add_field0(field0);
+  builder_.add_strcols(strcols);
+  builder_.add_numcols(numcols);
   return builder_.Finish();
 }
 
 inline flatbuffers::Offset<FbRow> CreateFbRowDirect(
     flatbuffers::FlatBufferBuilder &_fbb,
-    uint32_t field0 = 0,
-    uint32_t field1 = 0,
-    uint32_t field2 = 0,
-    uint32_t field3 = 0,
-    uint32_t field4 = 0,
-    uint32_t field5 = 0,
-    uint32_t field6 = 0,
-    uint32_t field7 = 0,
-    const char *field8 = nullptr,
-    const char *field9 = nullptr,
-    const char *field10 = nullptr,
-    const char *field11 = nullptr,
-    const char *field12 = nullptr,
-    const char *field13 = nullptr,
-    const char *field14 = nullptr,
-    const char *field15 = nullptr) {
-  auto field8__ = field8 ? _fbb.CreateString(field8) : 0;
-  auto field9__ = field9 ? _fbb.CreateString(field9) : 0;
-  auto field10__ = field10 ? _fbb.CreateString(field10) : 0;
-  auto field11__ = field11 ? _fbb.CreateString(field11) : 0;
-  auto field12__ = field12 ? _fbb.CreateString(field12) : 0;
-  auto field13__ = field13 ? _fbb.CreateString(field13) : 0;
-  auto field14__ = field14 ? _fbb.CreateString(field14) : 0;
-  auto field15__ = field15 ? _fbb.CreateString(field15) : 0;
+    const std::vector<int32_t> *numcols = nullptr,
+    const std::vector<flatbuffers::Offset<flatbuffers::String>> *strcols = nullptr) {
+  auto numcols__ = numcols ? _fbb.CreateVector<int32_t>(*numcols) : 0;
+  auto strcols__ = strcols ? _fbb.CreateVector<flatbuffers::Offset<flatbuffers::String>>(*strcols) : 0;
   return rocksdb::CreateFbRow(
       _fbb,
-      field0,
-      field1,
-      field2,
-      field3,
-      field4,
-      field5,
-      field6,
-      field7,
-      field8__,
-      field9__,
-      field10__,
-      field11__,
-      field12__,
-      field13__,
-      field14__,
-      field15__);
+      numcols__,
+      strcols__);
 }
 
 inline const rocksdb::FbRow *GetFbRow(const void *buf) {

@@ -21,8 +21,10 @@ namespace ROCKSDB_NAMESPACE {
     public:
       InputOutputDataType in_type;
       InputOutputDataType out_type;
-      ConverterData(InputOutputDataType intype, InputOutputDataType outtype) :
-        in_type(intype), out_type(outtype) {}
+      int column_data_type;
+      ConverterData(InputOutputDataType intype, InputOutputDataType outtype,
+                    int columndatatype) :
+        in_type(intype), out_type(outtype), column_data_type(columndatatype) {}
   };
 
   class Converter : public Transformer {

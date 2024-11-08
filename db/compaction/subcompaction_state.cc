@@ -102,7 +102,8 @@ Status SubcompactionState::AddToOutput(
     std::vector<Transformer*> transformers,
     TransformerType transformer_type,
     InputOutputDataType inputDataType,
-    InputOutputDataType outputDataType) {
+    InputOutputDataType outputDataType,
+    int columnDataType) {
   // update target output first
   is_current_penultimate_level_ = iter.output_to_penultimate_level();
   current_outputs_ = is_current_penultimate_level_ ? &penultimate_level_outputs_
@@ -112,7 +113,7 @@ Status SubcompactionState::AddToOutput(
   }
 
   return Current().AddToOutput(iter, open_file_func, close_file_func, transformers,
-                               transformer_type, inputDataType, outputDataType);
+                   transformer_type, inputDataType, outputDataType, columnDataType);
 }
 
 Status SubcompactionState::AddDerivedOutput(
