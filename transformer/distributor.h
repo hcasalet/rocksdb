@@ -8,9 +8,10 @@ namespace ROCKSDB_NAMESPACE {
 class DistributorData : public TransformerData {
   public:
     int splits;
+    bool keepOriginal;
     InputOutputDataType vtype;
-    DistributorData(int num_splits, InputOutputDataType v_type) : 
-      splits(num_splits), vtype(v_type) {}
+    DistributorData(int num_splits, bool keep_original, InputOutputDataType v_type) : 
+      splits(num_splits), keepOriginal(keep_original), vtype(v_type) {}
 };
 
 class Distributor : public Transformer {

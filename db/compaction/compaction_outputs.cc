@@ -447,7 +447,38 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::DISTRIBUTOR): {
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, inputDataType); 
+                  std::make_shared<DistributorData>(output_cfds_size, false, inputDataType); 
+        transformers[0]->Transform(value.ToString(), &output_values, splittingData);
+      } else {
+        output_values.push_back(value.ToString());
+      }
+  
+      for (size_t i = 0; i < output_values.size(); i++) {
+        s = current_output(i).validator.Add(key, Slice(output_values[i]));
+        if (!s.ok()) {
+          return s;
+        }
+        builders_[i]->Add(key, Slice(output_values[i]));
+    
+        stats_.num_output_records++;
+        current_output_file_size_ = builders_[i]->EstimatedFileSize();
+  
+        if (blob_garbage_meter_) {
+          s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_values[i]));
+        }
+        if (!s.ok()) {
+          return s;
+        }
+
+        s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
+                                                    ikey.type);
+      }
+      break;
+    }
+    case to_underlying(TransformerType::DISTRIBUTORWRITEBOTH): {
+      if (output_cfds_size > 0) {
+        std::shared_ptr<TransformerData> splittingData = 
+                  std::make_shared<DistributorData>(output_cfds_size, true, inputDataType); 
         transformers[0]->Transform(value.ToString(), &output_values, splittingData);
       } else {
         output_values.push_back(value.ToString());
@@ -478,7 +509,7 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, inputDataType);
+                  std::make_shared<DistributorData>(output_cfds_size, false, inputDataType);
         transformers[0]->Transform(value.ToString(), &output_values, splittingData);
 
         std::shared_ptr<TransformerData> convertingData =

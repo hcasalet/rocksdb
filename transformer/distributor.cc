@@ -9,6 +9,10 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
                 const std::shared_ptr<TransformerData>& data)
 {
     auto distributorData = std::dynamic_pointer_cast<DistributorData>(data);
+    if (distributorData->keepOriginal) {
+        outputs->push_back(input);
+    }
+
     int splits = distributorData->splits;
     InputOutputDataType vtype = distributorData->vtype;
 

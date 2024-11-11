@@ -39,10 +39,11 @@ namespace ROCKSDB_NAMESPACE {
 */
 
 enum class TransformerType {
-  NOTRANSFORMATION = 0,
-  DISTRIBUTOR      = 1 << 0,     // 1
-  CONVERTER        = 1 << 1,     // 2
-  AUGMENTER        = 1 << 2      // 4
+  NOTRANSFORMATION     = 0,
+  DISTRIBUTOR          = 1 << 0,       // 1
+  CONVERTER            = 1 << 1,       // 2
+  AUGMENTER            = 1 << 2,       // 4
+  DISTRIBUTORWRITEBOTH = 1 << 5        // 32
 };
 
 enum class InputOutputDataType {

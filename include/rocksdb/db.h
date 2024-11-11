@@ -399,7 +399,8 @@ class DB {
   // Add destination cfs for data transformation cases
   virtual Status AddTransformingDestinationCfds(const std::string& cf_name,
                                               bool cracked, bool converted,
-                                              bool derived);
+                                              bool derived, bool writeboth,
+                                              int splits);
   
   // Display the transforming destination cfds for debugging purpose
   virtual Status DisplayTransformingDestinationCfds();

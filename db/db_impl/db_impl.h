@@ -327,7 +327,8 @@ class DBImpl : public DB {
 
   virtual Status AddTransformingDestinationCfds(const std::string& cf_name,
                                               bool cracked, bool converted,
-                                              bool derived) override;
+                                              bool derived, bool writeboth,
+                                              int splits) override;
   
   virtual Status DisplayTransformingDestinationCfds() override;
 
@@ -1814,7 +1815,8 @@ class DBImpl : public DB {
 
   Status AddTransformingDestinationCfdsImpl(const std::string& cf_name,
                                         bool cracked, bool converted,
-                                        bool derived);
+                                        bool derived, bool writeboth,
+                                        int splits);
   
   //Status DisplayTransformingDestinationCfdsImpl();
 
