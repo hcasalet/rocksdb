@@ -103,7 +103,8 @@ Status SubcompactionState::AddToOutput(
     TransformerType transformer_type,
     InputOutputDataType inputDataType,
     InputOutputDataType outputDataType,
-    int columnDataType) {
+    int columnDataType,
+    uint64_t compactionJobId) {
   // update target output first
   is_current_penultimate_level_ = iter.output_to_penultimate_level();
   current_outputs_ = is_current_penultimate_level_ ? &penultimate_level_outputs_
@@ -113,7 +114,8 @@ Status SubcompactionState::AddToOutput(
   }
 
   return Current().AddToOutput(iter, open_file_func, close_file_func, transformers,
-                   transformer_type, inputDataType, outputDataType, columnDataType);
+                   transformer_type, inputDataType, outputDataType, columnDataType,
+                   compactionJobId);
 }
 
 Status SubcompactionState::AddDerivedOutput(

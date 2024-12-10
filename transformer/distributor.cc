@@ -6,7 +6,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 void Distributor::Transform(std::string input, std::vector<std::string>* outputs, 
-                const std::shared_ptr<TransformerData>& data)
+                const std::shared_ptr<TransformerData>& data, uint64_t job_id)
 {
     auto distributorData = std::dynamic_pointer_cast<DistributorData>(data);
     if (distributorData->keepOriginal) {
@@ -84,17 +84,17 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
     }
 }
 
-void Distributor::Prepare() {
+void Distributor::Prepare(uint64_t job_id) {
     for (auto store : stores_) {
         store.clear();
     }
 }
 
-void Distributor::Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) {
+void Distributor::Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) {
     return;
 }
 
-size_t Distributor::GetStoreSize() {
+size_t Distributor::GetStoreSize(uint64_t job_id) {
     return stores_.size();
 }
 

@@ -74,10 +74,11 @@ class Transformer {
   // non-virtual interface
   virtual void Transform(std::string input,
                          std::vector<std::string>* outputs,
-                         const std::shared_ptr<TransformerData>& data) = 0;
-  virtual void Prepare() = 0;
-  virtual void Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) = 0;
-  virtual size_t GetStoreSize() = 0;
+                         const std::shared_ptr<TransformerData>& data,
+                         uint64_t job_id) = 0;
+  virtual void Prepare(uint64_t job_id) = 0;
+  virtual void Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) = 0;
+  virtual size_t GetStoreSize(uint64_t job_id) = 0;
 };
 
 // Create a new Transformer that can be shared among multiple RocksDB instances

@@ -6,7 +6,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Converter::Transform(std::string input, std::vector<std::string>* outputs, const std::shared_ptr<TransformerData>& data)
+void Converter::Transform(std::string input,
+                          std::vector<std::string>* outputs,
+                          const std::shared_ptr<TransformerData>& data,
+                          uint64_t job_id)
 {
     auto converterData = std::dynamic_pointer_cast<ConverterData>(data);
 
@@ -70,17 +73,17 @@ void Converter::Transform(std::string input, std::vector<std::string>* outputs, 
     return;
 }
 
-void Converter::Prepare() {
+void Converter::Prepare(uint64_t job_id) {
     for (auto store : stores_) {
         store.clear();
     }
 }
 
-void Converter::Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) {
+void Converter::Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) {
     return;
 }
 
-size_t Converter::GetStoreSize() {
+size_t Converter::GetStoreSize(uint64_t job_id) {
     return stores_.size();
 }
 

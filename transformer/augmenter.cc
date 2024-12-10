@@ -5,53 +5,65 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Augmenter::Transform(std::string input, std::vector<std::string>* outputs, const std::shared_ptr<TransformerData>& data) {
+void Augmenter::Transform(std::string input,
+                          std::vector<std::string>* outputs,
+                          const std::shared_ptr<TransformerData>& data,
+                          uint64_t job_id) {
     auto augmenterData = std::dynamic_pointer_cast<AugmenterData>(data);
-    //nlohmann::json parsedJson = nlohmann::json::parse(input);
+    if (!augmenterData) {
+        throw std::runtime_error("Invalid TransformerData: Failed to cast to AugmenterData.");
+    }
     data::Row row;
-    row.ParseFromString(input);
-    store_[row.columns(0)].push_back(augmenterData->row_key);
-
-    //for (size_t i = 0; i < derivers_.size(); i++) {
-    /*std::vector<std::string> inputs;
-    for (auto pos : derivers_[i]->positions) {
-        assert(pos < row.columns_size());
-        //assert(pos < int(parsedJson.size()));
-        inputs.push_back(row.columns(pos).value());
-        //nputs.push_back(std::to_string(parsedJson["field"+std::to_string(pos)].get<int>()));
+    if (!row.ParseFromString(input)) {
+        throw std::runtime_error("Failed to parse row from input string.");
     }
+    if (row.columns_size() <= 0 || row.columns(0).empty()) {
+        throw std::runtime_error("Invalid or empty column in row.");
+    }
+    // Lock the mutex before accessing store_
+    {
+        std::lock_guard<std::mutex> lock(stores_mutex_);
+        auto& store = stores_[job_id];
+        store[row.columns(0)].push_back(augmenterData->row_key);
+    }
+}
 
-    std::string derived = derivers_[i]->derive(inputs);
-
-    if (derivers_[i]->is_index) {
-        stores_[i][derived].push_back(augmenterData->row_key);
+void Augmenter::Prepare(uint64_t job_id) {
+    std::lock_guard<std::mutex> lock(stores_mutex_);
+    if (stores_.find(job_id) == stores_.end()) {
+        stores_[job_id] = std::map<std::string, std::vector<std::string>>();
     } else {
-        stores_[i][augmenterData->row_key].push_back(derived);
-    }*/
-    //}
-}
-
-void Augmenter::Prepare() {
-    //for (auto store : stores_) {
-    store_.clear();
-    //}
-}
-
-void Augmenter::Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) {
-    //assert(size_t(position) < stores_.size());
-
-    for (auto kv : store_) {
-        std::ostringstream oss;
-        for (size_t i = 0; i < kv.second.size(); ++i) {
-            if (i > 0) oss << ",";  // Add comma before each element except the first
-            oss << kv.second[i];
-        }
-        output.emplace_back(kv.first, oss.str());
+        stores_[job_id].clear();
     }
 }
 
-size_t Augmenter::GetStoreSize() {
-    return store_.size();
+void Augmenter::Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) {
+    std::lock_guard<std::mutex> lock(stores_mutex_);
+    auto it = stores_.find(job_id);
+    if (it != stores_.end()) {
+        const auto& store = it->second;
+        for (const auto& entry : store) {
+            std::ostringstream oss;
+            for (size_t i = 0; i < entry.second.size(); ++i) {
+                if (i > 0) oss << ",";  // Add comma before each element except the first
+                oss << entry.second[i];
+            }
+            output.emplace_back(entry.first, oss.str());
+        }
+    } else {
+        throw std::runtime_error("No store found for job_id " + std::to_string(job_id));
+    }
+    stores_.erase(it);
+}
+
+size_t Augmenter::GetStoreSize(uint64_t job_id) {
+    std::lock_guard<std::mutex> lock(stores_mutex_);
+    auto it = stores_.find(job_id);
+    if (it != stores_.end()) {
+        return it->second.size();
+    } else {
+        return 0;
+    }
 }
 
 }

@@ -34,10 +34,11 @@ namespace ROCKSDB_NAMESPACE {
 
       void Transform(std::string input,
                      std::vector<std::string>* outputs,
-                     const std::shared_ptr<TransformerData>& data) override;
-      void Prepare() override;
-      void Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) override;
-      size_t GetStoreSize() override;
+                     const std::shared_ptr<TransformerData>& data,
+                     uint64_t job_id) override;
+      void Prepare(uint64_t job_id) override;
+      void Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) override;
+      size_t GetStoreSize(uint64_t job_id) override;
 
     private:
       std::vector<std::map<std::string, std::vector<std::string>>> stores_;

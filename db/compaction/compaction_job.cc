@@ -1061,6 +1061,7 @@ void CompactionJob::NotifyOnSubcompactionCompleted(
 void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   assert(sub_compact);
   assert(sub_compact->compaction);
+  uint64_t compactionJobId = GetCompactionId(sub_compact);
   if (db_options_.compaction_service) {
     CompactionServiceJobStatus comp_status =
         ProcessKeyValueCompactionWithCompactionService(sub_compact);
@@ -1320,7 +1321,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   // let's clear the AugmenterStore for Augmenter Transformation
   if (transformers_.size() > 0 && 
       (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER))) {
-    transformers_[transformers_.size()-1]->Prepare();
+    transformers_[transformers_.size()-1]->Prepare(compactionJobId);
   }
 
   while (exec_status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
@@ -1343,7 +1344,8 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     // into `CompactionOutputs` which has the output file information.
     exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, transformers_,
                               cfd->ioptions()->transformer_type, cfd->ioptions()->input_data_type,
-                              cfd->ioptions()->output_data_type, cfd->ioptions()->column_data_type);
+                              cfd->ioptions()->output_data_type, cfd->ioptions()->column_data_type,
+                              compactionJobId);
     if (!exec_status.ok()) {
       break;
     }
@@ -1364,19 +1366,11 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER)) &&
       cfd->GetName().find("_index") == std::string::npos) {
     std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs;
-    //for (auto transformer : transformers_) {
-      //if (dynamic_cast<Augmenter*>(transformer)) {
-        //size_t num_stores = transformer->GetStoreSize();
-        //for (size_t i = 0; i < num_stores; i++) {
-          std::vector<std::pair<std::string, std::string>> derived_output;
-          transformers_[0]->Retrieve(0, derived_output);
-          derived_outputs.push_back(derived_output);
-        //}
+    std::vector<std::pair<std::string, std::string>> derived_output;
+    transformers_[0]->Retrieve(compactionJobId, derived_output);
+    derived_outputs.push_back(derived_output);
 
-        exec_status = sub_compact->AddDerivedOutput(derived_outputs, open_file_func, close_file_func);
-        //break;
-      //}
-    //}
+    exec_status = sub_compact->AddDerivedOutput(derived_outputs, open_file_func, close_file_func);
   }
 
   sub_compact->compaction_job_stats.num_blobs_read =

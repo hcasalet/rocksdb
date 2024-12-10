@@ -1,4 +1,5 @@
 #include <memory>
+#include <mutex>
 #include <functional>
 #include "rocksdb/transformer.h"
 
@@ -36,14 +37,16 @@ class Augmenter : public Transformer
 
     void Transform(std::string input,
                    std::vector<std::string>* outputs,
-                   const std::shared_ptr<TransformerData>& data) override;
-    void Prepare() override;
-    void Retrieve(int position, std::vector<std::pair<std::string, std::string>>& output) override;
-    size_t GetStoreSize() override;
+                   const std::shared_ptr<TransformerData>& data,
+                   uint64_t job_id) override;
+    void Prepare(uint64_t job_id) override;
+    void Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) override;
+    size_t GetStoreSize(uint64_t job_id) override;
 
   private:
     std::vector<DeriveFuncData*> derivers_;
-    std::map<std::string, std::vector<std::string>> store_;
+    std::unordered_map<int, std::map<std::string, std::vector<std::string>>> stores_;
+    std::mutex stores_mutex_; // Mutex to protect access to store_
 };
 
 }
