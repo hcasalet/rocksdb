@@ -380,6 +380,80 @@ struct LevelFilesBrief {
 // to the MANIFEST file.
 class VersionEdit {
  public:
+  // Default constructor
+  VersionEdit() = default;
+
+  // Copy constructor
+  VersionEdit(const VersionEdit& other)
+      : max_level_(other.max_level_),
+        db_id_(other.db_id_),
+        comparator_(other.comparator_),
+        log_number_(other.log_number_),
+        prev_log_number_(other.prev_log_number_),
+        next_file_number_(other.next_file_number_),
+        max_column_family_(other.max_column_family_),
+        min_log_number_to_keep_(other.min_log_number_to_keep_),
+        last_sequence_(other.last_sequence_),
+        has_db_id_(other.has_db_id_),
+        has_comparator_(other.has_comparator_),
+        has_log_number_(other.has_log_number_),
+        has_prev_log_number_(other.has_prev_log_number_),
+        has_next_file_number_(other.has_next_file_number_),
+        has_max_column_family_(other.has_max_column_family_),
+        has_min_log_number_to_keep_(other.has_min_log_number_to_keep_),
+        has_last_sequence_(other.has_last_sequence_),
+        compact_cursors_(other.compact_cursors_),
+        deleted_files_(other.deleted_files_),
+        new_files_(other.new_files_),
+        blob_file_additions_(other.blob_file_additions_),
+        blob_file_garbages_(other.blob_file_garbages_),
+        wal_additions_(other.wal_additions_),
+        wal_deletion_(other.wal_deletion_),
+        column_family_(other.column_family_),
+        is_column_family_drop_(other.is_column_family_drop_),
+        is_column_family_add_(other.is_column_family_add_),
+        column_family_name_(other.column_family_name_),
+        is_in_atomic_group_(other.is_in_atomic_group_),
+        remaining_entries_(other.remaining_entries_),
+        full_history_ts_low_(other.full_history_ts_low_) {}
+
+  VersionEdit& operator=(const VersionEdit& other) {
+        if (this != &other) {
+            max_level_ = other.max_level_;
+            db_id_ = other.db_id_;
+            comparator_ = other.comparator_;
+            log_number_ = other.log_number_;
+            prev_log_number_ = other.prev_log_number_;
+            next_file_number_ = other.next_file_number_;
+            max_column_family_ = other.max_column_family_;
+            min_log_number_to_keep_ = other.min_log_number_to_keep_;
+            last_sequence_ = other.last_sequence_;
+            has_db_id_ = other.has_db_id_;
+            has_comparator_ = other.has_comparator_;
+            has_log_number_ = other.has_log_number_;
+            has_prev_log_number_ = other.has_prev_log_number_;
+            has_next_file_number_ = other.has_next_file_number_;
+            has_max_column_family_ = other.has_max_column_family_;
+            has_min_log_number_to_keep_ = other.has_min_log_number_to_keep_;
+            has_last_sequence_ = other.has_last_sequence_;
+            compact_cursors_ = other.compact_cursors_;
+            deleted_files_ = other.deleted_files_;
+            new_files_ = other.new_files_;
+            blob_file_additions_ = other.blob_file_additions_;
+            blob_file_garbages_ = other.blob_file_garbages_;
+            wal_additions_ = other.wal_additions_;
+            wal_deletion_ = other.wal_deletion_;
+            column_family_ = other.column_family_;
+            is_column_family_drop_ = other.is_column_family_drop_;
+            is_column_family_add_ = other.is_column_family_add_;
+            column_family_name_ = other.column_family_name_;
+            is_in_atomic_group_ = other.is_in_atomic_group_;
+            remaining_entries_ = other.remaining_entries_;
+            full_history_ts_low_ = other.full_history_ts_low_;
+        }
+        return *this;
+    }
+
   void Clear();
 
   void SetDBId(const std::string& db_id) {

@@ -1735,15 +1735,14 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
   VersionEdit* const edit = compaction->edit();
   assert(edit);
   
-  std::vector<VersionEdit*> edit_outs;
+  std::vector<std::shared_ptr<VersionEdit>> edit_outs;
   for (size_t i = 0; i < transforming_cfds.size(); i++) {
     if (transforming_cfds[i]->GetName() != compacting_cfd->GetName()) {
-      VersionEdit* edit_out = new VersionEdit();
-      assert(edit_out);
+      auto edit_out = std::make_shared<VersionEdit>();
       edit_out->SetColumnFamily(transforming_cfds[i]->GetID());
-      edit_outs.push_back(edit_out);
+      edit_outs.push_back(std::move(edit_out));
     } else {
-      edit_outs.push_back(edit);
+      edit_outs.push_back(std::make_shared<VersionEdit>(*edit));
     }
   }
   
@@ -1824,7 +1823,7 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
     for (size_t i = 0; i < transforming_cfds.size(); i++) {
       if (transforming_cfds[i]->GetName() != compacting_cfd->GetName()) {
         log_and_apply_status = versions_->LogAndApply(transforming_cfds[i],
-                                mutable_cf_options, read_options, edit_outs[i],
+                                mutable_cf_options, read_options, edit_outs[i].get(),
                                 db_mutex_, db_directory_);
         if (!log_and_apply_status.ok()) {
           return log_and_apply_status;
@@ -1835,15 +1834,6 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
      log_and_apply_status = versions_->LogAndApply(compaction->column_family_data(),
                                   mutable_cf_options, read_options, edit,
                                   db_mutex_, db_directory_);
-    /*if (compacting_cfd->ioptions()->transformer_type == TransformerType::AUGMENTER) {
-      std::vector<ColumnFamilyData*> derived_cfds;
-      GetDerivedCfds(derived_cfds, compaction->output_level());
-      for (size_t i = 0; i < derived_cfds.size(); i++) {
-        log_and_apply_status = versions_->LogAndApply(derived_cfds[i],
-                                mutable_cf_options, read_options, edit_outs[i],
-                                db_mutex_, db_directory_);
-      }
-    }*/
   }
   return log_and_apply_status;
 }
