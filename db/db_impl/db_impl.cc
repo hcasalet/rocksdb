@@ -3348,7 +3348,15 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
         root_cfd->AddDestinationCfd(index_cf);
       }
     }
-  } 
+  }
+
+  if (!cracked && !converted && !derived && !writeboth) {
+    std::string check_noop_name = cf_name + "_sys_cf_";
+    ColumnFamilyData* check_noop = all_cfds->GetColumnFamily(check_noop_name);
+    if (check_noop != nullptr) {
+      root_cfd->AddDestinationCfd(check_noop);
+    }
+  }
 
   destination_cfds_computed_ = true;
   return Status::OK();
