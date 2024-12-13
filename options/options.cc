@@ -198,7 +198,7 @@ void ColumnFamilyOptions::Dump(Logger* log) const {
     ROCKS_LOG_HEADER(log, "            Options.compacting_column_family_num_levels: %d", compacting_column_family_num_levels);
     ROCKS_LOG_HEADER(log, "            Options.compacting_level_within_column_family_group: %d", compacting_level_within_column_family_group);
     ROCKS_LOG_HEADER(log, "            Options.num_columns: %d", num_columns);
-    ROCKS_LOG_HEADER(log, "            Options.column_data_type: %d", column_data_type);
+    ROCKS_LOG_HEADER(log, "            Options.column_data_type: %s", column_data_type.c_str());
     ROCKS_LOG_HEADER(log, "            Options.transform_type: %d", static_cast<int>(transformer_type));
     ROCKS_LOG_HEADER(log, "            Options.input_data_type: %d", static_cast<int>(input_data_type));
     ROCKS_LOG_HEADER(log, "            Options.output_data_type: %d", static_cast<int>(output_data_type));

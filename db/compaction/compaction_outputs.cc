@@ -368,7 +368,7 @@ Status CompactionOutputs::AddToOutput(
     TransformerType transformer_type, 
     InputOutputDataType inputDataType,
     InputOutputDataType outputDataType,
-    int columnDataType,
+    std::string columnDataType,
     uint64_t compactionJobId) {
   Status s;
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();

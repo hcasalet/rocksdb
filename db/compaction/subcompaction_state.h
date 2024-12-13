@@ -218,7 +218,7 @@ class SubcompactionState {
                      TransformerType transformer_type,
                      InputOutputDataType inputDataType,
                      InputOutputDataType outputDataType,
-                     int columnDataType,
+                     std::string columnDataType,
                      uint64_t compactionJobId);
 
   // Add derived output

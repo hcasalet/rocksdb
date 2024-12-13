@@ -21,9 +21,9 @@ namespace ROCKSDB_NAMESPACE {
     public:
       InputOutputDataType in_type;
       InputOutputDataType out_type;
-      int column_data_type;
+      std::string column_data_type;
       ConverterData(InputOutputDataType intype, InputOutputDataType outtype,
-                    int columndatatype) :
+                    std::string columndatatype) :
         in_type(intype), out_type(outtype), column_data_type(columndatatype) {}
   };
 

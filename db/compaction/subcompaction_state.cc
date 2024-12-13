@@ -103,7 +103,7 @@ Status SubcompactionState::AddToOutput(
     TransformerType transformer_type,
     InputOutputDataType inputDataType,
     InputOutputDataType outputDataType,
-    int columnDataType,
+    std::string columnDataType,
     uint64_t compactionJobId) {
   // update target output first
   is_current_penultimate_level_ = iter.output_to_penultimate_level();

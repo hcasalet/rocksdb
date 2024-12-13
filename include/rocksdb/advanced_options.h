@@ -571,7 +571,7 @@ struct AdvancedColumnFamilyOptions {
   int num_columns = 1;
 
   // Column data type is by default valued 0 (mixed)
-  int column_data_type = 0;
+  std::string column_data_type = "mixed";
 
   // Transformer type
   TransformerType transformer_type = TransformerType::NOTRANSFORMATION;

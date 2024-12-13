@@ -628,7 +628,7 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {offsetof(struct ImmutableCFOptions, num_columns), OptionType::kInt,
           OptionVerificationType::kNormal, OptionTypeFlags::kNone}},
         {"column_data_type",
-         {offsetof(struct ImmutableCFOptions, column_data_type), OptionType::kInt,
+         {offsetof(struct ImmutableCFOptions, column_data_type), OptionType::kString,
           OptionVerificationType::kNormal, OptionTypeFlags::kNone}},  
         {"transformer_type",
          {offsetof(struct ImmutableCFOptions, transformer_type), OptionType::kInt,

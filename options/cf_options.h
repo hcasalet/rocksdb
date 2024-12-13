@@ -70,7 +70,7 @@ struct ImmutableCFOptions {
 
   int num_columns;
 
-  int column_data_type; // 0 - default; 1 - numeric only; 2 - strings only
+  std::string column_data_type; // mixed - default;  numeric, string
 
   TransformerType transformer_type;
 

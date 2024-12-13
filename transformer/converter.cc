@@ -25,31 +25,42 @@ void Converter::Transform(std::string input,
         case InputOutputDataType::PROTOBUF: {
             data::Row row;
             row.ParseFromString(input);
-
-            for (int i = 0; i < row.columns_size(); i++) {
-                const std::string& column = row.columns(i); // Avoid repeated lookups
-
-                if (column.empty()) { // Handle empty strings explicitly
-                    strvals.push_back(builder.CreateString(column));
-                    continue;
+            if (converterData->column_data_type == "numeric") {
+                for (int i = 0; i < row.columns_size(); i++) {
+                    numvals.push_back(std::stoi(row.columns(i)));
+                } 
+            } else if (converterData->column_data_type == "string") {
+                for (int i = 0; i < row.columns_size(); i++) {
+                    strvals.push_back(builder.CreateString(row.columns(i)));
                 }
-
-                try {
-                    numvals.push_back(std::stoi(column));
-                } catch (...) {
-                    strvals.push_back(builder.CreateString(column));
+            } else {
+                for (int i = 0; i < row.columns_size(); i++) {
+                    try {
+                        numvals.push_back(std::stoi(row.columns(i)));
+                    } catch (...) {
+                        strvals.push_back(builder.CreateString(row.columns(i)));
+                    }
                 }
             }
             break;
         }
         case InputOutputDataType::JSON: {
             nlohmann::json parsedJson = nlohmann::json::parse(input);
-
-            for (const auto& element : parsedJson) {
-                if (element.is_number()) {
+            if (converterData->column_data_type == "numeric") {
+                for (const auto& element : parsedJson) {
                     numvals.push_back(element.get<int>());
-                } else if (element.is_string()) {
+                }
+            } else if (converterData->column_data_type == "string") {
+                for (const auto& element : parsedJson) {
                     strvals.push_back(builder.CreateString(element.get<std::string>()));
+                }
+            } else {
+                for  (const auto& element : parsedJson) {
+                    if (element.is_number()) {
+                        numvals.push_back(element.get<int>());
+                    } else if (element.is_string()) {
+                        strvals.push_back(builder.CreateString(element.get<std::string>()));
+                    }
                 }
             }
             break;

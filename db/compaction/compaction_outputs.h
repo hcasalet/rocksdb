@@ -283,7 +283,7 @@ class CompactionOutputs {
                      TransformerType transformer_types,
                      InputOutputDataType inputDataType,
                      InputOutputDataType outputDataType,
-                     int columnDataType,
+                     std::string columnDataType,
                      uint64_t compactionJobId);
   
   // Add derived data to the output file
