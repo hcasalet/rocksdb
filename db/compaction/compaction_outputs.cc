@@ -14,6 +14,7 @@
 #include "transformer/distributor.h"
 #include "transformer/converter.h"
 #include "transformer/augmenter.h"
+#include "transformer/mynooper.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -556,6 +557,29 @@ Status CompactionOutputs::AddToOutput(
       std::shared_ptr<TransformerData> convertingData =
                 std::make_shared<ConverterData>(inputDataType, outputDataType, columnDataType);
       transformers[0]->Transform(value.ToString(), &output_values, convertingData, compactionJobId);
+      s = current_output(0).validator.Add(key, Slice(output_values[0]));
+      if (!s.ok()) {
+        return s;
+      }
+
+      builders_[0]->Add(key, Slice(output_values[0]));
+      stats_.num_output_records++;
+      current_output_file_size_ = builders_[0]->EstimatedFileSize();
+  
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(output_values[0]));
+      }
+      if (!s.ok()) {
+        return s;
+      }
+
+      s = current_output(0).meta.UpdateBoundaries(key, Slice(output_values[0]), ikey.sequence,
+                                                  ikey.type);
+      break;
+    }
+    case to_underlying(TransformerType::MYNOOPER): {
+      std::shared_ptr<TransformerData> mynooperData = std::make_shared<MynooperData>();
+      transformers[0]->Transform(value.ToString(), &output_values, mynooperData, compactionJobId);
       s = current_output(0).validator.Add(key, Slice(output_values[0]));
       if (!s.ok()) {
         return s;

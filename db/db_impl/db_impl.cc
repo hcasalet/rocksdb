@@ -3351,7 +3351,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
   }
 
   if (!cracked && !converted && !derived && !writeboth) {
-    std::string check_noop_name = cf_name + "_sys_cf_";
+    std::string check_noop_name = cf_name + "_identity_cf";
     ColumnFamilyData* check_noop = all_cfds->GetColumnFamily(check_noop_name);
     if (check_noop != nullptr) {
       root_cfd->AddDestinationCfd(check_noop);

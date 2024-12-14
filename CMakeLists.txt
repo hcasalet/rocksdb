@@ -864,7 +864,7 @@ set(SOURCES
         transformer/distributor.cc
         transformer/converter.cc
         transformer/augmenter.cc
-        transformer/nooper.cc
+        transformer/mynooper.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc

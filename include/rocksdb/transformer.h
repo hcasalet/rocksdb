@@ -43,7 +43,8 @@ enum class TransformerType {
   DISTRIBUTOR          = 1 << 0,       // 1
   CONVERTER            = 1 << 1,       // 2
   AUGMENTER            = 1 << 2,       // 4
-  DISTRIBUTORWRITEBOTH = 1 << 5        // 32
+  DISTRIBUTORWRITEBOTH = 1 << 5,       // 32
+  MYNOOPER             = 1 << 6,       // 64
 };
 
 enum class InputOutputDataType {

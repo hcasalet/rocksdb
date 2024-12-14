@@ -63,6 +63,7 @@
 #include "transformer/augmenter.h"
 #include "transformer/converter.h"
 #include "transformer/distributor.h"
+#include "transformer/mynooper.h"
 #include "util/stop_watch.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -850,7 +851,8 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
           cfd->GetDestinationCfdSize() == 1) ||
       (to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER) &&
           cfd->GetDestinationCfdSize() == 1) ||
-      (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_converted_cf") != std::string::npos)) {
+      (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_converted_cf") != std::string::npos) ||
+      (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_identtiy_cf") != std::string::npos)) {
     cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_, compaction_stats_);
   }
 
@@ -1877,6 +1879,8 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         }
         break;
       case to_underlying(TransformerType::CONVERTER):
+        break;
+      case to_underlying(TransformerType::MYNOOPER):
         break;
       default: {
         break;

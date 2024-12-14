@@ -5,10 +5,15 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-class Nooper : public Transformer {
+class MynooperData : public TransformerData {
+  public:
+    MynooperData() {}
+};
+
+class Mynooper : public Transformer {
 public:
-    Nooper() {};
-    ~Nooper() {};
+    Mynooper() {};
+    ~Mynooper() {};
 
     void Transform(std::string input,
                    std::vector<std::string>* outputs,
