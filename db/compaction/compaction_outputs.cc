@@ -620,8 +620,10 @@ Status CompactionOutputs::AddToOutput(
       s = current_output(0).meta.UpdateBoundaries(key, value, ikey.sequence,
                                                  ikey.type);
 
-      std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(key.data()); 
-      transformers[0]->Transform(value.ToString(), &output_values, augmentingData, compactionJobId);
+      std::string indkey(value.data(), value.size());
+      std::string indvalue(key.data(), key.size());
+      std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(indvalue); 
+      transformers[0]->Transform(indkey, &output_values, augmentingData, compactionJobId);
 
       break;
     }
@@ -650,6 +652,7 @@ Status CompactionOutputs::AddToOutput(
 
       s = current_output(0).meta.UpdateBoundaries(key, Slice(output_converted_values[0]), ikey.sequence,
                                                   ikey.type);
+
 
       std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(key.data()); 
       transformers[1]->Transform(output_converted_values[0], &output_values, augmentingData, compactionJobId);
