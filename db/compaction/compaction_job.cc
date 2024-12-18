@@ -852,6 +852,7 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
       (to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER) &&
           cfd->GetDestinationCfdSize() == 1) ||
       (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_converted_cf") != std::string::npos) ||
+      (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_indexed_data_cf") != std::string::npos) ||
       (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_identtiy_cf") != std::string::npos)) {
     cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_, compaction_stats_);
   }
