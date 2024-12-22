@@ -8,7 +8,9 @@ namespace ROCKSDB_NAMESPACE {
 class AugmenterData : public TransformerData {
   public:
     std::string row_key;
-    AugmenterData(std::string rowKey) : row_key(rowKey) {}
+    InputOutputDataType input_type;
+    AugmenterData(std::string rowKey, InputOutputDataType inType) :
+              row_key(rowKey), input_type(inType) {}
 };
 
 class DeriveFuncData {

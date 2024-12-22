@@ -13,18 +13,42 @@ void Augmenter::Transform(std::string input,
     if (!augmenterData) {
         throw std::runtime_error("Invalid TransformerData: Failed to cast to AugmenterData.");
     }
-    data::Row row;
-    if (!row.ParseFromString(input)) {
-        throw std::runtime_error("Failed to parse row from input string.");
+
+    std::string index_key;
+    switch (augmenterData->input_type) {
+        case InputOutputDataType::PROTOBUF: {
+            data::Row row;
+            if (!row.ParseFromString(input)) {
+                throw std::runtime_error("Failed to parse row from input string.");
+            }
+            if (row.columns_size() <= 0 || row.columns(0).empty()) {
+                throw std::runtime_error("Invalid or empty column in row.");
+            }
+            index_key = row.columns(0);
+            break;
+        }
+        case InputOutputDataType::JSON: {
+            nlohmann::json parsedJson = nlohmann::json::parse(input);
+            if (parsedJson.empty()) {
+                throw std::runtime_error("Failed to parse row from input string.");
+            }
+            if (!parsedJson.contains("field0") || parsedJson["field0"].empty()) {
+                throw std::runtime_error("Invalid or empty column in row.");
+            }
+            index_key = parsedJson["field0"].get<std::string>();
+            break;
+        }
+        default: {
+            index_key = input;
+            break;
+        }
     }
-    if (row.columns_size() <= 0 || row.columns(0).empty()) {
-        throw std::runtime_error("Invalid or empty column in row.");
-    }
+    
     // Lock the mutex before accessing store_
     {
         std::lock_guard<std::mutex> lock(stores_mutex_);
         auto& store = stores_[job_id];
-        store[row.columns(0)].push_back(augmenterData->row_key);
+        store[index_key].push_back(augmenterData->row_key);
     }
 }
 

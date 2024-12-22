@@ -622,7 +622,8 @@ Status CompactionOutputs::AddToOutput(
 
       std::string indkey(value.data(), value.size());
       std::string indvalue(key.data(), key.size());
-      std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(indvalue); 
+      std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(indvalue,
+                                                        inputDataType); 
       transformers[0]->Transform(indkey, &output_values, augmentingData, compactionJobId);
 
       break;
@@ -654,7 +655,8 @@ Status CompactionOutputs::AddToOutput(
                                                   ikey.type);
 
 
-      std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(key.data()); 
+      std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(key.data(),
+                                                        inputDataType); 
       transformers[1]->Transform(output_converted_values[0], &output_values, augmentingData, compactionJobId);
     }
     default: {
