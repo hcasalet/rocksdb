@@ -2017,9 +2017,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         db_options_.stats, listeners, db_options_.file_checksum_gen_factory.get(),
         tmp_set.Contains(FileType::kTableFile), false), i);
 
-    if (cfd->ioptions()->transformer_type == TransformerType::NOTRANSFORMATION ||
-        (cfd->ioptions()->transformer_type == TransformerType::AUGMENTER &&
-         cfd->GetName().find("index_cf") == std::string::npos)) {
+    if (cfd->ioptions()->transformer_type == TransformerType::NOTRANSFORMATION) {
       TableBuilderOptions tboptions(
         *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
         cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),
