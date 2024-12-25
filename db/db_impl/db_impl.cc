@@ -3265,7 +3265,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
   ColumnFamilyData* root_cfd = all_cfds->GetColumnFamily(cf_name);
 
   std::string cf_name_prefix = cf_name;
-  if (converted) {
+  if (converted && !cracked) {
     cf_name_prefix += "_converted_cf";
   }
 
