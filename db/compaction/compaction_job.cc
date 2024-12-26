@@ -2030,11 +2030,11 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
       outputs.NewBuilder(tboptions, i);   
     } else {
       TableBuilderOptions tboptions(
-        *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
-        cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),
+        *dest_cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
+        dest_cfd->internal_comparator(), dest_cfd->int_tbl_prop_collector_factories(),
         sub_compact->compaction->output_compression(),
-        sub_compact->compaction->output_compression_opts(), cfd->GetID(),
-        cfd->GetName(), 0,
+        sub_compact->compaction->output_compression_opts(), dest_cfd->GetID(),
+        dest_cfd->GetName(), 0,
         bottommost_level_, TableFileCreationReason::kCompaction,
         0 /* oldest_key_time */, current_time, db_id_, db_session_id_,
         sub_compact->compaction->max_output_file_size(), file_number);
