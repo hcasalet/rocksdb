@@ -34,8 +34,10 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
                 }
 
                 // any leftovers gets added to the last collection
-                for (int j = 0; j < row.columns_size()-splits*group_size; j++) {
-                    splittedRow.add_columns(row.columns(splits*group_size+j));
+                if (i == splits-1) {
+                    for (int j = 0; j < row.columns_size()-splits*group_size; j++) {
+                        splittedRow.add_columns(row.columns(splits*group_size+j));
+                    }
                 }
              
                 std::string serializedRow;
@@ -68,8 +70,10 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
                 }
 
                 // any leftovers gets added to the last collection
-                for (int j = 0; j < int(parsedJson.size())-splits*group_size; j++) {
-                    jsonData["field"+std::to_string(splits*group_size+j)] = parsedJson["field"+std::to_string(splits*group_size+j)];
+                if (i == splits-1) {
+                    for (int j = 0; j < int(parsedJson.size())-splits*group_size; j++) {
+                        jsonData["field"+std::to_string(splits*group_size+j)] = parsedJson["field"+std::to_string(splits*group_size+j)];
+                    }
                 }
                 
                 outputs->push_back(jsonData.dump());
