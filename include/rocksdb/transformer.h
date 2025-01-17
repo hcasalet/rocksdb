@@ -59,6 +59,11 @@ constexpr TransformerType operator|(TransformerType lhs, TransformerType rhs) {
     return static_cast<TransformerType>(static_cast<T>(lhs) | static_cast<T>(rhs));
 }
 
+constexpr TransformerType operator&(TransformerType lhs, TransformerType rhs) {
+    using T = std::underlying_type_t<TransformerType>;
+    return static_cast<TransformerType>(static_cast<T>(lhs) & static_cast<T>(rhs));
+}
+
 constexpr int to_underlying(TransformerType type) {
     return static_cast<std::underlying_type_t<TransformerType>>(type);
 }
@@ -83,7 +88,7 @@ class Transformer {
 };
 
 // Create a new Transformer that can be shared among multiple RocksDB instances
-extern Transformer* NewTransformer(
-    const std::string& conversion_type = "");
+extern std::shared_ptr<Transformer> NewTransformer(
+    const TransformerType transformer_type = TransformerType::NOTRANSFORMATION);
 
 }
