@@ -13,7 +13,6 @@ namespace ROCKSDB_NAMESPACE {
   };
 
   enum class ConverterOutputType {
-    ARROW,
     FLATBUFFERS
   };
 
