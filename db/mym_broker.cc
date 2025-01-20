@@ -14,9 +14,15 @@ MymBroker::MymBroker(const std::string& cfname,
                      TransformerData& transformer_data)
     : options_(options)
 {
+    bool split{false}, convert{false}, augment{false};
     int num_splits = 1;
     if (auto distributor = dynamic_cast<DistributorData*>(&transformer_data)) {
         num_splits = distributor->splits;
+        split = true;
+    } else if (auto converter = dynamic_cast<ConverterData*>(&transformer_data)) {
+        convert = true;
+    } else if (auto augmenter = dynamic_cast<AugmenterData*>(&transformer_data)) {
+        augment = true;
     }
 
     std::vector<ColumnFamilyDescriptor> column_family_descriptors;
@@ -31,7 +37,7 @@ MymBroker::MymBroker(const std::string& cfname,
         s = db_->CreateColumnFamilies(column_family_descriptors, &cf_handles);
         assert(s.ok());
 
-        s = db_->AddTransformingDestinationCfds(cfname, true, false, false, false, num_splits);
+        s = db_->AddTransformingDestinationCfds(cfname, split, convert, augment, false, num_splits);
         assert(s.ok());
     } else {
         column_family_descriptors.push_back(ColumnFamilyDescriptor(
@@ -39,7 +45,7 @@ MymBroker::MymBroker(const std::string& cfname,
         s = DB::Open(options_, dbfilepath, column_family_descriptors, &cf_handles, &db_);
         assert(s.ok());
 
-        s = db_->AddTransformingDestinationCfds(cfname, true, false, false, false, num_splits);
+        s = db_->AddTransformingDestinationCfds(cfname, split, convert, augment, false, num_splits);
         assert(s.ok());
     }
 
@@ -55,7 +61,7 @@ int MymBroker::Read(const std::string &key, const std::set<int>* positions, std:
 
     int level = 1;
     while (true) {
-        std::map<std::string, ColFamMeta> level_handles = int_cf_meta_[level];
+        std::unordered_map<std::string, ColFamMeta> level_handles = int_cf_meta_[level];
         if (level_handles.size() == 0) {
             break;
         }
@@ -96,6 +102,9 @@ int MymBroker::Read(const std::string &key, const std::set<int>* positions, std:
         }
     }
     
+    if (result != "") {
+        return 0;
+    }
     return 1;
 }
 
@@ -113,7 +122,7 @@ int MymBroker::Scan(const std::string &begin_key, int scan_length, const std::se
     
     int level = 1;
     while (true) {
-        std::map<std::string, ColFamMeta> level_handles = int_cf_meta_[level];
+        std::unordered_map<std::string, ColFamMeta> level_handles = int_cf_meta_[level];
         if (level_handles.size() == 0) {
             break;
         }
@@ -288,20 +297,20 @@ void MymBroker::saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column
 
         if (column_family_descriptors[i].name == cfname) {
             std::set<int> cf_colset;
-            user_cf_meta_ = ColFamMeta(cfname, 0, handles[i], &cf_colset);
+            user_cf_meta_ = ColFamMeta(cfname, 0, handles[i], std::move(cf_colset));
             continue;
         }
 
         if (num_splits == 1) {
             std::set<int> cf_colset;
             int_cf_meta_[1][column_family_descriptors[i].name] = ColFamMeta(
-                column_family_descriptors[i].name, 1, handles[i], &cf_colset
+                column_family_descriptors[i].name, 1, handles[i], std::move(cf_colset)
             );
         } else {
             std::set<int> colpos;
             getColPositions(group, i - pre_group, options_.num_columns, colpos);
             int_cf_meta_[level][column_family_descriptors[i].name] = ColFamMeta(
-                column_family_descriptors[i].name, level, handles[i], &colpos                    
+                column_family_descriptors[i].name, level, handles[i], std::move(colpos)                    
             );
             roundcount++;
 
@@ -315,7 +324,7 @@ void MymBroker::saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column
     }
 }
 
-void MymBroker::getColPositions(int divide, int start, int total_cols, std::set<int> col_pos)
+void MymBroker::getColPositions(int divide, int start, int total_cols, std::set<int>& col_pos)
 {
     int share = total_cols/divide;
     for (int i = start*share; i < start*share + share; i++) {
@@ -327,13 +336,13 @@ int MymBroker::checkColumnSearch(ColFamMeta& cfmeta, const std::set<int>* column
 {
     // if colPositions is empty, it is entire row so it covers everything column in 
     // the query
-    if (cfmeta.colPositions_ == nullptr || cfmeta.colPositions_->size() == 0) {
+    if (cfmeta.colPositions_.size() == 0) {
         return 2;
     }
 
     int covered = 0;
     for (auto column_position : *column_positions) {
-        if (cfmeta.colPositions_->find(column_position) != cfmeta.colPositions_->end()) {
+        if (cfmeta.colPositions_.find(column_position) != cfmeta.colPositions_.end()) {
             covered = 2;
         } else {
             if (covered == 2) {

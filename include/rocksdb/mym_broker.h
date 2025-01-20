@@ -42,14 +42,14 @@ class ColFamMeta {
     std::string cfName_;
     int logical_level_;
     ColumnFamilyHandle* cf_handle_;
-    std::set<int>* colPositions_;
+    std::set<int> colPositions_;
 
   public:
     ColFamMeta() {}
     ColFamMeta(std::string cf_name, int logical_level, ColumnFamilyHandle* cf_handle,
-               std::set<int>* col_positions) 
+               std::set<int> col_positions) 
         : cfName_(cf_name), logical_level_(logical_level), 
-          cf_handle_(cf_handle), colPositions_(col_positions) {}
+          cf_handle_(cf_handle), colPositions_(std::move(col_positions)) {}
 };
 
 class MymBroker {
@@ -74,7 +74,7 @@ class MymBroker {
         DB *db_;
         Options options_;
         ColFamMeta user_cf_meta_;
-        std::map<int, std::map<std::string, ColFamMeta>> int_cf_meta_;
+        std::unordered_map<int, std::unordered_map<std::string, ColFamMeta>> int_cf_meta_;
         TransformerData transformer_data_;
 
         void genIntColFamDescriptors(const std::string& cfname,
@@ -83,7 +83,7 @@ class MymBroker {
         void saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column_family_descriptors,
                                   std::vector<ColumnFamilyHandle*> handles,
                                   std::string cfname, int num_splits);
-        void getColPositions(int divide, int start, int total_cols, std::set<int> col_pos);
+        void getColPositions(int divide, int start, int total_cols, std::set<int>& col_pos);
         int checkColumnSearch(ColFamMeta& cfmeta, const std::set<int>* column_positions);
 };  
 
