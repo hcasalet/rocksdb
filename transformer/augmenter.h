@@ -38,7 +38,7 @@ class Augmenter : public Transformer
     ~Augmenter() {};
 
     void Transform(std::string input,
-                   std::vector<std::string>* outputs,
+                   std::vector<std::string>& outputs,
                    const std::shared_ptr<TransformerData>& data,
                    uint64_t job_id) override;
     void Prepare(uint64_t job_id) override;

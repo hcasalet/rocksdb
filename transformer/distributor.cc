@@ -5,12 +5,12 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Distributor::Transform(std::string input, std::vector<std::string>* outputs, 
+void Distributor::Transform(std::string input, std::vector<std::string>& outputs, 
                 const std::shared_ptr<TransformerData>& data, uint64_t job_id)
 {
     auto distributorData = std::dynamic_pointer_cast<DistributorData>(data);
     if (distributorData->keepOriginal) {
-        outputs->push_back(input);
+        outputs.push_back(input);
     }
 
     int splits = distributorData->splits;
@@ -42,7 +42,7 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
              
                 std::string serializedRow;
                 splittedRow.SerializeToString(&serializedRow);
-                outputs->push_back(serializedRow);
+                outputs.push_back(serializedRow);
             }
 
             break;
@@ -76,13 +76,13 @@ void Distributor::Transform(std::string input, std::vector<std::string>* outputs
                     }
                 }
                 
-                outputs->push_back(jsonData.dump());
+                outputs.push_back(jsonData.dump());
             }
             
             break;
         }
         default: {
-            outputs->push_back(input);
+            outputs.push_back(input);
             break;
         }
     }

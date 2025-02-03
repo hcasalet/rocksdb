@@ -1,4 +1,5 @@
 #include <queue>
+#include <sstream>
 #include "rocksdb/mym_broker.h"
 #include "transformer/distributor.h"
 #include "transformer/converter.h"
@@ -103,6 +104,54 @@ int MymBroker::Read(const std::string &key, const std::set<int>* positions, std:
     }
     
     if (result != "") {
+        return 0;
+    }
+    return 1;
+}
+
+int MymBroker::IndexRead(const std::string &key, const std::set<int>* positions, std::vector<std::string> &result)
+{
+    Status s;
+
+    // search for index handles in level-1 handles
+    std::unordered_map<std::string, ColFamMeta> level_1_handles = int_cf_meta_[1];
+
+    std::string valkeystr;
+    for (auto idx_hdl : level_1_handles) {
+        if (idx_hdl.first.find("_secondary_") != std::string::npos) {
+            s = db_->Get(ReadOptions(), idx_hdl.second.cf_handle_, key, &valkeystr);
+            if (!s.ok()) {
+                return Status::kNotFound;
+            }
+            break;
+        }
+    }
+
+    ColumnFamilyHandle* primary_hdl;
+    for (auto pri_hdl : level_1_handles) {
+        if (pri_hdl.first.find("_indexed_data_cf") != std::string::npos) {
+            primary_hdl = pri_hdl.second.cf_handle_;
+        }
+    }
+
+    if (valkeystr != "") {
+        std::vector<std::string> valkeys = parsePrimaryKeys(valkeystr);
+        for (auto valkey : valkeys) {
+            std::string valresult;
+            s = db_->Get(ReadOptions(), user_cf_meta_.cf_handle_, key, &valresult);
+            if (valresult != "") {
+                result.push_back(valresult);
+                continue;
+            }
+
+            s = db_->Get(ReadOptions(), primary_hdl, valkey, &valresult);
+            if (valresult != "") {
+                result.push_back(valresult);
+            }
+        }   
+    }
+
+    if (result.size() > 0) {
         return 0;
     }
     return 1;
@@ -352,6 +401,19 @@ int MymBroker::checkColumnSearch(ColFamMeta& cfmeta, const std::set<int>* column
     }
 
     return covered;
+}
+
+std::vector<std::string> MymBroker::parsePrimaryKeys(const std::string& keystr)
+{
+    std::vector<std::string> primary_keys;
+    std::istringstream stream(keystr);
+    std::string key;
+    
+    while (std::getline(stream, key, ',')) {
+        primary_keys.push_back(key);
+    }
+
+    return primary_keys;
 }
 
 

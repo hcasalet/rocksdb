@@ -6,7 +6,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 void Augmenter::Transform(std::string input,
-                          std::vector<std::string>* outputs,
+                          std::vector<std::string>& outputs,
                           const std::shared_ptr<TransformerData>& data,
                           uint64_t job_id) {
     auto augmenterData = std::dynamic_pointer_cast<AugmenterData>(data);
@@ -35,7 +35,11 @@ void Augmenter::Transform(std::string input,
             if (!parsedJson.contains("field0") || parsedJson["field0"].empty()) {
                 throw std::runtime_error("Invalid or empty column in row.");
             }
-            index_key = parsedJson["field0"].get<std::string>();
+            if (parsedJson["field0"].is_number()) {
+                index_key = parsedJson["field0"].get<int>();
+            } else {
+                index_key = parsedJson["field0"].get<std::string>();
+            }
             break;
         }
         default: {

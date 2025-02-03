@@ -450,7 +450,7 @@ Status CompactionOutputs::AddToOutput(
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
                   std::make_shared<DistributorData>(output_cfds_size, false, inputDataType); 
-        transformers[0]->Transform(value.ToString(), &output_values, splittingData, compactionJobId);
+        transformers[0]->Transform(value.ToString(), output_values, splittingData, compactionJobId);
       } else {
         output_values.push_back(value.ToString());
       }
@@ -481,7 +481,7 @@ Status CompactionOutputs::AddToOutput(
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
                   std::make_shared<DistributorData>(output_cfds_size, true, inputDataType); 
-        transformers[0]->Transform(value.ToString(), &output_values, splittingData, compactionJobId);
+        transformers[0]->Transform(value.ToString(), output_values, splittingData, compactionJobId);
       } else {
         output_values.push_back(value.ToString());
       }
@@ -512,7 +512,7 @@ Status CompactionOutputs::AddToOutput(
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
                   std::make_shared<DistributorData>(output_cfds_size, false, inputDataType);
-        transformers[0]->Transform(value.ToString(), &output_values, splittingData, compactionJobId);
+        transformers[0]->Transform(value.ToString(), output_values, splittingData, compactionJobId);
 
         std::shared_ptr<TransformerData> convertingData =
               std::make_shared<ConverterData>(inputDataType, outputDataType, columnDataType);
@@ -520,7 +520,7 @@ Status CompactionOutputs::AddToOutput(
         std::vector<std::string> output_converted_values;
         for (auto ovalue : output_values) {
           std::vector<std::string> ovalues;
-          transformers[1]->Transform(ovalue, &ovalues, convertingData, compactionJobId);
+          transformers[1]->Transform(ovalue, ovalues, convertingData, compactionJobId);
           output_converted_values.push_back(ovalues[0]);
         }
         output_values = output_converted_values;
@@ -556,7 +556,7 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::CONVERTER): {
       std::shared_ptr<TransformerData> convertingData =
                 std::make_shared<ConverterData>(inputDataType, outputDataType, columnDataType);
-      transformers[0]->Transform(value.ToString(), &output_values, convertingData, compactionJobId);
+      transformers[0]->Transform(value.ToString(), output_values, convertingData, compactionJobId);
       s = current_output(0).validator.Add(key, Slice(output_values[0]));
       if (!s.ok()) {
         return s;
@@ -579,7 +579,7 @@ Status CompactionOutputs::AddToOutput(
     }
     case to_underlying(TransformerType::MYNOOPER): {
       std::shared_ptr<TransformerData> mynooperData = std::make_shared<MynooperData>();
-      transformers[0]->Transform(value.ToString(), &output_values, mynooperData, compactionJobId);
+      transformers[0]->Transform(value.ToString(), output_values, mynooperData, compactionJobId);
       s = current_output(0).validator.Add(key, Slice(output_values[0]));
       if (!s.ok()) {
         return s;
@@ -624,7 +624,7 @@ Status CompactionOutputs::AddToOutput(
       std::string indvalue(key.data(), key.size());
       std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(indvalue,
                                                         inputDataType); 
-      transformers[0]->Transform(indkey, &output_values, augmentingData, compactionJobId);
+      transformers[0]->Transform(indkey, output_values, augmentingData, compactionJobId);
 
       break;
     }
@@ -634,7 +634,7 @@ Status CompactionOutputs::AddToOutput(
       std::vector<std::string> output_converted_values;
       std::shared_ptr<TransformerData> convertingData = std::make_shared<ConverterData>(
                                   inputDataType, outputDataType, columnDataType);
-      transformers[0]->Transform(value.data(), &output_converted_values, convertingData, compactionJobId);
+      transformers[0]->Transform(value.data(), output_converted_values, convertingData, compactionJobId);
 
       s = current_output(0).validator.Add(key, Slice(output_converted_values[0]));
       if (!s.ok()) {
@@ -657,7 +657,7 @@ Status CompactionOutputs::AddToOutput(
 
       std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(key.data(),
                                                         inputDataType); 
-      transformers[1]->Transform(output_converted_values[0], &output_values, augmentingData, compactionJobId);
+      transformers[1]->Transform(output_converted_values[0], output_values, augmentingData, compactionJobId);
     }
     default: {
       break;

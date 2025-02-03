@@ -7,7 +7,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 void Converter::Transform(std::string input,
-                          std::vector<std::string>* outputs,
+                          std::vector<std::string>& outputs,
                           const std::shared_ptr<TransformerData>& data,
                           uint64_t job_id)
 {
@@ -66,7 +66,7 @@ void Converter::Transform(std::string input,
             break;
         }
         default: {
-            outputs->push_back(input);
+            outputs.push_back(input);
             break;
         }
     }
@@ -79,7 +79,7 @@ void Converter::Transform(std::string input,
     uint8_t *buf = builder.GetBufferPointer();
     int size = builder.GetSize();
     std::string s(reinterpret_cast<char*>(buf), size);
-    outputs->push_back(s);
+    outputs.push_back(s);
     
     return;
 }
@@ -90,7 +90,9 @@ void Converter::Prepare(uint64_t job_id) {
     }
 }
 
-void Converter::Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) {
+void Converter::Retrieve(uint64_t job_id, 
+            std::vector<std::pair<std::string, std::string>>& output)
+{
     return;
 }
 

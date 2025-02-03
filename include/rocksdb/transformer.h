@@ -75,15 +75,19 @@ class TransformerData {
 
 class Transformer {
  public:
-  virtual ~Transformer() {}
+  virtual ~Transformer() = default;
 
-  // non-virtual interface
+  // Pure virtual methods to be implemented by derived classes
+  virtual void Prepare(uint64_t job_id) = 0;
+
   virtual void Transform(std::string input,
-                         std::vector<std::string>* outputs,
+                         std::vector<std::string>& outputs,
                          const std::shared_ptr<TransformerData>& data,
                          uint64_t job_id) = 0;
-  virtual void Prepare(uint64_t job_id) = 0;
-  virtual void Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) = 0;
+
+  virtual void Retrieve(uint64_t job_id,
+      std::vector<std::pair<std::string, std::string>>& output) = 0;
+      
   virtual size_t GetStoreSize(uint64_t job_id) = 0;
 };
 

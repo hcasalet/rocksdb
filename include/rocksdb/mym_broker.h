@@ -68,6 +68,8 @@ class MymBroker {
 
         int Delete(const std::string &key);
 
+        int IndexRead(const std::string &key, const std::set<int>* positions, std::vector<std::string> &result);
+
         ~MymBroker() {};
     
     private:
@@ -85,6 +87,7 @@ class MymBroker {
                                   std::string cfname, int num_splits);
         void getColPositions(int divide, int start, int total_cols, std::set<int>& col_pos);
         int checkColumnSearch(ColFamMeta& cfmeta, const std::set<int>* column_positions);
+        std::vector<std::string> parsePrimaryKeys(const std::string& keystr);
 };  
 
 }
