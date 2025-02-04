@@ -5759,6 +5759,7 @@ Status VersionSet::LogAndApply(
     }
     return Status::ColumnFamilyDropped();
   }
+  
   return ProcessManifestWrites(writers, mu, dir_contains_current_file,
                                new_descriptor_log, new_cf_options,
                                read_options);

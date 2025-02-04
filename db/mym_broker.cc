@@ -313,6 +313,7 @@ void MymBroker::genIntColFamDescriptors(const std::string& cfname,
 
     } else if (auto augmenter = dynamic_cast<AugmenterData*>(&transformer_data)) {
         options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
+        options_.target_file_size_base = 1024 * 1024 * 1024;
         column_families.push_back(ColumnFamilyDescriptor(
                     cfname+"_indexed_data_cf", ColumnFamilyOptions(options_)));
         options_.merge_operator = std::make_shared<SecondaryIndexMergeOperator>();

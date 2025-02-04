@@ -380,7 +380,8 @@ Status CompactionOutputs::AddToOutput(
     return s;
   }
   const Slice& key = c_iter.key();
-  if (ShouldStopBefore(c_iter) && HasBuilder()) {
+  if (to_underlying(transformer_type) != to_underlying(TransformerType::AUGMENTER) &&   
+      ShouldStopBefore(c_iter) && HasBuilder()) {
     s = close_file_func(*this, c_iter.InputStatus(), key);
     if (!s.ok()) {
       return s;
@@ -681,13 +682,14 @@ Status CompactionOutputs::AddDerivedOutput(
       rocksdb::Slice encoded_key = internal_key.Encode();
       rocksdb::Slice value = Slice(dout.second);
 
-      builders_[i + 1]->Add(encoded_key, value);
       s = current_output(i+1).validator.Add(encoded_key, value);
       if (!s.ok()) {
         return s;
       }
 
+      builders_[i + 1]->Add(encoded_key, value);
       stats_.num_output_records++;
+      current_output_file_size_ = builders_[i+1]->EstimatedFileSize();
 
       if (blob_garbage_meter_) {
         s = blob_garbage_meter_->ProcessOutFlow(Slice(dout.first), Slice(dout.second));
