@@ -84,20 +84,8 @@ void Converter::Transform(std::string input,
     return;
 }
 
-void Converter::Prepare(uint64_t job_id) {
-    for (auto store : stores_) {
-        store.clear();
-    }
-}
-
-void Converter::Retrieve(uint64_t job_id, 
-            std::vector<std::pair<std::string, std::string>>& output)
-{
-    return;
-}
-
-size_t Converter::GetStoreSize(uint64_t job_id) {
-    return stores_.size();
+TransformerType Converter::Supports() const {
+    return TransformerType::CONVERTER;
 }
 
 }

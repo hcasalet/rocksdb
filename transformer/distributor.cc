@@ -88,18 +88,8 @@ void Distributor::Transform(std::string input, std::vector<std::string>& outputs
     }
 }
 
-void Distributor::Prepare(uint64_t job_id) {
-    for (auto store : stores_) {
-        store.clear();
-    }
-}
-
-void Distributor::Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) {
-    return;
-}
-
-size_t Distributor::GetStoreSize(uint64_t job_id) {
-    return stores_.size();
+TransformerType Distributor::Supports() const {
+    return TransformerType::DISTRIBUTOR;
 }
 
 }

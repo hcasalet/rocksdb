@@ -1320,13 +1320,6 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       reinterpret_cast<void*>(
           const_cast<Compaction*>(sub_compact->compaction)));
 
-  // Below compaction for every row of input will start. But before that,
-  // let's clear the AugmenterStore for Augmenter Transformation
-  if (transformers_.size() > 0 && 
-      (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER))) {
-    transformers_[transformers_.size()-1]->Prepare(compactionJobId);
-  }
-
   while (exec_status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
     // Invariant: c_iter.status() is guaranteed to be OK if c_iter->Valid()
     // returns true.
@@ -1361,19 +1354,6 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     if (c_iter->status().IsManualCompactionPaused()) {
       break;
     }
-  }
-
-  // Compacting one record at a time is done. Now after that, we need to take care of 
-  // the Augmenting case.
-  if (transformers_.size() > 0 && 
-      (static_cast<int>(cfd->ioptions()->transformer_type) & static_cast<int>(TransformerType::AUGMENTER)) &&
-      cfd->GetName().find("_index") == std::string::npos) {
-    std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs;
-    std::vector<std::pair<std::string, std::string>> derived_output;
-    transformers_[0]->Retrieve(compactionJobId, derived_output);
-    derived_outputs.push_back(derived_output);
-
-    exec_status = sub_compact->AddDerivedOutput(derived_outputs, open_file_func, close_file_func);
   }
 
   sub_compact->compaction_job_stats.num_blobs_read =

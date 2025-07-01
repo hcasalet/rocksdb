@@ -41,10 +41,8 @@ class Augmenter : public Transformer
                    std::vector<std::string>& outputs,
                    const std::shared_ptr<TransformerData>& data,
                    uint64_t job_id) override;
-    void Prepare(uint64_t job_id) override;
-    void Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) override;
-    size_t GetStoreSize(uint64_t job_id) override;
-
+  
+    TransformerType Supports() const override;
   private:
     std::vector<DeriveFuncData*> derivers_;
     std::unordered_map<int, std::map<std::string, std::vector<std::string>>> stores_;

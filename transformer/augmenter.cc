@@ -56,42 +56,8 @@ void Augmenter::Transform(std::string input,
     }
 }
 
-void Augmenter::Prepare(uint64_t job_id) {
-    std::lock_guard<std::mutex> lock(stores_mutex_);
-    if (stores_.find(job_id) == stores_.end()) {
-        stores_[job_id] = std::map<std::string, std::vector<std::string>>();
-    } else {
-        stores_[job_id].clear();
-    }
-}
-
-void Augmenter::Retrieve(uint64_t job_id, std::vector<std::pair<std::string, std::string>>& output) {
-    std::lock_guard<std::mutex> lock(stores_mutex_);
-    auto it = stores_.find(job_id);
-    if (it != stores_.end()) {
-        const auto& store = it->second;
-        for (const auto& entry : store) {
-            std::ostringstream oss;
-            for (size_t i = 0; i < entry.second.size(); ++i) {
-                if (i > 0) oss << ",";  // Add comma before each element except the first
-                oss << entry.second[i];
-            }
-            output.emplace_back(entry.first, oss.str());
-        }
-    } else {
-        throw std::runtime_error("No store found for job_id " + std::to_string(job_id));
-    }
-    stores_.erase(it);
-}
-
-size_t Augmenter::GetStoreSize(uint64_t job_id) {
-    std::lock_guard<std::mutex> lock(stores_mutex_);
-    auto it = stores_.find(job_id);
-    if (it != stores_.end()) {
-        return it->second.size();
-    } else {
-        return 0;
-    }
+TransformerType Augmenter::Supports() const {
+    return TransformerType::AUGMENTER;
 }
 
 }

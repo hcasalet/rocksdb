@@ -11,30 +11,13 @@
 namespace ROCKSDB_NAMESPACE {
 
 /*
- * There are basically 3 types of tranformations during compaction:
- * 1 -- Converting data from one format to another, for instance, from json format
- *      to flat buffers. There is no column family change. The converted data is
- *      written into the compacting column family on a lower level. This is the 
- *      converter type.
- * 2 -- Splitting data from row-wise to column-wise. This results in the split data
- *      getting written into level 0 of different column families, and the 
- *      compacting column faily deleted. This is the distributor type.
- * 3 -- Deriving new data such as creating an index on the orignal data. This results
- *      in the derived data getting written into the augmented column families, and 
- *      the original data into the compacting column family. This is the augmenter type.
+ *
+ * TransformerType is a bitmask enum used to specify transformation behavior during compaction:
+ * - DISTRIBUTOR: splits a record into multiple outputs written to separate column families
+ * - CONVERTER: converts record formats (e.g., JSON → FlatBuffers)
+ * - AUGMENTER: derives new records (e.g., index entries) in addition to writing the original
  * 
- * In defining TransformerType enum, we assign value 1 to the distributor, 4 to the converter, 
- * and 7 to the augmenter, so that algebraic operations on any of those type values have the 
- * unique result. This allows us to support algebraic operations on the transformer types. 
- * We have the following values for transformation types:
- * 
- *   1  -- converter only
- *   4  -- distributor only
- *   5  -- converter+distributor
- *   7  -- augmenter only
- *   8  -- converter+augmenter
- *   11 -- distributor+augmenter     (not supported yet)
- *   12 -- distributor+converter+augmenter (not supported yet)
+ * These types may be combined using bitwise OR to express compound transformations.
  * 
 */
 
@@ -77,18 +60,14 @@ class Transformer {
  public:
   virtual ~Transformer() = default;
 
-  // Pure virtual methods to be implemented by derived classes
-  virtual void Prepare(uint64_t job_id) = 0;
-
+  // Transforms a single input record into one or more outputs.
   virtual void Transform(std::string input,
                          std::vector<std::string>& outputs,
                          const std::shared_ptr<TransformerData>& data,
                          uint64_t job_id) = 0;
-
-  virtual void Retrieve(uint64_t job_id,
-      std::vector<std::pair<std::string, std::string>>& output) = 0;
-      
-  virtual size_t GetStoreSize(uint64_t job_id) = 0;
+  
+  // Declares which transformation features this transformer supports
+  virtual TransformerType Supports() const = 0;
 };
 
 // Create a new Transformer that can be shared among multiple RocksDB instances
