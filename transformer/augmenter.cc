@@ -47,13 +47,11 @@ void Augmenter::Transform(std::string input,
             break;
         }
     }
-    
-    // Lock the mutex before accessing store_
-    {
-        std::lock_guard<std::mutex> lock(stores_mutex_);
-        auto& store = stores_[job_id];
-        store[index_key].push_back(augmenterData->row_key);
+
+    if (index_key != "") {
+        index_key += "$$" + augmenterData->row_key;
     }
+    outputs.push_back(index_key);
 }
 
 TransformerType Augmenter::Supports() const {

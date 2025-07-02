@@ -67,8 +67,8 @@ class CompactionOutputs {
   }
 
   // TODO: Remove it when remote compaction support tiered compaction
-  void SetTotalBytes(uint64_t bytes) { stats_.bytes_written += bytes; }
-  void SetNumOutputRecords(uint64_t num) { stats_.num_output_records = num; }
+  void SetTotalBytes(uint64_t bytes, int pos) { stats_[pos].bytes_written += bytes; }
+  void SetNumOutputRecords(uint64_t num, int pos) { stats_[pos].num_output_records = num; }
 
   // TODO: Move the BlobDB builder into CompactionOutputs
   const std::vector<BlobFileAddition>& GetBlobFileAdditions() const {
@@ -85,26 +85,26 @@ class CompactionOutputs {
 
   bool HasBlobFileAdditions() const { return !blob_file_additions_.empty(); }
 
-  BlobGarbageMeter* CreateBlobGarbageMeter() {
+  BlobGarbageMeter* CreateBlobGarbageMeter(int pos) {
     assert(!is_penultimate_level_);
-    blob_garbage_meter_ = std::make_unique<BlobGarbageMeter>();
-    return blob_garbage_meter_.get();
+    blob_garbage_meter_[pos] = std::make_unique<BlobGarbageMeter>();
+    return blob_garbage_meter_[pos].get();
   }
 
-  BlobGarbageMeter* GetBlobGarbageMeter() const {
+  BlobGarbageMeter* GetBlobGarbageMeter(int pos) const {
     if (is_penultimate_level_) {
       // blobdb doesn't support per_key_placement yet
-      assert(blob_garbage_meter_ == nullptr);
+      assert(blob_garbage_meter_[pos] == nullptr);
       return nullptr;
     }
-    return blob_garbage_meter_.get();
+    return blob_garbage_meter_[pos].get();
   }
 
-  void UpdateBlobStats() {
+  void UpdateBlobStats(int pos) {
     assert(!is_penultimate_level_);
-    stats_.num_output_files_blob = blob_file_additions_.size();
+    stats_[pos].num_output_files_blob = blob_file_additions_.size();
     for (const auto& blob : blob_file_additions_) {
-      stats_.bytes_written_blob += blob.GetTotalBlobBytes();
+      stats_[pos].bytes_written_blob += blob.GetTotalBlobBytes();
     }
   }
 
@@ -346,10 +346,10 @@ class CompactionOutputs {
 
   // BlobDB info
   std::vector<BlobFileAddition> blob_file_additions_;
-  std::unique_ptr<BlobGarbageMeter> blob_garbage_meter_;
+  std::vector<std::unique_ptr<BlobGarbageMeter>> blob_garbage_meter_;
 
   // Basic compaction output stats for this level's outputs
-  InternalStats::CompactionOutputsStats stats_;
+  std::vector<InternalStats::CompactionOutputsStats> stats_;
 
   // indicate if this CompactionOutputs obj for penultimate_level, should always
   // be false if per_key_placement feature is not enabled.

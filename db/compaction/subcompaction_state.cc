@@ -14,19 +14,19 @@
 
 namespace ROCKSDB_NAMESPACE {
 void SubcompactionState::AggregateCompactionStats(
-    InternalStats::CompactionStatsFull& compaction_stats) const {
-  compaction_stats.stats.Add(compaction_outputs_.stats_);
+    InternalStats::CompactionStatsFull& compaction_stats, int pos) const {
+  compaction_stats.stats.Add(compaction_outputs_.stats_[pos]);
   if (HasPenultimateLevelOutputs()) {
     compaction_stats.has_penultimate_level_output = true;
     compaction_stats.penultimate_level_stats.Add(
-        penultimate_level_outputs_.stats_);
+        penultimate_level_outputs_.stats_[pos]); 
   }
 }
 
-OutputIterator SubcompactionState::GetOutputs() const {
-  return OutputIterator(penultimate_level_outputs_.outputs_[0],
-                        compaction_outputs_.outputs_[0]);
-}
+//OutputIterator SubcompactionState::GetOutputs() const {
+//  return OutputIterator(penultimate_level_outputs_.outputs_[0],
+//                        compaction_outputs_.outputs_[0]);
+//}
 
 OutputIterator SubcompactionState::GetOutputs(int pos) const {
   assert(penultimate_level_outputs_.outputs_.size() > size_t(pos));
