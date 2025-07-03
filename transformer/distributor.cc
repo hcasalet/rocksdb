@@ -5,8 +5,9 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Distributor::Transform(std::string input, std::vector<std::string>& outputs, 
-                const std::shared_ptr<TransformerData>& data, uint64_t job_id)
+void Distributor::Transform(const std::vector<uint8_t>& input,
+                          std::vector<std::vector<uint8_t>>& outputs,
+                          const std::shared_ptr<TransformerData>& data) const
 {
     auto distributorData = std::dynamic_pointer_cast<DistributorData>(data);
     if (distributorData->keepOriginal) {
@@ -19,7 +20,7 @@ void Distributor::Transform(std::string input, std::vector<std::string>& outputs
     switch (vtype) {
         case InputOutputDataType::PROTOBUF: {
             data::Row row;
-            row.ParseFromString(input);
+            row.ParseFromArray(input.data(), input.size());
             int group_size = row.columns_size()/splits;
             if (group_size < 1) {
                 group_size = 1;
@@ -40,8 +41,10 @@ void Distributor::Transform(std::string input, std::vector<std::string>& outputs
                     }
                 }
              
-                std::string serializedRow;
-                splittedRow.SerializeToString(&serializedRow);
+                std::vector<uint8_t> serializedRow;
+                size_t output_len = splittedRow.ByteSizeLong();
+                serializedRow.resize(output_len);
+                splittedRow.SerializeToArray(serializedRow.data(), output_len);
                 outputs.push_back(serializedRow);
             }
 
@@ -76,7 +79,8 @@ void Distributor::Transform(std::string input, std::vector<std::string>& outputs
                     }
                 }
                 
-                outputs.push_back(jsonData.dump());
+                std::string jsonStr = jsonData.dump();
+                outputs.push_back(std::vector<uint8_t>(jsonStr.begin(), jsonStr.end()));
             }
             
             break;

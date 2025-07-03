@@ -3,8 +3,9 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Mynooper::Transform(std::string input, std::vector<std::string>& outputs, 
-                const std::shared_ptr<TransformerData>& data, uint64_t job_id)
+void Mynooper::Transform(const std::vector<uint8_t>& input,
+                          std::vector<std::vector<uint8_t>>& outputs,
+                          const std::shared_ptr<TransformerData>& data) const
 {
     outputs.push_back(input);
 }

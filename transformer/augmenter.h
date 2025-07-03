@@ -37,10 +37,9 @@ class Augmenter : public Transformer
         : derivers_(derivers) {};
     ~Augmenter() {};
 
-    void Transform(std::string input,
-                   std::vector<std::string>& outputs,
-                   const std::shared_ptr<TransformerData>& data,
-                   uint64_t job_id) override;
+    void Transform(const std::vector<uint8_t>& input,
+                   std::vector<std::vector<uint8_t>>& outputs,
+                   const std::shared_ptr<TransformerData>& data) const override;
   
     TransformerType Supports() const override;
   private:

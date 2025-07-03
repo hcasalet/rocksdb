@@ -55,8 +55,8 @@ Status CompactionOutputs::Finish(const Status& intput_status,
         builders_[position]->GetTableProperties().user_defined_timestamps_persisted);
   }
   current_output(position).finished = true;
-  stats_[position].bytes_written += current_bytes;
-  stats_[position].num_output_files += outputs_[position].size();
+  stats_.bytes_written += current_bytes;
+  stats_.num_output_files += outputs_[position].size();
   
   return s;
 }
@@ -421,7 +421,7 @@ Status CompactionOutputs::AddToOutput(
   const Slice& value = c_iter.value();
 
   // transform value
-  std::vector<std::string> output_values;
+  std::vector<std::vector<uint8_t>> output_values;
   int output_cfds_size = static_cast<int>(c_iter.output_cfds().size());
   const ParsedInternalKey& ikey = c_iter.ikey();
 
@@ -432,11 +432,11 @@ Status CompactionOutputs::AddToOutput(
         return s;
       }
       builders_[0]->Add(key, value);
-      stats_[0].num_output_records++;
+      stats_.num_output_records++;
       current_output_file_size_ = builders_[0]->EstimatedFileSize();
   
-      if (blob_garbage_meter_[0]) {
-        s = blob_garbage_meter_[0]->ProcessOutFlow(key, value);
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(key, value);
       }
       if (!s.ok()) {
         return s;
@@ -450,62 +450,78 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::DISTRIBUTOR): {
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, false, inputDataType); 
-        transformers[0]->Transform(value.ToString(), output_values, splittingData, compactionJobId);
+                  std::make_shared<DistributorData>(output_cfds_size, false, inputDataType);
+        std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
+                                  reinterpret_cast<const uint8_t*>(value.data() + value.size()));
+        transformers[0]->Transform(val_vec, output_values, splittingData);
       } else {
-        output_values.push_back(value.ToString());
+        output_values.emplace_back(
+          reinterpret_cast<const uint8_t*>(value.data()),
+          reinterpret_cast<const uint8_t*>(value.data()) + value.size()
+        );
       }
   
       for (size_t i = 0; i < output_values.size(); i++) {
-        s = current_output(i).validator.Add(key, Slice(output_values[i]));
+        s = current_output(i).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                       output_values[i].size()));
         if (!s.ok()) {
           return s;
         }
-        builders_[i]->Add(key, Slice(output_values[i]));
+        builders_[i]->Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                     output_values[i].size()));
     
-        stats_[i].num_output_records++;
+        stats_.num_output_records++;
         current_output_file_size_ = builders_[i]->EstimatedFileSize();
   
-        if (blob_garbage_meter_[i]) {
-          s = blob_garbage_meter_[i]->ProcessOutFlow(key, Slice(output_values[i]));
+        if (blob_garbage_meter_) {
+          s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                     output_values[i].size()));
         }
         if (!s.ok()) {
           return s;
         }
 
-        s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
-                                                    ikey.type);
+        s = current_output(i).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                        output_values[i].size()), ikey.sequence, ikey.type);
       }
       break;
     }
     case to_underlying(TransformerType::DISTRIBUTORWRITEBOTH): {
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, true, inputDataType); 
-        transformers[0]->Transform(value.ToString(), output_values, splittingData, compactionJobId);
+                  std::make_shared<DistributorData>(output_cfds_size, true, inputDataType);
+        std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
+                                    reinterpret_cast<const uint8_t*>(value.data() + value.size()));
+        transformers[0]->Transform(val_vec, output_values, splittingData);
       } else {
-        output_values.push_back(value.ToString());
+        output_values.emplace_back(
+          reinterpret_cast<const uint8_t*>(value.data()),
+          reinterpret_cast<const uint8_t*>(value.data()) + value.size()
+        );
       }
   
       for (size_t i = 0; i < output_values.size(); i++) {
-        s = current_output(i).validator.Add(key, Slice(output_values[i]));
+        s = current_output(i).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                       output_values[i].size()));
         if (!s.ok()) {
           return s;
         }
-        builders_[i]->Add(key, Slice(output_values[i]));
+        builders_[i]->Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                     output_values[i].size()));
     
-        stats_[i].num_output_records++;
+        stats_.num_output_records++;
         current_output_file_size_ = builders_[i]->EstimatedFileSize();
   
-        if (blob_garbage_meter_[i]) {
-          s = blob_garbage_meter_[i]->ProcessOutFlow(key, Slice(output_values[i]));
+        if (blob_garbage_meter_) {
+          s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                     output_values[i].size()));
         }
         if (!s.ok()) {
           return s;
         }
 
-        s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
-                                                    ikey.type);
+        s = current_output(i).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                    output_values[i].size()), ikey.sequence, ikey.type);
       }
       break;
     }
@@ -513,42 +529,50 @@ Status CompactionOutputs::AddToOutput(
       if (output_cfds_size > 0) {
         std::shared_ptr<TransformerData> splittingData = 
                   std::make_shared<DistributorData>(output_cfds_size, false, inputDataType);
-        transformers[0]->Transform(value.ToString(), output_values, splittingData, compactionJobId);
+        std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
+                                    reinterpret_cast<const uint8_t*>(value.data() + value.size()));
+        transformers[0]->Transform(val_vec, output_values, splittingData);
 
         std::shared_ptr<TransformerData> convertingData =
               std::make_shared<ConverterData>(inputDataType, outputDataType, columnDataType);
 
-        std::vector<std::string> output_converted_values;
+        std::vector<std::vector<uint8_t>> output_converted_values;
         for (auto ovalue : output_values) {
-          std::vector<std::string> ovalues;
-          transformers[1]->Transform(ovalue, ovalues, convertingData, compactionJobId);
+          std::vector<std::vector<uint8_t>> ovalues;
+          transformers[1]->Transform(ovalue, ovalues, convertingData);
           output_converted_values.push_back(ovalues[0]);
         }
         output_values = output_converted_values;
       } else {
-        output_values.push_back(value.data());
+        output_values.emplace_back(
+          reinterpret_cast<const uint8_t*>(value.data()),
+          reinterpret_cast<const uint8_t*>(value.data()) + value.size()
+        );
       }
   
       if (static_cast<int>(output_values.size()) == output_cfds_size) {
         for (int i = 0; i < output_cfds_size; i++) {
-          s = current_output(i).validator.Add(key, Slice(output_values[i]));
+          s = current_output(i).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                         output_values[i].size()));
           if (!s.ok()) {
             return s;
           }
-          builders_[i]->Add(key, Slice(output_values[i]));
+          builders_[i]->Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                       output_values[i].size()));
     
-          stats_[i].num_output_records++;
+          stats_.num_output_records++;
           current_output_file_size_ = builders_[i]->EstimatedFileSize();
   
-          if (blob_garbage_meter_[i]) {
-            s = blob_garbage_meter_[i]->ProcessOutFlow(key, Slice(output_values[i]));
+          if (blob_garbage_meter_) {
+            s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                       output_values[i].size()));
           }
           if (!s.ok()) {
             return s;
           }
 
-          s = current_output(i).meta.UpdateBoundaries(key, Slice(output_values[i]), ikey.sequence,
-                                                      ikey.type);
+          s = current_output(i).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                      output_values[i].size()), ikey.sequence, ikey.type);
         }
       }
       
@@ -557,56 +581,67 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::CONVERTER): {
       std::shared_ptr<TransformerData> convertingData =
                 std::make_shared<ConverterData>(inputDataType, outputDataType, columnDataType);
-      transformers[0]->Transform(value.ToString(), output_values, convertingData, compactionJobId);
-      s = current_output(0).validator.Add(key, Slice(output_values[0]));
+      std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
+                                  reinterpret_cast<const uint8_t*>(value.data() + value.size()));
+      transformers[0]->Transform(val_vec, output_values, convertingData);
+      s = current_output(0).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
+                                          output_values[0].size()));
       if (!s.ok()) {
         return s;
       }
 
-      builders_[0]->Add(key, Slice(output_values[0]));
-      stats_[0].num_output_records++;
+      builders_[0]->Add(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
+                                   output_values[0].size()));
+      stats_.num_output_records++;
       current_output_file_size_ = builders_[0]->EstimatedFileSize();
   
-      if (blob_garbage_meter_[0]) {
-        s = blob_garbage_meter_[0]->ProcessOutFlow(key, Slice(output_values[0]));
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
+                                                   output_values[0].size()));
       }
       if (!s.ok()) {
         return s;
       }
 
-      s = current_output(0).meta.UpdateBoundaries(key, Slice(output_values[0]), ikey.sequence,
-                                                  ikey.type);
+      s = current_output(0).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
+                                                  output_values[0].size()), ikey.sequence, ikey.type);
       break;
     }
     case to_underlying(TransformerType::MYNOOPER): {
       std::shared_ptr<TransformerData> mynooperData = std::make_shared<MynooperData>();
-      transformers[0]->Transform(value.ToString(), output_values, mynooperData, compactionJobId);
-      s = current_output(0).validator.Add(key, Slice(output_values[0]));
+      std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
+                                  reinterpret_cast<const uint8_t*>(value.data() + value.size()));
+      transformers[0]->Transform(val_vec, output_values, mynooperData);
+      s = current_output(0).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
+                                          output_values[0].size()));
       if (!s.ok()) {
         return s;
       }
 
-      builders_[0]->Add(key, Slice(output_values[0]));
-      stats_[0].num_output_records++;
+      builders_[0]->Add(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
+                                   output_values[0].size()));
+      stats_.num_output_records++;
       current_output_file_size_ = builders_[0]->EstimatedFileSize();
   
-      if (blob_garbage_meter_[0]) {
-        s = blob_garbage_meter_[0]->ProcessOutFlow(key, Slice(output_values[0]));
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
+                                                   output_values[0].size()));
       }
       if (!s.ok()) {
         return s;
       }
 
-      s = current_output(0).meta.UpdateBoundaries(key, Slice(output_values[0]), ikey.sequence,
-                                                  ikey.type);
+      s = current_output(0).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
+                                                  output_values[0].size()), ikey.sequence, ikey.type);
       break;
     }
     case to_underlying(TransformerType::AUGMENTER): {
-      std::string indkey(value.data(), value.size());
+      std::vector<uint8_t> indkey(reinterpret_cast<const uint8_t*>(value.data()),
+                                  reinterpret_cast<const uint8_t*>(value.data() + value.size()));
       std::string indvalue(key.data(), key.size());
       std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(indvalue,
                                                         inputDataType);
-      transformers[0]->Transform(indkey, output_values, augmentingData, compactionJobId);
+      transformers[0]->Transform(indkey, output_values, augmentingData);
       
       // handling primary data
       s = current_output(0).validator.Add(key, value);
@@ -614,34 +649,36 @@ Status CompactionOutputs::AddToOutput(
         return s;
       }
       builders_[0]->Add(key, value);
-      stats_[0].num_output_records++;
+      stats_.num_output_records++;
       current_output_file_size_ = builders_[0]->EstimatedFileSize();
-      if (blob_garbage_meter_[0]) {
-        s = blob_garbage_meter_[0]->ProcessOutFlow(key, value);
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(key, value);
       }
       if (!s.ok()) {
         return s;
       }
-      s = current_output(0).meta.UpdateBoundaries(key, value, ikey.sequence,
-                                                 ikey.type);
+      s = current_output(0).meta.UpdateBoundaries(key, value, ikey.sequence, ikey.type);
 
       // handling secondary index data
       for (size_t i = 0; i < output_values.size(); i++) {
-        s = current_ouput(i+1).validator.Add(Slice(output_values[i]), "");
+        s = current_output(i+1).validator.Add(Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                              output_values[i].size()), "");
         if (!s.ok()) {
           return s;
         }
-        builders_[i+1]->Add(Slice(output_values[i]), "");
-        stats_[i+1].num_output_records++;
+        builders_[i+1]->Add(Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                              output_values[i].size()), "");
+        stats_.num_output_records++;
         current_output_file_size_ = builders_[i+1]->EstimatedFileSize();
-        if (blob_garbage_meter_[i+1]) {
-          s = blob_garbage_meter_[i+1]->ProcessOutFlow(Slice(output_values[i]), "");
+        if (blob_garbage_meter_) {
+          s = blob_garbage_meter_->ProcessOutFlow(Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                       output_values[i].size()), "");
         }
         if (!s.ok()) {
           return s;
         }
-        s = current_output(i+1).meta.UpdateBoundaries(Slice(output_values[i]), "", ikey.sequence,
-                                                    ikey.type);
+        s = current_output(i+1).meta.UpdateBoundaries(Slice(reinterpret_cast<const char*>(output_values[i].data()),
+                                                      output_values[i].size()), "", ikey.sequence,  ikey.type);
       }
       break;
     }
@@ -673,11 +710,11 @@ Status CompactionOutputs::AddDerivedOutput(
       }
 
       builders_[i + 1]->Add(encoded_key, value);
-      stats_[i+1].num_output_records++;
+      stats_.num_output_records++;
       current_output_file_size_ = builders_[i+1]->EstimatedFileSize();
 
-      if (blob_garbage_meter_[i+1]) {
-        s = blob_garbage_meter_[i+1]->ProcessOutFlow(Slice(dout.first), Slice(dout.second));
+      if (blob_garbage_meter_) {
+        s = blob_garbage_meter_->ProcessOutFlow(Slice(dout.first), Slice(dout.second));
       }
       if (!s.ok()) {
         return s;

@@ -6,17 +6,11 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Converter::Transform(std::string input,
-                          std::vector<std::string>& outputs,
-                          const std::shared_ptr<TransformerData>& data,
-                          uint64_t job_id)
+void Converter::Transform(const std::vector<uint8_t>& input,
+                          std::vector<std::vector<uint8_t>>& outputs,
+                          const std::shared_ptr<TransformerData>& data) const
 {
     auto converterData = std::dynamic_pointer_cast<ConverterData>(data);
-
-    size_t end = input.find_last_not_of(" \t\n\r\0");
-    if (end != std::string::npos) {
-        input = input.substr(0, end+1);
-    }
  
     flatbuffers::FlatBufferBuilder builder;
     std::vector<int32_t> numvals;
@@ -24,7 +18,7 @@ void Converter::Transform(std::string input,
     switch (converterData->in_type) {
         case InputOutputDataType::PROTOBUF: {
             data::Row row;
-            row.ParseFromString(input);
+            row.ParseFromArray(input.data(), input.size());
             if (converterData->column_data_type == "numeric") {
                 for (int i = 0; i < row.columns_size(); i++) {
                     numvals.push_back(std::stoi(row.columns(i)));
@@ -77,9 +71,8 @@ void Converter::Transform(std::string input,
     builder.Finish(fb_row);
             
     uint8_t *buf = builder.GetBufferPointer();
-    int size = builder.GetSize();
-    std::string s(reinterpret_cast<char*>(buf), size);
-    outputs.push_back(s);
+    int bsize = builder.GetSize();
+    outputs.emplace_back(buf, buf + bsize);
     
     return;
 }

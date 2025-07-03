@@ -79,7 +79,7 @@ class SubcompactionState {
 
   // Get all outputs from the subcompaction. For per_key_placement compaction,
   // it returns both the last level outputs and penultimate level outputs.
-  //OutputIterator GetOutputs() const;
+  OutputIterator GetOutputs() const;
   OutputIterator GetOutputs(int pos) const;
 
   // Assign range dels aggregator, for each range_del, it can only be assigned
@@ -201,8 +201,12 @@ class SubcompactionState {
 
   void Cleanup(Cache* cache);
 
+  size_t GetCompactionOutputsSize() const {
+    return compaction_outputs_.GetOutputsSize();
+  }
+
   void AggregateCompactionStats(
-      InternalStats::CompactionStatsFull& compaction_stats, int pos) const;
+      InternalStats::CompactionStatsFull& compaction_stats) const;
 
   CompactionOutputs& Current() const {
     assert(current_outputs_);

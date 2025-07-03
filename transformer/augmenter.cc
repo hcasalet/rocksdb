@@ -5,10 +5,9 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Augmenter::Transform(std::string input,
-                          std::vector<std::string>& outputs,
-                          const std::shared_ptr<TransformerData>& data,
-                          uint64_t job_id) {
+void Augmenter::Transform(const std::vector<uint8_t>& input,
+                          std::vector<std::vector<uint8_t>>& outputs,
+                          const std::shared_ptr<TransformerData>& data) const {
     auto augmenterData = std::dynamic_pointer_cast<AugmenterData>(data);
     if (!augmenterData) {
         throw std::runtime_error("Invalid TransformerData: Failed to cast to AugmenterData.");
@@ -18,7 +17,7 @@ void Augmenter::Transform(std::string input,
     switch (augmenterData->input_type) {
         case InputOutputDataType::PROTOBUF: {
             data::Row row;
-            if (!row.ParseFromString(input)) {
+            if (!row.ParseFromArray(input.data(), input.size())) {
                 throw std::runtime_error("Failed to parse row from input string.");
             }
             if (row.columns_size() <= 0 || row.columns(0).empty()) {
@@ -43,7 +42,6 @@ void Augmenter::Transform(std::string input,
             break;
         }
         default: {
-            index_key = input;
             break;
         }
     }
@@ -51,7 +49,7 @@ void Augmenter::Transform(std::string input,
     if (index_key != "") {
         index_key += "$$" + augmenterData->row_key;
     }
-    outputs.push_back(index_key);
+    outputs.emplace_back(index_key.begin(), index_key.end());
 }
 
 TransformerType Augmenter::Supports() const {

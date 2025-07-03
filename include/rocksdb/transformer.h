@@ -61,10 +61,9 @@ class Transformer {
   virtual ~Transformer() = default;
 
   // Transforms a single input record into one or more outputs.
-  virtual void Transform(std::string input,
-                         std::vector<std::string>& outputs,
-                         const std::shared_ptr<TransformerData>& data,
-                         uint64_t job_id) = 0;
+  virtual void Transform(const std::vector<uint8_t>& input,
+                         std::vector<std::vector<uint8_t>>& outputs,
+                         const std::shared_ptr<TransformerData>& data) const = 0;
   
   // Declares which transformation features this transformer supports
   virtual TransformerType Supports() const = 0;
