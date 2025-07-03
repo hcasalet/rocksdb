@@ -51,10 +51,11 @@ constexpr int to_underlying(TransformerType type) {
     return static_cast<std::underlying_type_t<TransformerType>>(type);
 }
 
-class TransformerData {
+// A schema descriptor defines how to interpret or transform input data.
+class SchemaDescriptor {
   public:
-    virtual ~TransformerData() = default;
-};
+   virtual ~SchemaDescriptor() = default;
+ };
 
 class Transformer {
  public:
@@ -63,7 +64,7 @@ class Transformer {
   // Transforms a single input record into one or more outputs.
   virtual void Transform(const std::vector<uint8_t>& input,
                          std::vector<std::vector<uint8_t>>& outputs,
-                         const std::shared_ptr<TransformerData>& data) const = 0;
+                         const std::shared_ptr<SchemaDescriptor>& data) const = 0;
   
   // Declares which transformation features this transformer supports
   virtual TransformerType Supports() const = 0;

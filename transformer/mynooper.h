@@ -5,9 +5,9 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-class MynooperData : public TransformerData {
+class MynooperSchema : public SchemaDescriptor {
   public:
-    MynooperData() {}
+    MynooperSchema() {}
 };
 
 class Mynooper : public Transformer {
@@ -17,7 +17,7 @@ public:
 
     void Transform(const std::vector<uint8_t>& input,
                    std::vector<std::vector<uint8_t>>& outputs,
-                   const std::shared_ptr<TransformerData>& data) const override;
+                   const std::shared_ptr<SchemaDescriptor>& schema) const override;
     
     TransformerType Supports() const override;
 };

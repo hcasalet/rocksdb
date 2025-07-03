@@ -449,8 +449,8 @@ Status CompactionOutputs::AddToOutput(
     }
     case to_underlying(TransformerType::DISTRIBUTOR): {
       if (output_cfds_size > 0) {
-        std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, false, inputDataType);
+        std::shared_ptr<SchemaDescriptor> splittingData = 
+                  std::make_shared<DistributorSchema>(output_cfds_size, false, inputDataType);
         std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                   reinterpret_cast<const uint8_t*>(value.data() + value.size()));
         transformers[0]->Transform(val_vec, output_values, splittingData);
@@ -488,8 +488,8 @@ Status CompactionOutputs::AddToOutput(
     }
     case to_underlying(TransformerType::DISTRIBUTORWRITEBOTH): {
       if (output_cfds_size > 0) {
-        std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, true, inputDataType);
+        std::shared_ptr<SchemaDescriptor> splittingData = 
+                  std::make_shared<DistributorSchema>(output_cfds_size, true, inputDataType);
         std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                     reinterpret_cast<const uint8_t*>(value.data() + value.size()));
         transformers[0]->Transform(val_vec, output_values, splittingData);
@@ -527,14 +527,14 @@ Status CompactionOutputs::AddToOutput(
     }
     case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
       if (output_cfds_size > 0) {
-        std::shared_ptr<TransformerData> splittingData = 
-                  std::make_shared<DistributorData>(output_cfds_size, false, inputDataType);
+        std::shared_ptr<SchemaDescriptor> splittingData = 
+                  std::make_shared<DistributorSchema>(output_cfds_size, false, inputDataType);
         std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                     reinterpret_cast<const uint8_t*>(value.data() + value.size()));
         transformers[0]->Transform(val_vec, output_values, splittingData);
 
-        std::shared_ptr<TransformerData> convertingData =
-              std::make_shared<ConverterData>(inputDataType, outputDataType, columnDataType);
+        std::shared_ptr<SchemaDescriptor> convertingData =
+              std::make_shared<ConverterSchema>(inputDataType, outputDataType, columnDataType);
 
         std::vector<std::vector<uint8_t>> output_converted_values;
         for (auto ovalue : output_values) {
@@ -579,8 +579,8 @@ Status CompactionOutputs::AddToOutput(
       break;
     }
     case to_underlying(TransformerType::CONVERTER): {
-      std::shared_ptr<TransformerData> convertingData =
-                std::make_shared<ConverterData>(inputDataType, outputDataType, columnDataType);
+      std::shared_ptr<SchemaDescriptor> convertingData =
+                std::make_shared<ConverterSchema>(inputDataType, outputDataType, columnDataType);
       std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                   reinterpret_cast<const uint8_t*>(value.data() + value.size()));
       transformers[0]->Transform(val_vec, output_values, convertingData);
@@ -608,10 +608,10 @@ Status CompactionOutputs::AddToOutput(
       break;
     }
     case to_underlying(TransformerType::MYNOOPER): {
-      std::shared_ptr<TransformerData> mynooperData = std::make_shared<MynooperData>();
+      std::shared_ptr<SchemaDescriptor> mynooperSchema = std::make_shared<MynooperSchema>();
       std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                   reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-      transformers[0]->Transform(val_vec, output_values, mynooperData);
+      transformers[0]->Transform(val_vec, output_values, mynooperSchema);
       s = current_output(0).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
                                           output_values[0].size()));
       if (!s.ok()) {
@@ -639,7 +639,7 @@ Status CompactionOutputs::AddToOutput(
       std::vector<uint8_t> indkey(reinterpret_cast<const uint8_t*>(value.data()),
                                   reinterpret_cast<const uint8_t*>(value.data() + value.size()));
       std::string indvalue(key.data(), key.size());
-      std::shared_ptr<TransformerData> augmentingData = std::make_shared<AugmenterData>(indvalue,
+      std::shared_ptr<SchemaDescriptor> augmentingData = std::make_shared<AugmenterSchema>(indvalue,
                                                         inputDataType);
       transformers[0]->Transform(indkey, output_values, augmentingData);
       

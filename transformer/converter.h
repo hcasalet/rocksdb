@@ -16,12 +16,12 @@ namespace ROCKSDB_NAMESPACE {
     FLATBUFFERS
   };
 
-  class ConverterData : public TransformerData {
+  class ConverterSchema : public SchemaDescriptor {
     public:
       InputOutputDataType in_type;
       InputOutputDataType out_type;
       std::string column_data_type;
-      ConverterData(InputOutputDataType intype, InputOutputDataType outtype,
+      ConverterSchema(InputOutputDataType intype, InputOutputDataType outtype,
                     std::string columndatatype) :
         in_type(intype), out_type(outtype), column_data_type(columndatatype) {}
   };
@@ -33,7 +33,7 @@ namespace ROCKSDB_NAMESPACE {
 
       void Transform(const std::vector<uint8_t>& input,
                      std::vector<std::vector<uint8_t>>& outputs,
-                     const std::shared_ptr<TransformerData>& data) const override;
+                     const std::shared_ptr<SchemaDescriptor>& data) const override;
     
       TransformerType Supports() const override;
     private:

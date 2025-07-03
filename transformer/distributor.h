@@ -5,12 +5,12 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-class DistributorData : public TransformerData {
+class DistributorSchema : public SchemaDescriptor {
   public:
     int splits;
     bool keepOriginal;
     InputOutputDataType vtype;
-    DistributorData(int num_splits, bool keep_original, InputOutputDataType v_type) : 
+    DistributorSchema(int num_splits, bool keep_original, InputOutputDataType v_type) : 
       splits(num_splits), keepOriginal(keep_original), vtype(v_type) {}
 };
 
@@ -21,7 +21,7 @@ public:
 
     void Transform(const std::vector<uint8_t>& input,
                    std::vector<std::vector<uint8_t>>& outputs,
-                   const std::shared_ptr<TransformerData>& data) const override;
+                   const std::shared_ptr<SchemaDescriptor>& data) const override;
     
     TransformerType Supports() const override;
 private:

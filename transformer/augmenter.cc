@@ -7,14 +7,14 @@ namespace ROCKSDB_NAMESPACE {
 
 void Augmenter::Transform(const std::vector<uint8_t>& input,
                           std::vector<std::vector<uint8_t>>& outputs,
-                          const std::shared_ptr<TransformerData>& data) const {
-    auto augmenterData = std::dynamic_pointer_cast<AugmenterData>(data);
-    if (!augmenterData) {
-        throw std::runtime_error("Invalid TransformerData: Failed to cast to AugmenterData.");
+                          const std::shared_ptr<SchemaDescriptor>& schema) const {
+    auto augmenterSchema = std::dynamic_pointer_cast<AugmenterSchema>(schema);
+    if (!augmenterSchema) {
+        throw std::runtime_error("Invalid SchemaDescriptor: Failed to cast to AugmenterSchema.");
     }
 
     std::string index_key;
-    switch (augmenterData->input_type) {
+    switch (augmenterSchema->input_type) {
         case InputOutputDataType::PROTOBUF: {
             data::Row row;
             if (!row.ParseFromArray(input.data(), input.size())) {
@@ -47,7 +47,7 @@ void Augmenter::Transform(const std::vector<uint8_t>& input,
     }
 
     if (index_key != "") {
-        index_key += "$$" + augmenterData->row_key;
+        index_key += "$$" + augmenterSchema->row_key;
     }
     outputs.emplace_back(index_key.begin(), index_key.end());
 }

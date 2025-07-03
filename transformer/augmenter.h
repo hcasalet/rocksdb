@@ -5,11 +5,11 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-class AugmenterData : public TransformerData {
+class AugmenterSchema : public SchemaDescriptor {
   public:
     std::string row_key;
     InputOutputDataType input_type;
-    AugmenterData(std::string rowKey, InputOutputDataType inType) :
+    AugmenterSchema(std::string rowKey, InputOutputDataType inType) :
               row_key(rowKey), input_type(inType) {}
 };
 
@@ -39,7 +39,7 @@ class Augmenter : public Transformer
 
     void Transform(const std::vector<uint8_t>& input,
                    std::vector<std::vector<uint8_t>>& outputs,
-                   const std::shared_ptr<TransformerData>& data) const override;
+                   const std::shared_ptr<SchemaDescriptor>& data) const override;
   
     TransformerType Supports() const override;
   private:

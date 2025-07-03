@@ -7,15 +7,15 @@ namespace ROCKSDB_NAMESPACE {
 
 void Distributor::Transform(const std::vector<uint8_t>& input,
                           std::vector<std::vector<uint8_t>>& outputs,
-                          const std::shared_ptr<TransformerData>& data) const
+                          const std::shared_ptr<SchemaDescriptor>& schema) const
 {
-    auto distributorData = std::dynamic_pointer_cast<DistributorData>(data);
-    if (distributorData->keepOriginal) {
+    auto distributorSchema = std::dynamic_pointer_cast<DistributorSchema>(schema);
+    if (distributorSchema->keepOriginal) {
         outputs.push_back(input);
     }
 
-    int splits = distributorData->splits;
-    InputOutputDataType vtype = distributorData->vtype;
+    int splits = distributorSchema->splits;
+    InputOutputDataType vtype = distributorSchema->vtype;
 
     switch (vtype) {
         case InputOutputDataType::PROTOBUF: {
