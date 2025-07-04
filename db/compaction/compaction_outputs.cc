@@ -486,45 +486,6 @@ Status CompactionOutputs::AddToOutput(
       }
       break;
     }
-    case to_underlying(TransformerType::DISTRIBUTORWRITEBOTH): {
-      if (output_cfds_size > 0) {
-        std::shared_ptr<SchemaDescriptor> splittingData = 
-                  std::make_shared<DistributorSchema>(output_cfds_size, true, inputDataType);
-        std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
-                                    reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-        transformers[0]->Transform(val_vec, output_values, splittingData);
-      } else {
-        output_values.emplace_back(
-          reinterpret_cast<const uint8_t*>(value.data()),
-          reinterpret_cast<const uint8_t*>(value.data()) + value.size()
-        );
-      }
-  
-      for (size_t i = 0; i < output_values.size(); i++) {
-        s = current_output(i).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                       output_values[i].size()));
-        if (!s.ok()) {
-          return s;
-        }
-        builders_[i]->Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                     output_values[i].size()));
-    
-        stats_.num_output_records++;
-        current_output_file_size_ = builders_[i]->EstimatedFileSize();
-  
-        if (blob_garbage_meter_) {
-          s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                     output_values[i].size()));
-        }
-        if (!s.ok()) {
-          return s;
-        }
-
-        s = current_output(i).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                    output_values[i].size()), ikey.sequence, ikey.type);
-      }
-      break;
-    }
     case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
       if (output_cfds_size > 0) {
         std::shared_ptr<SchemaDescriptor> splittingData = 

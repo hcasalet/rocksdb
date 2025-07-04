@@ -26,8 +26,7 @@ enum class TransformerType {
   DISTRIBUTOR          = 1 << 0,       // 1
   CONVERTER            = 1 << 1,       // 2
   AUGMENTER            = 1 << 2,       // 4
-  DISTRIBUTORWRITEBOTH = 1 << 5,       // 32
-  MYNOOPER             = 1 << 6,       // 64
+  MYNOOPER             = 1 << 3,       // 8
 };
 
 enum class InputOutputDataType {
@@ -51,27 +50,54 @@ constexpr int to_underlying(TransformerType type) {
     return static_cast<std::underlying_type_t<TransformerType>>(type);
 }
 
+using ByteBuffer = std::vector<uint8_t>;
+
 // A schema descriptor defines how to interpret or transform input data.
 class SchemaDescriptor {
   public:
    virtual ~SchemaDescriptor() = default;
+
+   // Shows the data format before and after the transformation
+   virtual InputOutputDataType InputType() const { return InputOutputDataType::UNKNOWN; }
+   virtual InputOutputDataType OutputType() const { return InputOutputDataType::UNKNOWN; }
+
+   // Validates
+   virtual bool Validate(const ByteBuffer& input_data) const { return true; }
+
+   // Returns a pointer to an opaque structured representation.
+   // For example, a parsed Protobuf message or a JSON object.
+   virtual std::shared_ptr<void> Parse(const ByteBuffer& data) const = 0;
+
+   // Converts a structured object (possibly transformed) back into bytes
+   virtual ByteBuffer Serialize(const std::shared_ptr<void>& obj) const = 0;
+
+   // Fetch all the fields in the parsed object
+   virtual std::vector<std::pair<std::string, ByteBuffer>> 
+   GetFields(const std::shared_ptr<void>& obj) const {
+    return {};
+   }
+
  };
 
 class Transformer {
  public:
   virtual ~Transformer() = default;
 
+  // Returns transformer name
+  virtual std::string Name() const = 0;
+
   // Transforms a single input record into one or more outputs.
-  virtual void Transform(const std::vector<uint8_t>& input,
-                         std::vector<std::vector<uint8_t>>& outputs,
-                         const std::shared_ptr<SchemaDescriptor>& data) const = 0;
+  virtual void Transform(const ByteBuffer& input,
+                         std::vector<ByteBuffer>& outputs,
+                         const std::shared_ptr<SchemaDescriptor>& schema) const = 0;
   
   // Declares which transformation features this transformer supports
   virtual TransformerType Supports() const = 0;
 };
 
 // Create a new Transformer that can be shared among multiple RocksDB instances
-extern std::shared_ptr<Transformer> NewTransformer(
+// Returns nullptr for TransformerType: NOTRANSFORMATION.
+[[nodiscard]] std::shared_ptr<Transformer> CreateTransformer(
     const TransformerType transformer_type = TransformerType::NOTRANSFORMATION);
 
 }

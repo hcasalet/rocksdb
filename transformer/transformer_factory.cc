@@ -1,9 +1,11 @@
+#include "rocksdb/transformer.h"
 #include "distributor.h"
 #include "converter.h"
 #include "augmenter.h"
 #include "mynooper.h"
 
-std::shared_ptr<Transformer> NewTransformer(const TransformerType transformer_type) {
+namespace ROCKSDB_NAMESPACE {
+std::shared_ptr<Transformer> CreateTransformer(const TransformerType transformer_type) {
     switch (transformer_type) {
         case TransformerType::DISTRIBUTOR:
             return std::make_shared<Distributor>();
@@ -17,4 +19,5 @@ std::shared_ptr<Transformer> NewTransformer(const TransformerType transformer_ty
         default:
             return nullptr;  // Handle invalid type
     }
+}
 }

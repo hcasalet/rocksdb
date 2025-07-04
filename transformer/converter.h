@@ -24,6 +24,10 @@ namespace ROCKSDB_NAMESPACE {
       ConverterSchema(InputOutputDataType intype, InputOutputDataType outtype,
                     std::string columndatatype) :
         in_type(intype), out_type(outtype), column_data_type(columndatatype) {}
+
+      std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
+
+      ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
   };
 
   class Converter : public Transformer {
@@ -31,12 +35,12 @@ namespace ROCKSDB_NAMESPACE {
       Converter() {};
       ~Converter() {};
 
+      std::string Name() const override { return "Converter"; }
+
       void Transform(const std::vector<uint8_t>& input,
                      std::vector<std::vector<uint8_t>>& outputs,
                      const std::shared_ptr<SchemaDescriptor>& data) const override;
     
-      TransformerType Supports() const override;
-    private:
-      std::vector<std::map<std::string, std::vector<std::string>>> stores_;
+      TransformerType Supports() const override { return TransformerType::CONVERTER; }
     };
 }

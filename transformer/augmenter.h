@@ -11,6 +11,10 @@ class AugmenterSchema : public SchemaDescriptor {
     InputOutputDataType input_type;
     AugmenterSchema(std::string rowKey, InputOutputDataType inType) :
               row_key(rowKey), input_type(inType) {}
+
+    std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
+
+    ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
 };
 
 class DeriveFuncData {
@@ -33,19 +37,16 @@ class DeriveFuncData {
 class Augmenter : public Transformer
 {
   public:
-    Augmenter(std::vector<DeriveFuncData*>& derivers)
-        : derivers_(derivers) {};
+    Augmenter() {};
     ~Augmenter() {};
+
+    std::string Name() const override { return "Augmenter"; }
 
     void Transform(const std::vector<uint8_t>& input,
                    std::vector<std::vector<uint8_t>>& outputs,
                    const std::shared_ptr<SchemaDescriptor>& data) const override;
   
-    TransformerType Supports() const override;
-  private:
-    std::vector<DeriveFuncData*> derivers_;
-    std::unordered_map<int, std::map<std::string, std::vector<std::string>>> stores_;
-    std::mutex stores_mutex_; // Mutex to protect access to store_
+    TransformerType Supports() const override { return TransformerType::AUGMENTER; }
 };
 
 }

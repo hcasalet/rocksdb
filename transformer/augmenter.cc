@@ -5,6 +5,14 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+std::shared_ptr<void> AugmenterSchema::Parse(const ByteBuffer& data) const {
+    return nullptr;
+}
+
+ByteBuffer AugmenterSchema::Serialize(const std::shared_ptr<void>& obj) const {
+    return {};
+}
+
 void Augmenter::Transform(const std::vector<uint8_t>& input,
                           std::vector<std::vector<uint8_t>>& outputs,
                           const std::shared_ptr<SchemaDescriptor>& schema) const {
@@ -50,10 +58,6 @@ void Augmenter::Transform(const std::vector<uint8_t>& input,
         index_key += "$$" + augmenterSchema->row_key;
     }
     outputs.emplace_back(index_key.begin(), index_key.end());
-}
-
-TransformerType Augmenter::Supports() const {
-    return TransformerType::AUGMENTER;
 }
 
 }

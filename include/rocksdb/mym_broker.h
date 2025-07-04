@@ -77,8 +77,7 @@ class MymBroker {
         Options options_;
         ColFamMeta user_cf_meta_;
         std::unordered_map<int, std::unordered_map<std::string, ColFamMeta>> int_cf_meta_;
-        SchemaDescriptor transformer_schema_;
-
+        
         void genIntColFamDescriptors(const std::string& cfname,
                                      std::vector<ColumnFamilyDescriptor>& column_families,
                                      SchemaDescriptor& transformer_schema);
