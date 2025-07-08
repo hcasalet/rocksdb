@@ -1,6 +1,7 @@
 #pragma once
 
 #include <google/protobuf/message.h>
+#include <google/protobuf/descriptor.h>
 #include "rocksdb/transformer.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -9,21 +10,25 @@ namespace ROCKSDB_NAMESPACE {
     public:
       ProtobufDistributorSchema(std::unique_ptr<google::protobuf::Message> input_proto,
                                 std::vector<std::unique_ptr<google::protobuf::Message>> output_proto) :
-        input_proto_msgtype_(std::move(input_proto)), output_proto_msgtypes_(std::move(output_proto)) {}
+        input_proto_msgtype_(std::move(input_proto)), output_proto_msgtypes_(std::move(output_proto)) {
+          BuildInputFieldSchema();
+          BuildOutputFieldSchemas();
+        }
   
       InputOutputDataType InputType() const override { return InputOutputDataType::PROTOBUF; }
       InputOutputDataType OutputType() const override { return InputOutputDataType::PROTOBUF; }
-      bool Validate(const ByteBuffer& input_data) const override {
-        return !input_data.empty();  // Add real checks if needed later
-      }
+
+      bool Validate(const ByteBuffer& input_data) const override;
   
       std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
       ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
 
       int GetNumSplits() const { return output_proto_msgtypes_.size(); }
+
       std::unique_ptr<google::protobuf::Message> GetInputSchemaSpec() const { 
         return std::unique_ptr<google::protobuf::Message>(input_proto_msgtype_->New());
       }
+
       std::vector<std::unique_ptr<google::protobuf::Message>> GetOutputSchemaSpecs() const {
         std::vector<std::unique_ptr<google::protobuf::Message>> clones;
         for (const auto& m : output_proto_msgtypes_) {
@@ -32,9 +37,49 @@ namespace ROCKSDB_NAMESPACE {
         return clones;
       }
 
+      std::vector<FieldSchema> GetInputFieldSchema() const override {
+        return input_field_schema_;
+      }
+    
+      std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const override {
+        return output_field_schemas_;
+      }
+
     private:
       std::unique_ptr<google::protobuf::Message> input_proto_msgtype_;
       std::vector<std::unique_ptr<google::protobuf::Message>> output_proto_msgtypes_;
+
+      std::vector<FieldSchema> input_field_schema_;
+      std::vector<std::vector<FieldSchema>> output_field_schemas_;
+
+      void BuildInputFieldSchema() {
+        const auto* descriptor = input_proto_msgtype_->GetDescriptor();
+        for (int i = 0; i < descriptor->field_count(); ++i) {
+          const auto* field = descriptor->field(i);
+          input_field_schema_.push_back({
+            field->name(),
+            field->type_name(),  // Or use Type enum
+            field->number()
+          });
+        }
+      }
+
+      void BuildOutputFieldSchemas() {
+        for (const auto& msg : output_proto_msgtypes_) {
+          std::vector<FieldSchema> output_field_schema;
+          const auto* descriptor = msg->GetDescriptor();
+          for (int i = 0; i < descriptor->field_count(); ++i) {
+            const auto* field = descriptor->field(i);
+            output_field_schema.push_back({
+              field->name(),
+              field->type_name(),
+              field->number()
+            });
+          }
+          output_field_schemas_.push_back(output_field_schema);
+        }
+      }
+
   };
 
 }

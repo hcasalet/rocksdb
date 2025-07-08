@@ -25,4 +25,12 @@ ByteBuffer ProtobufDistributorSchema::Serialize(const std::shared_ptr<void>& obj
     return buffer;
 }
 
+bool ProtobufDistributorSchema::Validate(const ByteBuffer& input_data) const {
+    if (input_data.empty()) return false;
+
+    std::unique_ptr<google::protobuf::Message> msg(input_proto_msgtype_->New());
+
+    return msg->ParseFromArray(input_data.data(), static_cast<int>(input_data.size()));
+}
+
 }

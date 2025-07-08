@@ -54,24 +54,33 @@ constexpr int to_underlying(TransformerType type) {
 
 using ByteBuffer = std::vector<uint8_t>;
 
+struct FieldSchema {
+  std::string name;
+  std::string type;  // Could use enum for strict typing if preferred
+  int field_number;
+};
+
 // A schema descriptor defines how to interpret or transform input data.
 class SchemaDescriptor {
   public:
    virtual ~SchemaDescriptor() = default;
 
    // Shows the data format before and after the transformation
-   virtual InputOutputDataType InputType() const { return InputOutputDataType::UNKNOWN; }
-   virtual InputOutputDataType OutputType() const { return InputOutputDataType::UNKNOWN; }
+   /*virtual InputOutputDataType InputType() const = 0;
+   virtual InputOutputDataType OutputType() const = 0;
+   virtual bool Validate(const ByteBuffer& input_data) const = 0;*/
+   virtual InputOutputDataType InputType() const { return InputOutputDataType::UNKNOWN; } // temporary
+   virtual InputOutputDataType OutputType() const { return InputOutputDataType::UNKNOWN; } // temporary
+   virtual bool Validate(const ByteBuffer& input_data) const { return true; } // temporary
 
-   // Validates
-   virtual bool Validate(const ByteBuffer& input_data) const { return true; }
 
-   // Returns a pointer to an opaque structured representation.
-   // For example, a parsed Protobuf message or a JSON object.
    virtual std::shared_ptr<void> Parse(const ByteBuffer& data) const = 0;
-
-   // Converts a structured object (possibly transformed) back into bytes
    virtual ByteBuffer Serialize(const std::shared_ptr<void>& obj) const = 0;
+
+   /*virtual std::vector<FieldSchema> GetInputFieldSchema() const = 0;
+   virtual std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const = 0;*/
+   virtual std::vector<FieldSchema> GetInputFieldSchema() const { return {}; } // temporary
+   virtual std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const { return {};} // temporary
 
  };
 
