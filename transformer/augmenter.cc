@@ -1,7 +1,6 @@
 #include <sstream>
 #include <nlohmann/json.hpp>
 #include "augmenter.h"
-#include "columns.pb.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -28,10 +27,10 @@ void Augmenter::Transform(const std::vector<uint8_t>& input,
             if (!row.ParseFromArray(input.data(), input.size())) {
                 throw std::runtime_error("Failed to parse row from input string.");
             }
-            if (row.columns_size() <= 0 || row.columns(0).empty()) {
+            if (row.field1() < 0) {
                 throw std::runtime_error("Invalid or empty column in row.");
             }
-            index_key = row.columns(0);
+            index_key = row.field1();
             break;
         }
         case InputOutputDataType::JSON: {

@@ -4,6 +4,7 @@
 #include "flat/row_generated.h"
 #include "flat/row_num_generated.h"
 #include "flat/row_str_generated.h"
+#include "data.pb.h"
 
 namespace ROCKSDB_NAMESPACE {
 

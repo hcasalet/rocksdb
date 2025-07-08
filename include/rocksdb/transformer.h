@@ -33,7 +33,9 @@ enum class InputOutputDataType {
   UNKNOWN          = 0,
   JSON             = 1 << 0,
   PROTOBUF         = 1 << 1,
-  FLATBUFFERS      = 1 << 2
+  FLATBUFFERS      = 1 << 2,
+  AVRO             = 1 << 3,
+  PARQUET          = 1 << 4,
 };
 
 constexpr TransformerType operator|(TransformerType lhs, TransformerType rhs) {
@@ -70,12 +72,6 @@ class SchemaDescriptor {
 
    // Converts a structured object (possibly transformed) back into bytes
    virtual ByteBuffer Serialize(const std::shared_ptr<void>& obj) const = 0;
-
-   // Fetch all the fields in the parsed object
-   virtual std::vector<std::pair<std::string, ByteBuffer>> 
-   GetFields(const std::shared_ptr<void>& obj) const {
-    return {};
-   }
 
  };
 

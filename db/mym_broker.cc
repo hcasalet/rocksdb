@@ -5,6 +5,7 @@
 #include "transformer/converter.h"
 #include "transformer/augmenter.h"
 #include "transformer/mynooper.h"
+#include "transformer/protobuf_distributor_schema.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -17,8 +18,8 @@ MymBroker::MymBroker(const std::string& cfname,
 {
     bool split{false}, convert{false}, augment{false};
     int num_splits = 1;
-    if (auto distributor = dynamic_cast<DistributorSchema*>(&schema_descriptor)) {
-        num_splits = distributor->splits;
+    if (auto distributor = dynamic_cast<ProtobufDistributorSchema*>(&schema_descriptor)) {
+        num_splits = distributor->GetNumSplits();
         split = true;
     } else if (auto converter = dynamic_cast<ConverterSchema*>(&schema_descriptor)) {
         convert = true;
@@ -250,9 +251,9 @@ void MymBroker::genIntColFamDescriptors(const std::string& cfname,
 {
     column_families.push_back(ColumnFamilyDescriptor(cfname, ColumnFamilyOptions(options_)));
 
-    if (auto distributor = dynamic_cast<DistributorSchema*>(&schema_descriptor)) {
+    if (auto distributor = dynamic_cast<ProtobufDistributorSchema*>(&schema_descriptor)) {
         bool lastSplitLevel = false;
-        int num_splits = distributor->splits;
+        int num_splits = distributor->GetNumSplits();
         std::string prefix = cfname + "_sys_cf";
         std::queue<int> parents;
         parents.push(options_.num_columns);

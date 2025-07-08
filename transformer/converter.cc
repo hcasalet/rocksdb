@@ -2,7 +2,6 @@
 
 #include <nlohmann/json.hpp>
 #include "converter.h"
-#include "columns.pb.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -28,21 +27,44 @@ void Converter::Transform(const std::vector<uint8_t>& input,
             data::Row row;
             row.ParseFromArray(input.data(), input.size());
             if (converterSchema->column_data_type == "numeric") {
-                for (int i = 0; i < row.columns_size(); i++) {
-                    numvals.push_back(std::stoi(row.columns(i)));
-                } 
+                /*numvals.push_back(row.field1());
+                numvals.push_back(row.field2());
+                numvals.push_back(row.field3());
+                numvals.push_back(row.field4());
+                numvals.push_back(row.field5());
+                numvals.push_back(row.field6());
+                numvals.push_back(row.field7());
+                numvals.push_back(row.field8());
+                numvals.push_back(row.field9());
+                numvals.push_back(row.field10());
+                numvals.push_back(row.field11());
+                numvals.push_back(row.field12()); 
             } else if (converterSchema->column_data_type == "string") {
-                for (int i = 0; i < row.columns_size(); i++) {
-                    strvals.push_back(builder.CreateString(row.columns(i)));
-                }
+                strvals.push_back(builder.CreateString(row.field1()));
+                strvals.push_back(builder.CreateString(row.field2()));
+                strvals.push_back(builder.CreateString(row.field3()));
+                strvals.push_back(builder.CreateString(row.field4()));
+                strvals.push_back(builder.CreateString(row.field5()));
+                strvals.push_back(builder.CreateString(row.field6()));
+                strvals.push_back(builder.CreateString(row.field7()));
+                strvals.push_back(builder.CreateString(row.field8()));
+                strvals.push_back(builder.CreateString(row.field9()));
+                strvals.push_back(builder.CreateString(row.field10()));
+                strvals.push_back(builder.CreateString(row.field11()));
+                strvals.push_back(builder.CreateString(row.field12())); */
             } else {
-                for (int i = 0; i < row.columns_size(); i++) {
-                    try {
-                        numvals.push_back(std::stoi(row.columns(i)));
-                    } catch (...) {
-                        strvals.push_back(builder.CreateString(row.columns(i)));
-                    }
-                }
+                numvals.push_back(row.field1());
+                numvals.push_back(row.field2());
+                numvals.push_back(row.field3());
+                numvals.push_back(row.field4());
+                numvals.push_back(row.field12());
+                strvals.push_back(builder.CreateString(row.field5()));
+                strvals.push_back(builder.CreateString(row.field6()));
+                strvals.push_back(builder.CreateString(row.field7()));
+                strvals.push_back(builder.CreateString(row.field8()));
+                strvals.push_back(builder.CreateString(row.field9()));
+                strvals.push_back(builder.CreateString(row.field10()));
+                strvals.push_back(builder.CreateString(row.field11()));
             }
             break;
         }

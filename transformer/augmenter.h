@@ -2,6 +2,7 @@
 #include <mutex>
 #include <functional>
 #include "rocksdb/transformer.h"
+#include "data.pb.h"
 
 namespace ROCKSDB_NAMESPACE {
 

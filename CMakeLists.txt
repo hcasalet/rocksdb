@@ -637,7 +637,6 @@ endif()
 find_package(Threads REQUIRED)
 
 # Main library source code
-
 set(SOURCES
         cache/cache.cc
         cache/cache_entry_roles.cc
@@ -867,6 +866,7 @@ set(SOURCES
         transformer/augmenter.cc
         transformer/mynooper.cc
         transformer/transformer_factory.cc
+        transformer/protobuf_distributor_schema.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc
@@ -1131,16 +1131,16 @@ find_package(jsoncpp CONFIG REQUIRED)
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
 target_include_directories(
-  ${ROCKSDB_STATIC_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto ${CMAKE_SOURCE_DIR}/flat)
+  ${ROCKSDB_STATIC_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/flat ${PROTO_GEN_DIR})
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE 
-  proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} jsoncpp_lib)
+proto_generated ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} jsoncpp_lib)
 
 set(ROCKSDB_BUILD_SHARED OFF)
 if(ROCKSDB_BUILD_SHARED)
   add_library(${ROCKSDB_SHARED_LIB} SHARED ${SOURCES} ${BUILD_VERSION_CC})
-  target_include_directories(${ROCKSDB_SHARED_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/proto)
+  target_include_directories(${ROCKSDB_SHARED_LIB} PUBLIC ${PROTO_GEN_DIR})
   target_link_libraries(${ROCKSDB_SHARED_LIB} PRIVATE 
-    proto ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} jsoncpp_lib)
+    proto_generated ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} jsoncpp_lib)
 
   if(WIN32)
     set_target_properties(${ROCKSDB_SHARED_LIB} PROPERTIES
@@ -1504,7 +1504,7 @@ if(WITH_TESTS)
   add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
   set(TESTUTILLIB testutillib${ARTIFACT_SUFFIX})
   add_library(${TESTUTILLIB} STATIC ${TESTUTIL_SOURCE})
-  target_link_libraries(${TESTUTILLIB} ${ROCKSDB_LIB} ${FOLLY_LIBS} proto)
+  target_link_libraries(${TESTUTILLIB} ${ROCKSDB_LIB} ${FOLLY_LIBS} proto_generated)
   if(MSVC)
     set_target_properties(${TESTUTILLIB} PROPERTIES COMPILE_FLAGS "/Fd${CMAKE_CFG_INTDIR}/testutillib${ARTIFACT_SUFFIX}.pdb")
   endif()
@@ -1523,7 +1523,7 @@ if(WITH_TESTS)
         EXCLUDE_FROM_DEFAULT_BUILD_RELWITHDEBINFO 1
         OUTPUT_NAME ${exename}${ARTIFACT_SUFFIX}
       )
-      target_link_libraries(${exename}${ARTIFACT_SUFFIX} testutillib${ARTIFACT_SUFFIX} testharness gtest ${THIRDPARTY_LIBS} ${ROCKSDB_LIB} proto)
+      target_link_libraries(${exename}${ARTIFACT_SUFFIX} testutillib${ARTIFACT_SUFFIX} testharness gtest ${THIRDPARTY_LIBS} ${ROCKSDB_LIB} proto_generated)
       if(NOT "${exename}" MATCHES "db_sanity_test")
         gtest_discover_tests(${exename} DISCOVERY_TIMEOUT 120)
         add_dependencies(check ${exename}${ARTIFACT_SUFFIX})
@@ -1544,7 +1544,7 @@ if(WITH_TESTS)
   if(ROCKSDB_LIB_FOR_C)
     set(C_TESTS db/c_test.c)
     add_executable(c_test db/c_test.c)
-    target_link_libraries(c_test ${ROCKSDB_LIB_FOR_C} testharness proto)
+    target_link_libraries(c_test ${ROCKSDB_LIB_FOR_C} testharness proto_generated)
     add_test(NAME c_test COMMAND c_test${ARTIFACT_SUFFIX})
     add_dependencies(check c_test)
   endif()
@@ -1556,23 +1556,23 @@ if(WITH_BENCHMARK_TOOLS)
     tools/db_bench.cc
     tools/db_bench_tool.cc)
   target_link_libraries(db_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${THIRDPARTY_LIBS} proto)
+    ${ROCKSDB_LIB} ${THIRDPARTY_LIBS} proto_generated)
 
   add_executable(cache_bench${ARTIFACT_SUFFIX}
     cache/cache_bench.cc
     cache/cache_bench_tool.cc)
   target_link_libraries(cache_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto_generated)
 
   add_executable(memtablerep_bench${ARTIFACT_SUFFIX}
     memtable/memtablerep_bench.cc)
   target_link_libraries(memtablerep_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto_generated)
 
   add_executable(range_del_aggregator_bench${ARTIFACT_SUFFIX}
     db/range_del_aggregator_bench.cc)
   target_link_libraries(range_del_aggregator_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto_generated)
 
   add_executable(table_reader_bench${ARTIFACT_SUFFIX}
     table/table_reader_bench.cc)
@@ -1582,12 +1582,12 @@ if(WITH_BENCHMARK_TOOLS)
   add_executable(filter_bench${ARTIFACT_SUFFIX}
     util/filter_bench.cc)
   target_link_libraries(filter_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto_generated)
 
   add_executable(hash_table_bench${ARTIFACT_SUFFIX}
     utilities/persistent_cache/hash_table_bench.cc)
   target_link_libraries(hash_table_bench${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto_generated)
 endif()
 
 option(WITH_TRACE_TOOLS "build with trace tools" ON)
@@ -1595,12 +1595,12 @@ if(WITH_TRACE_TOOLS)
   add_executable(block_cache_trace_analyzer${ARTIFACT_SUFFIX}
     tools/block_cache_analyzer/block_cache_trace_analyzer_tool.cc)
   target_link_libraries(block_cache_trace_analyzer${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto_generated)
 
   add_executable(trace_analyzer${ARTIFACT_SUFFIX}
     tools/trace_analyzer.cc)
   target_link_libraries(trace_analyzer${ARTIFACT_SUFFIX}
-    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto)
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto_generated)
 
 endif()
 

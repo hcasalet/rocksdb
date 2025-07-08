@@ -15,6 +15,7 @@
 #include "transformer/converter.h"
 #include "transformer/augmenter.h"
 #include "transformer/mynooper.h"
+#include "transformer/protobuf_distributor_schema.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -449,8 +450,15 @@ Status CompactionOutputs::AddToOutput(
     }
     case to_underlying(TransformerType::DISTRIBUTOR): {
       if (output_cfds_size > 0) {
+        auto input_proto = std::unique_ptr<google::protobuf::Message>(new data::Row());
+        std::vector<std::unique_ptr<google::protobuf::Message>> output_protos;
+        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp1()));
+        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp2()));
+        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp3()));
+        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp4()));
+
         std::shared_ptr<SchemaDescriptor> splittingData = 
-                  std::make_shared<DistributorSchema>(output_cfds_size, false, inputDataType);
+                  std::make_shared<ProtobufDistributorSchema>(std::move(input_proto), std::move(output_protos));
         std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                   reinterpret_cast<const uint8_t*>(value.data() + value.size()));
         transformers[0]->Transform(val_vec, output_values, splittingData);
@@ -488,8 +496,14 @@ Status CompactionOutputs::AddToOutput(
     }
     case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
       if (output_cfds_size > 0) {
+        auto input_proto = std::unique_ptr<google::protobuf::Message>(new data::Row());
+        std::vector<std::unique_ptr<google::protobuf::Message>> output_protos;
+        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp1()));
+        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp2()));
+        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp3()));
+        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp4()));
         std::shared_ptr<SchemaDescriptor> splittingData = 
-                  std::make_shared<DistributorSchema>(output_cfds_size, false, inputDataType);
+                  std::make_shared<ProtobufDistributorSchema>(std::move(input_proto), std::move(output_protos));
         std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                     reinterpret_cast<const uint8_t*>(value.data() + value.size()));
         transformers[0]->Transform(val_vec, output_values, splittingData);
