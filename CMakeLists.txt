@@ -868,6 +868,8 @@ set(SOURCES
         transformer/transformer_factory.cc
         transformer/protobuf_distributor_schema.cc
         transformer/json_distributor_schema.cc
+        transformer/avro_distributor_schema.cc
+        transformer/csv_distributor_schema.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc

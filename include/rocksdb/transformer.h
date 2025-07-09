@@ -36,6 +36,7 @@ enum class InputOutputDataType {
   FLATBUFFERS      = 1 << 2,
   AVRO             = 1 << 3,
   PARQUET          = 1 << 4,
+  CSV              = 1 << 5,
 };
 
 constexpr TransformerType operator|(TransformerType lhs, TransformerType rhs) {
