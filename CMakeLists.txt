@@ -861,15 +861,15 @@ set(SOURCES
         trace_replay/trace_record_result.cc
         trace_replay/trace_record.cc
         trace_replay/trace_replay.cc
-        transformer/distributor.cc
+        transformer/distributor/distributor.cc
         transformer/converter.cc
         transformer/augmenter.cc
         transformer/mynooper.cc
         transformer/transformer_factory.cc
-        transformer/protobuf_distributor_schema.cc
-        transformer/json_distributor_schema.cc
-        transformer/avro_distributor_schema.cc
-        transformer/csv_distributor_schema.cc
+        transformer/distributor/protobuf_distributor_schema.cc
+        transformer/distributor/json_distributor_schema.cc
+        transformer/distributor/avro_distributor_schema.cc
+        transformer/distributor/csv_distributor_schema.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc

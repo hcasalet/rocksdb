@@ -1,11 +1,11 @@
 #include <queue>
 #include <sstream>
 #include "rocksdb/mym_broker.h"
-#include "transformer/distributor.h"
+#include "transformer/distributor/distributor.h"
 #include "transformer/converter.h"
 #include "transformer/augmenter.h"
 #include "transformer/mynooper.h"
-#include "transformer/protobuf_distributor_schema.h"
+#include "transformer/distributor/protobuf_distributor_schema.h"
 
 namespace ROCKSDB_NAMESPACE {
 
