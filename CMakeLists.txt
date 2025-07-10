@@ -870,6 +870,7 @@ set(SOURCES
         transformer/distributor/json_distributor_schema.cc
         transformer/distributor/avro_distributor_schema.cc
         transformer/distributor/csv_distributor_schema.cc
+        transformer/json2protobuf_schema.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc
