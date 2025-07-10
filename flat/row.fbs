@@ -1,8 +1,0 @@
-namespace rocksdb;
-
-table FbRow {
-    numcols:[int32];
-    strcols:[string];
-}
-
-root_type FbRow;

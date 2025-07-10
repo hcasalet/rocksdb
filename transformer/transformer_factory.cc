@@ -1,5 +1,5 @@
 #include "rocksdb/transformer.h"
-#include "distributor/distributor.h"
+#include "distribute/distributor.h"
 #include "converter.h"
 #include "augmenter.h"
 #include "mynooper.h"

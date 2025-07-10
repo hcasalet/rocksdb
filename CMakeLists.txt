@@ -861,16 +861,17 @@ set(SOURCES
         trace_replay/trace_record_result.cc
         trace_replay/trace_record.cc
         trace_replay/trace_replay.cc
-        transformer/distributor/distributor.cc
+        transformer/distribute/distributor.cc
         transformer/converter.cc
         transformer/augmenter.cc
         transformer/mynooper.cc
         transformer/transformer_factory.cc
-        transformer/distributor/protobuf_distributor_schema.cc
-        transformer/distributor/json_distributor_schema.cc
-        transformer/distributor/avro_distributor_schema.cc
-        transformer/distributor/csv_distributor_schema.cc
+        transformer/distribute/protobuf_distributor_schema.cc
+        transformer/distribute/json_distributor_schema.cc
+        transformer/distribute/avro_distributor_schema.cc
+        transformer/distribute/csv_distributor_schema.cc
         transformer/json2protobuf_schema.cc
+        transformer/protobuf2flatbuffers_schema.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc
@@ -1135,9 +1136,9 @@ find_package(jsoncpp CONFIG REQUIRED)
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
 target_include_directories(
-  ${ROCKSDB_STATIC_LIB} PUBLIC ${CMAKE_SOURCE_DIR}/flat ${PROTO_GEN_DIR})
+  ${ROCKSDB_STATIC_LIB} PUBLIC ${PROTO_GEN_DIR} ${FLATBUFFERS_GEN_DIR})
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE 
-proto_generated ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} jsoncpp_lib)
+proto_generated flatbuffers_generated ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} jsoncpp_lib)
 
 set(ROCKSDB_BUILD_SHARED OFF)
 if(ROCKSDB_BUILD_SHARED)

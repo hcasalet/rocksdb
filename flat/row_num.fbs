@@ -1,7 +1,0 @@
-namespace rocksdb;
-
-table FbRowNum {
-    col:[int32];
-}
-
-root_type FbRowNum;

@@ -97,7 +97,7 @@ void Converter::Transform(const std::vector<uint8_t>& input,
 
     auto num_vector = builder.CreateVector(numvals);
     auto col_vector = builder.CreateVector(strvals);
-    auto fb_row = rocksdb::CreateFbRow(builder, num_vector, col_vector);
+    auto fb_row = flat::CreateFbRow(builder, num_vector, col_vector);
     builder.Finish(fb_row);
             
     uint8_t *buf = builder.GetBufferPointer();
