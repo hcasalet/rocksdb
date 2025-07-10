@@ -61,7 +61,7 @@
 #include "table/unique_id_impl.h"
 #include "test_util/sync_point.h"
 #include "transformer/augmenter.h"
-#include "transformer/converter.h"
+#include "transformer/convert/converter.h"
 #include "transformer/distribute/distributor.h"
 #include "transformer/mynooper.h"
 #include "util/stop_watch.h"

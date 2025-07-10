@@ -12,7 +12,7 @@
 
 #include "db/builder.h"
 #include "transformer/distribute/distributor.h"
-#include "transformer/converter.h"
+#include "transformer/convert/converter.h"
 #include "transformer/augmenter.h"
 #include "transformer/mynooper.h"
 #include "transformer/distribute/protobuf_distributor_schema.h"

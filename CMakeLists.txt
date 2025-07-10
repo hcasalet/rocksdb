@@ -862,7 +862,9 @@ set(SOURCES
         trace_replay/trace_record.cc
         trace_replay/trace_replay.cc
         transformer/distribute/distributor.cc
-        transformer/converter.cc
+        transformer/convert/converter.cc
+        transformer/convert/json2protobuf_schema.cc
+        transformer/convert/protobuf2flatbuffers_schema.cc
         transformer/augmenter.cc
         transformer/mynooper.cc
         transformer/transformer_factory.cc
@@ -870,8 +872,6 @@ set(SOURCES
         transformer/distribute/json_distributor_schema.cc
         transformer/distribute/avro_distributor_schema.cc
         transformer/distribute/csv_distributor_schema.cc
-        transformer/json2protobuf_schema.cc
-        transformer/protobuf2flatbuffers_schema.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc
