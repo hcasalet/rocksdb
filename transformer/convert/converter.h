@@ -3,31 +3,9 @@
 #include "rocksdb/transformer.h"
 #include "row_generated.h"
 #include "data.pb.h"
-
+#include "json2protobuf_schema.h"
+#include "protobuf2flatbuffers_schema.h"
 namespace ROCKSDB_NAMESPACE {
-
-  enum class ConverterInputType {
-    JSON,
-    PROTOBUF
-  };
-
-  enum class ConverterOutputType {
-    FLATBUFFERS
-  };
-
-  class ConverterSchema : public SchemaDescriptor {
-    public:
-      InputOutputDataType in_type;
-      InputOutputDataType out_type;
-      std::string column_data_type;
-      ConverterSchema(InputOutputDataType intype, InputOutputDataType outtype,
-                    std::string columndatatype) :
-        in_type(intype), out_type(outtype), column_data_type(columndatatype) {}
-
-      std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
-
-      ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
-  };
 
   class Converter : public Transformer {
     public:

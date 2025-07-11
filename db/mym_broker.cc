@@ -6,6 +6,8 @@
 #include "transformer/augmenter.h"
 #include "transformer/mynooper.h"
 #include "transformer/distribute/protobuf_distributor_schema.h"
+#include "transformer/convert/json2protobuf_schema.h"
+#include "transformer/convert/protobuf2flatbuffers_schema.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -13,17 +15,18 @@ MymBroker::MymBroker(const std::string& cfname,
                      bool cf_created,
                      const char *dbfilepath,
                      Options& options,
-                     SchemaDescriptor& schema_descriptor)
+                     std::shared_ptr<SchemaDescriptor> schema_descriptor)
     : options_(options)
 {
     bool split{false}, convert{false}, augment{false};
     int num_splits = 1;
-    if (auto distributor = dynamic_cast<ProtobufDistributorSchema*>(&schema_descriptor)) {
+    if (auto distributor = std::dynamic_pointer_cast<ProtobufDistributorSchema>(schema_descriptor)) {
         num_splits = distributor->GetNumSplits();
         split = true;
-    } else if (auto converter = dynamic_cast<ConverterSchema*>(&schema_descriptor)) {
+    } else if (std::dynamic_pointer_cast<Protobuf2FlatbuffersSchema>(schema_descriptor) ||
+        std::dynamic_pointer_cast<Json2ProtobufSchema>(schema_descriptor)) {
         convert = true;
-    } else if (auto augmenter = dynamic_cast<AugmenterSchema*>(&schema_descriptor)) {
+    } else if (auto augmenter = std::dynamic_pointer_cast<AugmenterSchema>(schema_descriptor)) {
         augment = true;
     }
 
@@ -247,11 +250,11 @@ int MymBroker::Delete(const std::string &key)
 
 void MymBroker::genIntColFamDescriptors(const std::string& cfname,
                                    std::vector<ColumnFamilyDescriptor>& column_families,
-                                   SchemaDescriptor& schema_descriptor)
+                                   std::shared_ptr<SchemaDescriptor> schema_descriptor)
 {
     column_families.push_back(ColumnFamilyDescriptor(cfname, ColumnFamilyOptions(options_)));
 
-    if (auto distributor = dynamic_cast<ProtobufDistributorSchema*>(&schema_descriptor)) {
+    if (auto distributor = std::dynamic_pointer_cast<ProtobufDistributorSchema>(schema_descriptor)) {
         bool lastSplitLevel = false;
         int num_splits = distributor->GetNumSplits();
         std::string prefix = cfname + "_sys_cf";
@@ -307,12 +310,13 @@ void MymBroker::genIntColFamDescriptors(const std::string& cfname,
                 }
             }
         }
-    } else if (auto converter = dynamic_cast<ConverterSchema*>(&schema_descriptor)) {
+    } else if (std::dynamic_pointer_cast<Protobuf2FlatbuffersSchema>(schema_descriptor) ||
+                std::dynamic_pointer_cast<Json2ProtobufSchema>(schema_descriptor)) {
         options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
         column_families.push_back(ColumnFamilyDescriptor(
                     cfname+"_converted_cf", ColumnFamilyOptions(options_)));
 
-    } else if (auto augmenter = dynamic_cast<AugmenterSchema*>(&schema_descriptor)) {
+    } else if (auto augmenter = std::dynamic_pointer_cast<AugmenterSchema>(schema_descriptor)) {
         options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
         options_.target_file_size_base = 1024 * 1024 * 1024;
         column_families.push_back(ColumnFamilyDescriptor(
@@ -321,7 +325,7 @@ void MymBroker::genIntColFamDescriptors(const std::string& cfname,
         column_families.push_back(rocksdb::ColumnFamilyDescriptor(
                     cfname+"_secondary_index_cf", ColumnFamilyOptions(options_)));
 
-    } else if (auto mynooper = dynamic_cast<MynooperSchema*>(&schema_descriptor)) {
+    } else if (auto mynooper = std::dynamic_pointer_cast<MynooperSchema>(schema_descriptor)) {
         options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
         column_families.push_back(ColumnFamilyDescriptor(
                     cfname+"_identity_cf", ColumnFamilyOptions(options_)));

@@ -508,8 +508,9 @@ Status CompactionOutputs::AddToOutput(
                                     reinterpret_cast<const uint8_t*>(value.data() + value.size()));
         transformers[0]->Transform(val_vec, output_values, splittingData);
 
-        std::shared_ptr<SchemaDescriptor> convertingData =
-              std::make_shared<ConverterSchema>(inputDataType, outputDataType, columnDataType);
+        std::unique_ptr<google::protobuf::Message> input_proto_template = std::make_unique<data::Row>();
+        const flatbuffers::TypeTable* fb_type_table = flat::FbRowTypeTable();
+        auto convertingData = std::make_shared<rocksdb::Protobuf2FlatbuffersSchema>(std::move(input_proto_template), fb_type_table);
 
         std::vector<std::vector<uint8_t>> output_converted_values;
         for (auto ovalue : output_values) {
@@ -554,8 +555,10 @@ Status CompactionOutputs::AddToOutput(
       break;
     }
     case to_underlying(TransformerType::CONVERTER): {
-      std::shared_ptr<SchemaDescriptor> convertingData =
-                std::make_shared<ConverterSchema>(inputDataType, outputDataType, columnDataType);
+      std::unique_ptr<google::protobuf::Message> input_proto_template = std::make_unique<data::Row>();
+      const flatbuffers::TypeTable* fb_type_table = flat::FbRowTypeTable();
+      auto convertingData = std::make_shared<rocksdb::Protobuf2FlatbuffersSchema>(std::move(input_proto_template), fb_type_table);
+
       std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                   reinterpret_cast<const uint8_t*>(value.data() + value.size()));
       transformers[0]->Transform(val_vec, output_values, convertingData);

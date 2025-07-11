@@ -58,7 +58,7 @@ class MymBroker {
                   bool cf_created,
                   const char *dbfilepath,
                   Options& options,
-                  SchemaDescriptor& transformer_schema);
+                  std::shared_ptr<SchemaDescriptor> transformer_schema);
         int Read(const std::string &key, const std::set<int>* positions, std::string &result);
 
         int Scan(const std::string &begin_key, int scan_length, const std::set<int> *positions,
@@ -80,7 +80,7 @@ class MymBroker {
         
         void genIntColFamDescriptors(const std::string& cfname,
                                      std::vector<ColumnFamilyDescriptor>& column_families,
-                                     SchemaDescriptor& transformer_schema);
+                                     std::shared_ptr<SchemaDescriptor> transformer_schema);
         void saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column_family_descriptors,
                                   std::vector<ColumnFamilyHandle*> handles,
                                   std::string cfname, int num_splits);
