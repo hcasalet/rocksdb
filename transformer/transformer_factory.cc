@@ -1,8 +1,8 @@
 #include "rocksdb/transformer.h"
 #include "distribute/distributor.h"
 #include "convert/converter.h"
-#include "augmenter.h"
-#include "mynooper.h"
+#include "augment/augmenter.h"
+#include "identity/mynooper.h"
 
 namespace ROCKSDB_NAMESPACE {
 std::shared_ptr<Transformer> CreateTransformer(const TransformerType transformer_type) {

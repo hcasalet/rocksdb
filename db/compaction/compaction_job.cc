@@ -60,10 +60,10 @@
 #include "table/table_builder.h"
 #include "table/unique_id_impl.h"
 #include "test_util/sync_point.h"
-#include "transformer/augmenter.h"
+#include "transformer/augment/augmenter.h"
 #include "transformer/convert/converter.h"
 #include "transformer/distribute/distributor.h"
-#include "transformer/mynooper.h"
+#include "transformer/identity/mynooper.h"
 #include "util/stop_watch.h"
 
 namespace ROCKSDB_NAMESPACE {

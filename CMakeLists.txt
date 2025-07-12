@@ -865,8 +865,10 @@ set(SOURCES
         transformer/convert/converter.cc
         transformer/convert/json2protobuf_schema.cc
         transformer/convert/protobuf2flatbuffers_schema.cc
-        transformer/augmenter.cc
-        transformer/mynooper.cc
+        transformer/augment/augmenter.cc
+        transformer/augment/protobuf_index_schema.cc
+        transformer/augment/json_index_schema.cc
+        transformer/identity/mynooper.cc
         transformer/transformer_factory.cc
         transformer/distribute/protobuf_distributor_schema.cc
         transformer/distribute/json_distributor_schema.cc
