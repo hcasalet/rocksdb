@@ -279,7 +279,7 @@ class CompactionOutputs {
   Status AddToOutput(const CompactionIterator& c_iter,
                      const CompactionFileOpenFunc& open_file_func,
                      const CompactionFileCloseFunc& close_file_func,
-                     std::vector<Transformer*> transformers,
+                     std::vector<std::shared_ptr<Transformer>> transformers,
                      TransformerType transformer_types,
                      InputOutputDataType inputDataType,
                      InputOutputDataType outputDataType,

@@ -32,7 +32,6 @@ struct  ImmutableDBOptions {
   std::shared_ptr<RateLimiter> rate_limiter;
   std::shared_ptr<SstFileManager> sst_file_manager;
   std::shared_ptr<Logger> info_log;
-  std::vector<Transformer*> transformers;
   bool write_both;
   InfoLogLevel info_log_level;
   int max_file_opening_threads;

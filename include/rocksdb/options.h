@@ -172,6 +172,14 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // Default: nullptr
   std::shared_ptr<CompactionFilterFactory> compaction_filter_factory = nullptr;
 
+  // Transformers contains the transformers that transform compaction outputs 
+  // into the desired format
+  std::vector<std::shared_ptr<Transformer>> transformers;
+
+  // SchemaDescriptors for Transformer. Each one of them in the collection is 
+  // corresponding to the above transformers
+  std::vector<std::shared_ptr<SchemaDescriptor>> schemaDescriptors;
+
   // -------------------
   // Parameters that affect performance
 
@@ -547,10 +555,6 @@ struct DBOptions {
   // Default: Env::Default()
   Env* env = Env::Default();
   Env* base_env = Env::Default();
-
-  // Transformers contains the transformers that transform compaction outputs 
-  // into the desired format
-  std::vector<Transformer*> transformers;
 
   // controls if we write both original and transformed data
   bool write_both = false;

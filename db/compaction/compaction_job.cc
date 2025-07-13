@@ -165,7 +165,7 @@ CompactionJob::CompactionJob(
       bottommost_level_(false),
       write_hint_(Env::WLTH_NOT_SET),
       compaction_job_stats_(compaction_job_stats),
-      transformers_(db_options.transformers),
+      transformers_(compaction->column_family_data()->ioptions()->transformers),
       job_id_(job_id),
       dbname_(dbname),
       db_id_(db_id),

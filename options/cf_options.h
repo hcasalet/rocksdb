@@ -74,6 +74,9 @@ struct ImmutableCFOptions {
 
   TransformerType transformer_type;
 
+  std::vector<std::shared_ptr<Transformer>> transformers;
+  std::vector<std::shared_ptr<SchemaDescriptor>> schemaDescriptors;
+
   InputOutputDataType input_data_type;
 
   InputOutputDataType output_data_type;

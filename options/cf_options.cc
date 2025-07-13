@@ -957,6 +957,8 @@ ImmutableCFOptions::ImmutableCFOptions(const ColumnFamilyOptions& cf_options)
       num_columns(cf_options.num_columns),
       column_data_type(cf_options.column_data_type),
       transformer_type(cf_options.transformer_type),
+      transformers(cf_options.transformers),
+      schemaDescriptors(cf_options.schemaDescriptors),
       input_data_type(cf_options.input_data_type),
       output_data_type(cf_options.output_data_type),
       optimize_filters_for_hits(cf_options.optimize_filters_for_hits),
