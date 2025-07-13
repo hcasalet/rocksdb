@@ -78,8 +78,7 @@ class MymBroker {
         std::unordered_map<int, std::unordered_map<std::string, ColFamMeta>> int_cf_meta_;
         
         void genIntColFamDescriptors(const std::string& cfname,
-                                     std::vector<ColumnFamilyDescriptor>& column_families,
-                                     std::shared_ptr<SchemaDescriptor> transformer_schema);
+                                     std::vector<ColumnFamilyDescriptor>& column_families);
         void saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column_family_descriptors,
                                   std::vector<ColumnFamilyHandle*> handles,
                                   std::string cfname, int num_splits);
