@@ -14,24 +14,23 @@ namespace ROCKSDB_NAMESPACE {
 MymBroker::MymBroker(const std::string& cfname,
                      bool cf_created,
                      const char *dbfilepath,
-                     Options& options,
-                     std::shared_ptr<SchemaDescriptor> schema_descriptor)
+                     Options& options)
     : options_(options)
 {
     bool split{false}, convert{false}, augment{false};
     int num_splits = 1;
-    if (auto distributor = std::dynamic_pointer_cast<ProtobufDistributorSchema>(schema_descriptor)) {
+    if (auto distributor = std::dynamic_pointer_cast<ProtobufDistributorSchema>(options.schemaDescriptors[0])) {
         num_splits = distributor->GetNumSplits();
         split = true;
-    } else if (std::dynamic_pointer_cast<Protobuf2FlatbuffersSchema>(schema_descriptor) ||
-        std::dynamic_pointer_cast<Json2ProtobufSchema>(schema_descriptor)) {
+    } else if (std::dynamic_pointer_cast<Protobuf2FlatbuffersSchema>(options.schemaDescriptors[0]) ||
+        std::dynamic_pointer_cast<Json2ProtobufSchema>(options.schemaDescriptors[0])) {
         convert = true;
-    } else if (auto augmenter = std::dynamic_pointer_cast<AugmenterSchema>(schema_descriptor)) {
+    } else if (auto augmenter = std::dynamic_pointer_cast<AugmenterSchema>(options.schemaDescriptors[0])) {
         augment = true;
     }
 
     std::vector<ColumnFamilyDescriptor> column_family_descriptors;
-    genIntColFamDescriptors(cfname, column_family_descriptors, schema_descriptor);
+    genIntColFamDescriptors(cfname, column_family_descriptors, options.schemaDescriptors[0]);
     std::vector<ColumnFamilyHandle*> cf_handles;
     Status s;
 

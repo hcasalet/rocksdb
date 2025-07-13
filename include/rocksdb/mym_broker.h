@@ -57,8 +57,7 @@ class MymBroker {
         MymBroker(const std::string& cfname,
                   bool cf_created,
                   const char *dbfilepath,
-                  Options& options,
-                  std::shared_ptr<SchemaDescriptor> transformer_schema);
+                  Options& options);
         int Read(const std::string &key, const std::set<int>* positions, std::string &result);
 
         int Scan(const std::string &begin_key, int scan_length, const std::set<int> *positions,
