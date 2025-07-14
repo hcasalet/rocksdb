@@ -25,7 +25,7 @@ MymBroker::MymBroker(const std::string& cfname,
     } else if (std::dynamic_pointer_cast<Protobuf2FlatbuffersSchema>(options.schemaDescriptors[0]) ||
         std::dynamic_pointer_cast<Json2ProtobufSchema>(options.schemaDescriptors[0])) {
         convert = true;
-    } else if (auto augmenter = std::dynamic_pointer_cast<AugmenterSchema>(options.schemaDescriptors[0])) {
+    } else if (auto augmenter = std::dynamic_pointer_cast<ProtobufAugmenterSchema>(options.schemaDescriptors[0])) {
         augment = true;
     }
 
@@ -314,7 +314,7 @@ void MymBroker::genIntColFamDescriptors(const std::string& cfname,
         column_families.push_back(ColumnFamilyDescriptor(
                     cfname+"_converted_cf", ColumnFamilyOptions(options_)));
 
-    } else if (auto augmenter = std::dynamic_pointer_cast<AugmenterSchema>(options_.schemaDescriptors[0])) {
+    } else if (auto augmenter = std::dynamic_pointer_cast<ProtobufAugmenterSchema>(options_.schemaDescriptors[0])) {
         options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
         options_.target_file_size_base = 1024 * 1024 * 1024;
         column_families.push_back(ColumnFamilyDescriptor(

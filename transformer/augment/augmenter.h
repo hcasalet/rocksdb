@@ -3,20 +3,10 @@
 #include <functional>
 #include "rocksdb/transformer.h"
 #include "data.pb.h"
+#include "json_index_schema.h"
+#include "protobuf_index_schema.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-class AugmenterSchema : public SchemaDescriptor {
-  public:
-    std::string row_key;
-    InputOutputDataType input_type;
-    AugmenterSchema(std::string rowKey, InputOutputDataType inType) :
-              row_key(rowKey), input_type(inType) {}
-
-    std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
-
-    ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
-};
 
 class DeriveFuncData {
   public:

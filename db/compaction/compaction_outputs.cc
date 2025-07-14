@@ -616,9 +616,16 @@ Status CompactionOutputs::AddToOutput(
     case to_underlying(TransformerType::AUGMENTER): {
       std::vector<uint8_t> indkey(reinterpret_cast<const uint8_t*>(value.data()),
                                   reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-      std::string indvalue(key.data(), key.size());
-      std::shared_ptr<SchemaDescriptor> augmentingData = std::make_shared<AugmenterSchema>(indvalue,
-                                                        inputDataType);
+
+      output_values.emplace_back(key.data(), key.data()+key.size());
+
+      std::vector<std::string> keyfields; 
+      keyfields.push_back("field1");
+      std::vector<std::vector<std::string>> indexes;
+      indexes.push_back(keyfields);
+      std::shared_ptr<SchemaDescriptor> augmentingData = std::make_shared<ProtobufAugmenterSchema>(indexes, 
+                                                            std::make_unique<data::Row>());
+
       transformers[0]->Transform(indkey, output_values, augmentingData);
       
       // handling primary data
