@@ -17,6 +17,10 @@ MymBroker::MymBroker(const std::string& cfname,
                      Options& options)
     : options_(options)
 {
+    if (options.schemaDescriptors.size() > 4) {
+        throw std::runtime_error("Having more than 4 transformers is not supported.");
+    }
+    
     bool split{false}, convert{false}, augment{false};
     int num_splits = 1;
     if (auto distributor = std::dynamic_pointer_cast<ProtobufDistributorSchema>(options.schemaDescriptors[0])) {
