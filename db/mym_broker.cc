@@ -267,6 +267,8 @@ void MymBroker::genIntColFamDescriptors(const std::string& cfname,
 
     cf_opts.schemaDescriptors.clear();
     cf_opts.schemaDescriptors.push_back(options_.schemaDescriptors[0]);
+    cf_opts.transformers.clear();
+    cf_opts.transformers.push_back(options_.transformers[0]);
     column_families.push_back(ColumnFamilyDescriptor(cfname, cf_opts));
 
     std::queue<std::pair<std::string, ColumnFamilyOptions>> colfamqueue;
@@ -280,7 +282,7 @@ void MymBroker::genIntColFamDescriptors(const std::string& cfname,
             auto src_cf_name = front.first;
             auto src_cf_opts = front.second;
             colfamqueue.pop();
-            createDestinationColFamDescriptors(colfamqueue, src_cf_name, src_cf_opts, column_families, options_.schemaDescriptors[i], i+1);
+            createDestinationColFamDescriptors(colfamqueue, src_cf_name, src_cf_opts, column_families, i);
         }
     }
 }
@@ -289,28 +291,27 @@ void MymBroker::createDestinationColFamDescriptors(std::queue<std::pair<std::str
                                                    const std::string& cfname,
                                                    ColumnFamilyOptions& cfopts,
                                                    std::vector<ColumnFamilyDescriptor>& column_families,
-                                                   std::shared_ptr<SchemaDescriptor> schema,
                                                    size_t pos) {
     auto makeCfName = [&](const std::string& suffix) {
         return cfname + suffix;
     };
+
+    auto schema = options_.schemaDescriptors[pos];
     
     ColumnFamilyOptions int_cf_opts(options_);
     int_cf_opts.transformers.clear();
     int_cf_opts.schemaDescriptors.clear();
-    if (pos < options_.transformers.size()) {
-        int_cf_opts.SetTransformerType(options_.transformers[pos]->Supports());
-        int_cf_opts.transformers.push_back(options_.transformers[pos]);
-        int_cf_opts.schemaDescriptors.push_back(options_.schemaDescriptors[pos]);
+    if (pos + 1 < options_.transformers.size()) {
+        int_cf_opts.SetTransformerType(options_.transformers[pos+1]->Supports());
+        int_cf_opts.transformers.push_back(options_.transformers[pos+1]);
+        int_cf_opts.schemaDescriptors.push_back(options_.schemaDescriptors[pos+1]);
     } else {
         int_cf_opts.SetTransformerType(TransformerType::NOTRANSFORMATION);
     }
     
     if (static_cast<int>(schema->SupportsTransformerType()) & static_cast<int>(TransformerType::DISTRIBUTOR)) {
         int num_splits = schema->GetNumSplits();
-        int_cf_opts.level0_file_num_compaction_trigger = 4;
-        int_cf_opts.compaction_pri = kByCompensatedSize;
-
+        
         for (int k = 0; k < num_splits; k++) {
             std::string cfname_child = cfname + "_split_cf_" + std::to_string(k);
             column_families.push_back(ColumnFamilyDescriptor(cfname_child, int_cf_opts));
@@ -328,11 +329,14 @@ void MymBroker::createDestinationColFamDescriptors(std::queue<std::pair<std::str
         cfq.push(std::make_pair(primaryindex, int_cf_opts));
         cfopts.destination_column_families.push_back(primaryindex);
 
-        for (size_t j=0; j < schema->GetIndexKeys().size(); j++) {
+        for (size_t k=0; k < schema->GetIndexKeys().size(); k++) {
             ColumnFamilyOptions secondary_index_opts(options_);
             secondary_index_opts.SetTransformerType(TransformerType::NOTRANSFORMATION);
             secondary_index_opts.merge_operator = std::make_shared<SecondaryIndexMergeOperator>();
-            std::string secondaryindex = cfname + "_secondary_index_cf" + std::to_string(j);
+            secondary_index_opts.schemaDescriptors.clear();
+            secondary_index_opts.transformers.clear();
+
+            std::string secondaryindex = cfname + "_secondary_index_cf" + std::to_string(k);
             column_families.push_back(rocksdb::ColumnFamilyDescriptor(secondaryindex, secondary_index_opts));
             cfopts.destination_column_families.push_back(secondaryindex);
         }

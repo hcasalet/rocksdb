@@ -87,7 +87,6 @@ class MymBroker {
                                                 const std::string& cfname,
                                                 ColumnFamilyOptions& cfopts,
                                                 std::vector<ColumnFamilyDescriptor>& column_families,
-                                                std::shared_ptr<SchemaDescriptor> schema,
                                                 size_t pos);
         void getColPositions(int divide, int start, int total_cols, std::set<int>& col_pos);
         int checkColumnSearch(ColFamMeta& cfmeta, const std::set<int>* column_positions);
