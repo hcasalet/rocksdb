@@ -14,23 +14,12 @@ namespace ROCKSDB_NAMESPACE {
 MymBroker::MymBroker(const std::string& cfname,
                      bool cf_created,
                      const char *dbfilepath,
-                     Options& options)
+                     Options& options,
+                     int num_splits)
     : options_(options)
 {
     if (options.schemaDescriptors.size() > 4) {
         throw std::runtime_error("Having more than 4 transformers is not supported.");
-    }
-
-    bool split{false}, convert{false}, augment{false};
-    int num_splits = 1;
-    if (auto distributor = std::dynamic_pointer_cast<ProtobufDistributorSchema>(options.schemaDescriptors[0])) {
-        num_splits = distributor->GetNumSplits();
-        split = true;
-    } else if (std::dynamic_pointer_cast<Protobuf2FlatbuffersSchema>(options.schemaDescriptors[0]) ||
-        std::dynamic_pointer_cast<Json2ProtobufSchema>(options.schemaDescriptors[0])) {
-        convert = true;
-    } else if (auto augmenter = std::dynamic_pointer_cast<ProtobufAugmenterSchema>(options.schemaDescriptors[0])) {
-        augment = true;
     }
 
     std::vector<ColumnFamilyDescriptor> column_family_descriptors;
@@ -45,7 +34,7 @@ MymBroker::MymBroker(const std::string& cfname,
         s = db_->CreateColumnFamilies(column_family_descriptors, &cf_handles);
         assert(s.ok());
 
-        s = db_->AddTransformingDestinationCfds(cfname, split, convert, augment, false, num_splits);
+        s = db_->AddTransformingDestinationCfds(cfname);
         assert(s.ok());
     } else {
         column_family_descriptors.push_back(ColumnFamilyDescriptor(
@@ -53,7 +42,7 @@ MymBroker::MymBroker(const std::string& cfname,
         s = DB::Open(options_, dbfilepath, column_family_descriptors, &cf_handles, &db_);
         assert(s.ok());
 
-        s = db_->AddTransformingDestinationCfds(cfname, split, convert, augment, false, num_splits);
+        s = db_->AddTransformingDestinationCfds(cfname);
         assert(s.ok());
     }
 
@@ -357,7 +346,7 @@ void MymBroker::saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column
 {
     assert(column_family_descriptors.size()==handles.size());
 
-    int pre_group = 1;
+    int pre_group = 0;
     int group = num_splits;
     int level = 1;
     int roundcount = 0;
@@ -367,27 +356,25 @@ void MymBroker::saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column
         }
 
         if (column_family_descriptors[i].name == cfname) {
-            std::set<int> cf_colset;
-            user_cf_meta_ = ColFamMeta(cfname, 0, handles[i], std::move(cf_colset));
+            user_cf_meta_ = ColFamMeta(cfname, 0, handles[i], std::set<int>{});
             continue;
         }
 
         if (num_splits == 1) {
-            std::set<int> cf_colset;
             int_cf_meta_[1][column_family_descriptors[i].name] = ColFamMeta(
-                column_family_descriptors[i].name, 1, handles[i], std::move(cf_colset)
-            );
+                column_family_descriptors[i].name, 1, handles[i], std::set<int>{});
         } else {
             std::set<int> colpos;
-            getColPositions(group, i - pre_group, options_.num_columns, colpos);
+            getColPositions(group, pre_group, options_.num_columns, colpos);
             int_cf_meta_[level][column_family_descriptors[i].name] = ColFamMeta(
                 column_family_descriptors[i].name, level, handles[i], std::move(colpos)                    
             );
+            pre_group++;
             roundcount++;
 
             if (roundcount == group) {
                 roundcount = 0;
-                pre_group += group;
+                pre_group = 0;
                 group *= num_splits;
                 level += 1;
             }

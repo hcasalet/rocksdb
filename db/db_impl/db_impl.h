@@ -325,10 +325,7 @@ class DBImpl : public DB {
   virtual Status DropColumnFamilies(
       const std::vector<ColumnFamilyHandle*>& column_families) override;
 
-  virtual Status AddTransformingDestinationCfds(const std::string& cf_name,
-                                              bool cracked, bool converted,
-                                              bool derived, bool writeboth,
-                                              int splits) override;
+  virtual Status AddTransformingDestinationCfds(const std::string& cf_name) override;
   
   virtual Status DisplayTransformingDestinationCfds() override;
 
@@ -1813,10 +1810,7 @@ class DBImpl : public DB {
 
   Status DropColumnFamilyImpl(ColumnFamilyHandle* column_family);
 
-  Status AddTransformingDestinationCfdsImpl(const std::string& cf_name,
-                                        bool cracked, bool converted,
-                                        bool derived, bool writeboth,
-                                        int splits);
+  Status AddTransformingDestinationCfdsImpl(const std::string& cf_name);
   
   //Status DisplayTransformingDestinationCfdsImpl();
 

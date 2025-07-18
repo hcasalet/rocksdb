@@ -3251,12 +3251,40 @@ Status DBImpl::CreateColumnFamilyImpl(const ColumnFamilyOptions& cf_options,
   return s;
 }
 
-Status DBImpl::AddTransformingDestinationCfds(const std::string& cf_name,
-                                  bool cracked, bool converted,
-                                  bool derived, bool writeboth, int splits) {
-  return AddTransformingDestinationCfdsImpl(cf_name, cracked, converted, derived, writeboth, splits);
+Status DBImpl::AddTransformingDestinationCfds(const std::string& cf_name) {
+  return AddTransformingDestinationCfdsImpl(cf_name);
 }
 
+Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name) {
+  ColumnFamilySet* all_cfds = versions_->GetColumnFamilySet();
+  ColumnFamilyData* root_cfd = all_cfds->GetColumnFamily(cf_name);
+  std::queue<ColumnFamilyData*> cfdqueue;
+  cfdqueue.push(root_cfd);
+  bool looper = true;
+
+  while (looper) {
+    size_t qsize = cfdqueue.size();
+    if (qsize == 0) {
+      looper = false;
+      continue;
+    }
+
+    for (size_t i = 0; i < qsize; i++) {
+      auto curr = cfdqueue.front();
+      cfdqueue.pop();
+
+      auto destcfs = curr->ioptions()->destination_column_families;
+      for (auto destcf : destcfs) {
+        ColumnFamilyData* dest_cfd = all_cfds->GetColumnFamily(destcf);
+        curr->AddDestinationCfd(dest_cfd);
+        cfdqueue.push(dest_cfd);
+      }
+    }
+  }
+
+  return Status::OK();
+}
+/*
 Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name, 
               bool cracked, bool converted, bool derived, bool writeboth, int splits) {
   assert(!cracked || !derived);
@@ -3360,7 +3388,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
 
   destination_cfds_computed_ = true;
   return Status::OK();
-}
+}*/
 
 Status DBImpl::DisplayTransformingDestinationCfds() {
   for (auto cfd : *versions_->GetColumnFamilySet()) {
@@ -4832,10 +4860,7 @@ Status DB::DestroyColumnFamilyHandle(ColumnFamilyHandle* column_family) {
   return Status::OK();
 }
 
-Status DB::AddTransformingDestinationCfds(const std::string& cf_name,
-                                        bool cracked, bool converted,
-                                        bool derived, bool writeboth,
-                                        int splits) {
+Status DB::AddTransformingDestinationCfds(const std::string& cf_name) {
   return Status::NotSupported("");
 }
 

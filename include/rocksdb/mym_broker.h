@@ -58,7 +58,8 @@ class MymBroker {
         MymBroker(const std::string& cfname,
                   bool cf_created,
                   const char *dbfilepath,
-                  Options& options);
+                  Options& options,
+                  int num_splits);
         int Read(const std::string &key, const std::set<int>* positions, std::string &result);
 
         int Scan(const std::string &begin_key, int scan_length, const std::set<int> *positions,
