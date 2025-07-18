@@ -1,6 +1,7 @@
 #pragma once
 
 #include <set>
+#include <queue>
 #include "rocksdb/db.h"
 #include "rocksdb/merge_operator.h"
 
@@ -82,6 +83,12 @@ class MymBroker {
         void saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column_family_descriptors,
                                   std::vector<ColumnFamilyHandle*> handles,
                                   std::string cfname, int num_splits);
+        void createDestinationColFamDescriptors(std::queue<std::pair<std::string, ColumnFamilyOptions>>& cfq,
+                                                const std::string& cfname,
+                                                ColumnFamilyOptions& cfopts,
+                                                std::vector<ColumnFamilyDescriptor>& column_families,
+                                                std::shared_ptr<SchemaDescriptor> schema,
+                                                size_t pos);
         void getColPositions(int divide, int start, int total_cols, std::set<int>& col_pos);
         int checkColumnSearch(ColFamMeta& cfmeta, const std::set<int>* column_positions);
         std::vector<std::string> parsePrimaryKeys(const std::string& keystr);

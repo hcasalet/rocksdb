@@ -8,12 +8,16 @@ namespace ROCKSDB_NAMESPACE {
 
   class ProtobufDistributorSchema : public SchemaDescriptor {
     public:
-      ProtobufDistributorSchema(std::unique_ptr<google::protobuf::Message> input_proto,
-                                std::vector<std::unique_ptr<google::protobuf::Message>> output_proto) :
-        input_proto_msgtype_(std::move(input_proto)), output_proto_msgtypes_(std::move(output_proto)) {
-          BuildInputFieldSchema();
-          BuildOutputFieldSchemas();
-        }
+      ProtobufDistributorSchema(int splits,
+                                std::unique_ptr<google::protobuf::Message> input_proto,
+                                std::vector<std::unique_ptr<google::protobuf::Message>> output_proto)
+        : splits_(splits), input_proto_msgtype_(std::move(input_proto)),
+          output_proto_msgtypes_(std::move(output_proto)) {
+        BuildInputFieldSchema();
+        BuildOutputFieldSchemas();
+      }
+      
+      TransformerType SupportsTransformerType() const override { return TransformerType::DISTRIBUTOR; }
   
       InputOutputDataType InputType() const override { return InputOutputDataType::PROTOBUF; }
       InputOutputDataType OutputType() const override { return InputOutputDataType::PROTOBUF; }
@@ -23,7 +27,7 @@ namespace ROCKSDB_NAMESPACE {
       std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
       ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
 
-      int GetNumSplits() const { return output_proto_msgtypes_.size(); }
+      int GetNumSplits() const override { return splits_; }
 
       std::unique_ptr<google::protobuf::Message> GetInputSchemaSpec() const { 
         return std::unique_ptr<google::protobuf::Message>(input_proto_msgtype_->New());
@@ -46,6 +50,7 @@ namespace ROCKSDB_NAMESPACE {
       }
 
     private:
+      int splits_;
       std::unique_ptr<google::protobuf::Message> input_proto_msgtype_;
       std::vector<std::unique_ptr<google::protobuf::Message>> output_proto_msgtypes_;
 

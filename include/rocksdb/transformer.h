@@ -66,6 +66,8 @@ class SchemaDescriptor {
   public:
    virtual ~SchemaDescriptor() = default;
 
+   virtual TransformerType SupportsTransformerType() const = 0;
+
    // Shows the data format before and after the transformation
    /*virtual InputOutputDataType InputType() const = 0;
    virtual InputOutputDataType OutputType() const = 0;
@@ -74,7 +76,6 @@ class SchemaDescriptor {
    virtual InputOutputDataType OutputType() const { return InputOutputDataType::UNKNOWN; } // temporary
    virtual bool Validate(const ByteBuffer& input_data) const { return true; } // temporary
 
-
    virtual std::shared_ptr<void> Parse(const ByteBuffer& data) const = 0;
    virtual ByteBuffer Serialize(const std::shared_ptr<void>& obj) const = 0;
 
@@ -82,6 +83,8 @@ class SchemaDescriptor {
    virtual std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const = 0;*/
    virtual std::vector<FieldSchema> GetInputFieldSchema() const { return {}; } // temporary
    virtual std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const { return {};} // temporary
+   virtual int GetNumSplits() const { return 0; }
+   virtual std::vector<std::vector<std::string>> GetIndexKeys() const { return {}; }
 
  };
 

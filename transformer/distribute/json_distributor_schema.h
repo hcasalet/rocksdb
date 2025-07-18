@@ -9,10 +9,14 @@ namespace ROCKSDB_NAMESPACE {
 
   class JsonDistributorSchema : public SchemaDescriptor {
     public:
-      JsonDistributorSchema(std::vector<FieldSchema> input_schema,
+      JsonDistributorSchema(int splits, 
+                            std::vector<FieldSchema> input_schema,
                             std::vector<std::vector<FieldSchema>> output_schemas)
-          : input_field_schema_(std::move(input_schema)),
+          : splits_(splits),
+            input_field_schema_(std::move(input_schema)),
             output_field_schemas_(std::move(output_schemas)) {}
+      
+      TransformerType SupportsTransformerType() const override { return TransformerType::DISTRIBUTOR; }
 
       InputOutputDataType InputType() const override { return InputOutputDataType::JSON; }
       InputOutputDataType OutputType() const override { return InputOutputDataType::JSON; }
@@ -22,7 +26,7 @@ namespace ROCKSDB_NAMESPACE {
       std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
       ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
 
-      int GetNumSplits() const { return output_field_schemas_.size(); }
+      int GetNumSplits() const override { return splits_; }
 
       void BuildSchemasFromExampleJson(const nlohmann::json& input_example,
                                        const std::vector<nlohmann::json>& output_examples);
@@ -36,6 +40,7 @@ namespace ROCKSDB_NAMESPACE {
       }
 
     private:
+      int splits_;
       std::vector<FieldSchema> input_field_schema_;
       std::vector<std::vector<FieldSchema>> output_field_schemas_;
 

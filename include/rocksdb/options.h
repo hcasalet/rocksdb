@@ -180,6 +180,9 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   // corresponding to the above transformers
   std::vector<std::shared_ptr<SchemaDescriptor>> schemaDescriptors;
 
+  // Destination column families that are there to hold the transformed data
+  std::vector<std::string> destination_column_families;
+
   // -------------------
   // Parameters that affect performance
 

@@ -458,7 +458,7 @@ Status CompactionOutputs::AddToOutput(
         output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp4()));
 
         std::shared_ptr<SchemaDescriptor> splittingData = 
-                  std::make_shared<ProtobufDistributorSchema>(std::move(input_proto), std::move(output_protos));
+                  std::make_shared<ProtobufDistributorSchema>(2, std::move(input_proto), std::move(output_protos));
         std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                   reinterpret_cast<const uint8_t*>(value.data() + value.size()));
         transformers[0]->Transform(val_vec, output_values, splittingData);
@@ -503,7 +503,7 @@ Status CompactionOutputs::AddToOutput(
         output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp3()));
         output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp4()));
         std::shared_ptr<SchemaDescriptor> splittingData = 
-                  std::make_shared<ProtobufDistributorSchema>(std::move(input_proto), std::move(output_protos));
+                  std::make_shared<ProtobufDistributorSchema>(2, std::move(input_proto), std::move(output_protos));
         std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
                                     reinterpret_cast<const uint8_t*>(value.data() + value.size()));
         transformers[0]->Transform(val_vec, output_values, splittingData);

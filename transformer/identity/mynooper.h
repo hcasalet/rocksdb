@@ -12,6 +12,8 @@ class MynooperSchema : public SchemaDescriptor {
     std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
 
     ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
+
+    TransformerType SupportsTransformerType() const override { return TransformerType::NOTRANSFORMATION; }
 };
 
 class Mynooper : public Transformer {

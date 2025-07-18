@@ -3967,7 +3967,7 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
   if (cfd->ioptions()->transformers.size() > 0) {
     // schedule new compactions
     for (auto* my_cfd : *versions_->GetColumnFamilySet()) {
-      if (((my_cfd->GetName().find("_sys_cf_") != std::string::npos ||
+      if (((my_cfd->GetName().find("_split_cf_") != std::string::npos ||
            my_cfd->GetName().find("_converted_cf") != std::string::npos ||
            my_cfd->GetName().find("_identity_cf") != std::string::npos ||
            my_cfd->GetName().find("_indexed_data_cf") != std::string::npos ||

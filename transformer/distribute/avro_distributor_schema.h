@@ -13,8 +13,11 @@ namespace ROCKSDB_NAMESPACE {
 
 class AvroDistributorSchema : public SchemaDescriptor {
   public:
-    AvroDistributorSchema(const avro::ValidSchema& input_schema,
+    AvroDistributorSchema(int splits, 
+                          const avro::ValidSchema& input_schema,
                           const std::vector<avro::ValidSchema>& output_schemas);
+
+    TransformerType SupportsTransformerType() const override { return TransformerType::DISTRIBUTOR; }
   
     InputOutputDataType InputType() const override { return InputOutputDataType::AVRO; }
     InputOutputDataType OutputType() const override { return InputOutputDataType::AVRO; }
@@ -25,10 +28,13 @@ class AvroDistributorSchema : public SchemaDescriptor {
   
     std::vector<FieldSchema> GetInputFieldSchema() const override;
     std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const override;
+
+    int GetNumSplits() const override { return splits_; }
   
   private:
     void BuildFieldSchemas();
   
+    int splits_;
     avro::ValidSchema input_schema_;
     std::vector<avro::ValidSchema> output_schemas_;
     std::vector<FieldSchema> input_field_schema_;

@@ -263,7 +263,7 @@ void CompactionJob::Prepare() {
 
   int splits = cfd->GetDestinationCfdSize();
 
-  if (cfd->GetName().find("_sys_cf_") != std::string::npos) {
+  if (cfd->GetName().find("_split_cf_") != std::string::npos) {
     EnsureInputOnlyOnLevel0(cfd);
     assert(cfd->current()->storage_info()->NumLevelFiles(0) > 0);
   } else {
@@ -2184,8 +2184,8 @@ void CompactionJob::GetTransformingCfds(int splits, std::vector<ColumnFamilyData
   int parent_level = 0;
   int parent_group = 0;
 
-  if (cfname.find("_sys_cf_") == std::string::npos) {
-    cfname += "_sys_cf";
+  if (cfname.find("_split_cf_") == std::string::npos) {
+    cfname += "_split_cf";
   } else {
     size_t group = cfname.rfind("_G");
     if (group != std::string::npos) {
@@ -2228,8 +2228,8 @@ ColumnFamilyData* CompactionJob::GetWriteBothColumnFamily() {
   std::string cfname = cfd->GetName();
   int parent_level = 0;
 
-  if (cfname.find("_sys_cf_") == std::string::npos) {
-    cfname += "_sys_cf";
+  if (cfname.find("_split_cf_") == std::string::npos) {
+    cfname += "_split_cf";
   } else {
     size_t level = cfname.rfind("_level-");
 
@@ -2255,8 +2255,8 @@ int CompactionJob::GetSplits(ColumnFamilyData* cfd) {
   int parent_level = 0;
   int parent_group = 0;
 
-  if (cfname.find("_sys_cf_") == std::string::npos) {
-    cfname += "_sys_cf";
+  if (cfname.find("_split_cf_") == std::string::npos) {
+    cfname += "_split_cf";
   } else {
     size_t group = cfname.rfind("_G");
     if (group != std::string::npos) {

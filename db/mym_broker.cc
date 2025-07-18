@@ -20,7 +20,7 @@ MymBroker::MymBroker(const std::string& cfname,
     if (options.schemaDescriptors.size() > 4) {
         throw std::runtime_error("Having more than 4 transformers is not supported.");
     }
-    
+
     bool split{false}, convert{false}, augment{false};
     int num_splits = 1;
     if (auto distributor = std::dynamic_pointer_cast<ProtobufDistributorSchema>(options.schemaDescriptors[0])) {
@@ -254,83 +254,93 @@ int MymBroker::Delete(const std::string &key)
 void MymBroker::genIntColFamDescriptors(const std::string& cfname,
                                    std::vector<ColumnFamilyDescriptor>& column_families)
 {
-    column_families.push_back(ColumnFamilyDescriptor(cfname, ColumnFamilyOptions(options_)));
+    if (options_.schemaDescriptors.size() != options_.transformers.size()) {
+        throw std::runtime_error("Expected the number of transformers to equal the number of SchemaDescriptors.");
+    }
 
-    if (auto distributor = std::dynamic_pointer_cast<ProtobufDistributorSchema>(options_.schemaDescriptors[0])) {
-        bool lastSplitLevel = false;
-        int num_splits = distributor->GetNumSplits();
-        std::string prefix = cfname + "_sys_cf";
-        std::queue<int> parents;
-        parents.push(options_.num_columns);
+    // Generate ColumnFamilyDescriptor for user-facing column family
+    ColumnFamilyOptions cf_opts(options_);
+    if (options_.schemaDescriptors.size() == 0) {
+        column_families.push_back(ColumnFamilyDescriptor(cfname, cf_opts));
+        return;
+    }
 
-        int total_levels = options_.num_levels;
-        for (int level = 1; level < total_levels - 2; level++) {
-            int queueLen = parents.size();
+    cf_opts.schemaDescriptors.clear();
+    cf_opts.schemaDescriptors.push_back(options_.schemaDescriptors[0]);
+    column_families.push_back(ColumnFamilyDescriptor(cfname, cf_opts));
 
-            options_.num_levels = options_.num_levels - level;
-            if (level == total_levels - 3) {
-                lastSplitLevel = true;
-                options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
-                options_.level0_file_num_compaction_trigger = 4;
-                options_.compaction_pri = kByCompensatedSize;
-            }
-            for (int j = 0; j < queueLen; j++) {
-                int parent_cols = parents.front();
-                parents.pop();
-                if (parent_cols < 2) {
-                    continue;
-                }
+    std::queue<std::pair<std::string, ColumnFamilyOptions>> colfamqueue;
+    colfamqueue.push(std::make_pair(cfname, cf_opts));
 
-                if (!lastSplitLevel && parent_cols <= num_splits) {
-                    lastSplitLevel = true;
-                    options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
-                }
-                for (int k = 0; k < num_splits; k++) {
-                    int child = parent_cols/(num_splits-k);
-                    if (child == 0) {
-                        child = 1;
-                    }
+    for (size_t i = 0; i < options_.schemaDescriptors.size(); i++) {
+        size_t qsize = colfamqueue.size();
 
-                    if (child < num_splits) {
-                        lastSplitLevel = true;
-                        options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
-                    }
-                    std::string cfname_child = prefix + "_L" + std::to_string(level) + "_G" + std::to_string(j*num_splits+k);
-                    column_families.push_back(ColumnFamilyDescriptor(cfname_child, ColumnFamilyOptions(options_)));
-
-                    options_.SetTransformerType(TransformerType::DISTRIBUTOR);
-
-                    if (!lastSplitLevel && child >= num_splits) {
-                        parents.push(child);
-                    }
-                    if (k < num_splits-1) {
-                        parent_cols -= child;
-                        if (parent_cols == 0) {
-                            break;
-                        }
-                    }
-                }
-            }
+        for (size_t j = 0; j < qsize; j++) {
+            auto front = colfamqueue.front();
+            auto src_cf_name = front.first;
+            auto src_cf_opts = front.second;
+            colfamqueue.pop();
+            createDestinationColFamDescriptors(colfamqueue, src_cf_name, src_cf_opts, column_families, options_.schemaDescriptors[i], i+1);
         }
-    } else if (std::dynamic_pointer_cast<Protobuf2FlatbuffersSchema>(options_.schemaDescriptors[0]) ||
-                std::dynamic_pointer_cast<Json2ProtobufSchema>(options_.schemaDescriptors[0])) {
-        options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
-        column_families.push_back(ColumnFamilyDescriptor(
-                    cfname+"_converted_cf", ColumnFamilyOptions(options_)));
+    }
+}
 
-    } else if (auto augmenter = std::dynamic_pointer_cast<ProtobufAugmenterSchema>(options_.schemaDescriptors[0])) {
-        options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
-        options_.target_file_size_base = 1024 * 1024 * 1024;
-        column_families.push_back(ColumnFamilyDescriptor(
-                    cfname+"_indexed_data_cf", ColumnFamilyOptions(options_)));
-        options_.merge_operator = std::make_shared<SecondaryIndexMergeOperator>();
-        column_families.push_back(rocksdb::ColumnFamilyDescriptor(
-                    cfname+"_secondary_index_cf", ColumnFamilyOptions(options_)));
+void MymBroker::createDestinationColFamDescriptors(std::queue<std::pair<std::string, ColumnFamilyOptions>>& cfq,
+                                                   const std::string& cfname,
+                                                   ColumnFamilyOptions& cfopts,
+                                                   std::vector<ColumnFamilyDescriptor>& column_families,
+                                                   std::shared_ptr<SchemaDescriptor> schema,
+                                                   size_t pos) {
+    auto makeCfName = [&](const std::string& suffix) {
+        return cfname + suffix;
+    };
+    
+    ColumnFamilyOptions int_cf_opts(options_);
+    int_cf_opts.transformers.clear();
+    int_cf_opts.schemaDescriptors.clear();
+    if (pos < options_.transformers.size()) {
+        int_cf_opts.SetTransformerType(options_.transformers[pos]->Supports());
+        int_cf_opts.transformers.push_back(options_.transformers[pos]);
+        int_cf_opts.schemaDescriptors.push_back(options_.schemaDescriptors[pos]);
+    } else {
+        int_cf_opts.SetTransformerType(TransformerType::NOTRANSFORMATION);
+    }
+    
+    if (static_cast<int>(schema->SupportsTransformerType()) & static_cast<int>(TransformerType::DISTRIBUTOR)) {
+        int num_splits = schema->GetNumSplits();
+        int_cf_opts.level0_file_num_compaction_trigger = 4;
+        int_cf_opts.compaction_pri = kByCompensatedSize;
 
-    } else if (auto mynooper = std::dynamic_pointer_cast<MynooperSchema>(options_.schemaDescriptors[0])) {
-        options_.SetTransformerType(TransformerType::NOTRANSFORMATION);
-        column_families.push_back(ColumnFamilyDescriptor(
-                    cfname+"_identity_cf", ColumnFamilyOptions(options_)));
+        for (int k = 0; k < num_splits; k++) {
+            std::string cfname_child = cfname + "_split_cf_" + std::to_string(k);
+            column_families.push_back(ColumnFamilyDescriptor(cfname_child, int_cf_opts));
+            cfq.push(std::make_pair(cfname_child, int_cf_opts));
+            cfopts.destination_column_families.push_back(cfname_child);
+        }
+    } else if (static_cast<int>(schema->SupportsTransformerType()) & static_cast<int>(TransformerType::CONVERTER)) {
+        auto converted = makeCfName("_converted_cf");
+        column_families.push_back(ColumnFamilyDescriptor(converted, int_cf_opts));
+        cfq.push(std::make_pair(converted, int_cf_opts));
+        cfopts.destination_column_families.push_back(converted);
+    } else if (static_cast<int>(schema->SupportsTransformerType()) & static_cast<int>(TransformerType::AUGMENTER)) {
+        auto primaryindex = makeCfName("_indexed_data_cf");
+        column_families.push_back(ColumnFamilyDescriptor(primaryindex, int_cf_opts));
+        cfq.push(std::make_pair(primaryindex, int_cf_opts));
+        cfopts.destination_column_families.push_back(primaryindex);
+
+        for (size_t j=0; j < schema->GetIndexKeys().size(); j++) {
+            ColumnFamilyOptions secondary_index_opts(options_);
+            secondary_index_opts.SetTransformerType(TransformerType::NOTRANSFORMATION);
+            secondary_index_opts.merge_operator = std::make_shared<SecondaryIndexMergeOperator>();
+            std::string secondaryindex = cfname + "_secondary_index_cf" + std::to_string(j);
+            column_families.push_back(rocksdb::ColumnFamilyDescriptor(secondaryindex, secondary_index_opts));
+            cfopts.destination_column_families.push_back(secondaryindex);
+        }
+    } else if (static_cast<int>(schema->SupportsTransformerType()) & static_cast<int>(TransformerType::MYNOOPER)) {
+        int_cf_opts.SetTransformerType(TransformerType::NOTRANSFORMATION);
+        auto identity = makeCfName("_identity_cf");
+        column_families.push_back(ColumnFamilyDescriptor(identity, int_cf_opts));
+        cfopts.destination_column_families.push_back(identity);
     } else {
         // handle unknown type
         return; 

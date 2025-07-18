@@ -6,9 +6,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-AvroDistributorSchema::AvroDistributorSchema(const avro::ValidSchema& input_schema,
+AvroDistributorSchema::AvroDistributorSchema(int splits, 
+                                             const avro::ValidSchema& input_schema,
                                              const std::vector<avro::ValidSchema>& output_schemas)
-          : input_schema_(input_schema), output_schemas_(output_schemas) {
+          : splits_(splits), input_schema_(input_schema), output_schemas_(output_schemas) {
   BuildFieldSchemas();
 }
 

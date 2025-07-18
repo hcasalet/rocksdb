@@ -19,6 +19,8 @@ class Json2ProtobufSchema : public SchemaDescriptor {
         BuildSchemas();
     }
 
+    TransformerType SupportsTransformerType() const override { return TransformerType::CONVERTER; }
+
     InputOutputDataType InputType() const override { return InputOutputDataType::JSON; }
     InputOutputDataType OutputType() const override { return InputOutputDataType::PROTOBUF; }
     bool Validate(const ByteBuffer& input_data) const override;

@@ -3271,7 +3271,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
 
   if (cracked) {
     if (writeboth) {
-      std::string orig_cf_name = cf_name_prefix + "_sys_cf_original";
+      std::string orig_cf_name = cf_name_prefix + "_split_cf_original";
       ColumnFamilyData* orig_cf = all_cfds->GetColumnFamily(orig_cf_name);
       if (orig_cf != nullptr) {
         root_cfd->AddDestinationCfd(orig_cf);
@@ -3301,7 +3301,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
         }
 
         for (int j = 0; j < splits; j++) {
-          std::string dest_cf_name = cf_name_prefix + "_sys_cf_L" + std::to_string(src_level+1) + "_G" + std::to_string(src_group*splits+j);
+          std::string dest_cf_name = cf_name_prefix + "_split_cf_" + std::to_string(src_group*splits+j);
           ColumnFamilyData* dest_cfd = all_cfds->GetColumnFamily(dest_cf_name);
           if (dest_cfd != nullptr) {
             src_cfd->AddDestinationCfd(dest_cfd);

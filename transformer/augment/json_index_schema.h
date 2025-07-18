@@ -16,13 +16,15 @@ class JsonAugmenterSchema : public SchemaDescriptor {
         BuildInputSchema();
     }
 
+    TransformerType SupportsTransformerType() const override { return TransformerType::AUGMENTER; }
+
     InputOutputDataType InputType() const override { return InputOutputDataType::JSON; }
     InputOutputDataType OutputType() const override { return InputOutputDataType::JSON; }
 
     std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
     ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
 
-    const std::vector<std::vector<std::string>>& GetIndexKeys() const { return index_keys_; }
+    std::vector<std::vector<std::string>> GetIndexKeys() const override { return index_keys_; }
 
     std::vector<FieldSchema> GetInputFieldSchema() const override { return input_field_schema_; }
 

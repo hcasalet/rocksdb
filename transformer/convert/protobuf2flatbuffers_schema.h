@@ -20,6 +20,8 @@ class Protobuf2FlatbuffersSchema : public SchemaDescriptor {
         BuildSchemas();
     }
 
+    TransformerType SupportsTransformerType() const override { return TransformerType::CONVERTER; }
+
     InputOutputDataType InputType() const override { return InputOutputDataType::PROTOBUF; }
     InputOutputDataType OutputType() const override { return InputOutputDataType::FLATBUFFERS; }
 

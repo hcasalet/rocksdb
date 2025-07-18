@@ -15,6 +15,8 @@ class CsvDistributorSchema : public SchemaDescriptor {
           : header_(std::move(header)), types_(std::move(types)), splits_(splits) {
       BuildSchemas();
     }
+
+    TransformerType SupportsTransformerType() const override { return TransformerType::DISTRIBUTOR; }
     
     InputOutputDataType InputType() const override { return InputOutputDataType::CSV; }
     InputOutputDataType OutputType() const override { return InputOutputDataType::CSV; }
@@ -23,7 +25,7 @@ class CsvDistributorSchema : public SchemaDescriptor {
     std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
     ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
 
-    int GetNumSplits() const { return splits_; }
+    int GetNumSplits() const override { return splits_; }
     
     std::vector<FieldSchema> GetInputFieldSchema() const override { return input_schema_; }
     std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const override { return output_schemas_; }
