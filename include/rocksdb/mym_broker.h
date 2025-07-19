@@ -51,6 +51,8 @@ class ColFamMeta {
                std::set<int> col_positions) 
         : cfName_(cf_name), logical_level_(logical_level), 
           cf_handle_(cf_handle), colPositions_(std::move(col_positions)) {}
+    int GetLogicalLevel() { return logical_level_; }
+    std::set<int> GetColumns() { return colPositions_; }
 };
 
 class MymBroker {
@@ -79,11 +81,14 @@ class MymBroker {
         ColFamMeta user_cf_meta_;
         std::unordered_map<int, std::unordered_map<std::string, ColFamMeta>> int_cf_meta_;
         
-        void genIntColFamDescriptors(const std::string& cfname,
-                                     std::vector<ColumnFamilyDescriptor>& column_families);
+        std::queue<std::pair<int, std::vector<int>>> genIntColFamDescriptors(
+                                    const std::string& cfname,
+                                    std::vector<ColumnFamilyDescriptor>& column_families);
         void saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column_family_descriptors,
                                   std::vector<ColumnFamilyHandle*> handles,
-                                  std::string cfname, int num_splits);
+                                  std::string cfname,
+                                  std::queue<std::pair<int, std::vector<int>>> src_dest_pairs);
+        std::vector<std::set<int>> splitColumns(std::set<int> srccols, int splits);
         void createDestinationColFamDescriptors(std::queue<std::pair<std::string, ColumnFamilyOptions>>& cfq,
                                                 const std::string& cfname,
                                                 ColumnFamilyOptions& cfopts,

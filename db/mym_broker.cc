@@ -23,7 +23,7 @@ MymBroker::MymBroker(const std::string& cfname,
     }
 
     std::vector<ColumnFamilyDescriptor> column_family_descriptors;
-    genIntColFamDescriptors(cfname, column_family_descriptors);
+    auto src_dest_pairs = genIntColFamDescriptors(cfname, column_family_descriptors);
     std::vector<ColumnFamilyHandle*> cf_handles;
     Status s;
 
@@ -46,7 +46,7 @@ MymBroker::MymBroker(const std::string& cfname,
         assert(s.ok());
     }
 
-    saveIntColFamHandles(column_family_descriptors, cf_handles, cfname, num_splits);
+    saveIntColFamHandles(column_family_descriptors, cf_handles, cfname, src_dest_pairs);
 }
 
 int MymBroker::Read(const std::string &key, const std::set<int>* positions, std::string &result)
@@ -240,8 +240,9 @@ int MymBroker::Delete(const std::string &key)
     return 1;
 }
 
-void MymBroker::genIntColFamDescriptors(const std::string& cfname,
-                                   std::vector<ColumnFamilyDescriptor>& column_families)
+std::queue<std::pair<int, std::vector<int>>> MymBroker::genIntColFamDescriptors(
+            const std::string& cfname,
+            std::vector<ColumnFamilyDescriptor>& column_families)
 {
     if (options_.schemaDescriptors.size() != options_.transformers.size()) {
         throw std::runtime_error("Expected the number of transformers to equal the number of SchemaDescriptors.");
@@ -251,7 +252,7 @@ void MymBroker::genIntColFamDescriptors(const std::string& cfname,
     ColumnFamilyOptions cf_opts(options_);
     if (options_.schemaDescriptors.size() == 0) {
         column_families.push_back(ColumnFamilyDescriptor(cfname, cf_opts));
-        return;
+        return std::queue<std::pair<int, std::vector<int>>>{};
     }
 
     cf_opts.schemaDescriptors.clear();
@@ -262,18 +263,35 @@ void MymBroker::genIntColFamDescriptors(const std::string& cfname,
 
     std::queue<std::pair<std::string, ColumnFamilyOptions>> colfamqueue;
     colfamqueue.push(std::make_pair(cfname, cf_opts));
+    //In the following queue, each element has the 1st int to be its own position 
+    //in the ColumnFamilyDescriptors and handles list; the second vector of ints 
+    //are the positions of its destination column families
+    std::queue<std::pair<int, std::vector<int>>> src_dest_pair_queue;
+    size_t head = 0, tail;
 
     for (size_t i = 0; i < options_.schemaDescriptors.size(); i++) {
-        size_t qsize = colfamqueue.size();
+        size_t qsize = colfamqueue.size();   
 
         for (size_t j = 0; j < qsize; j++) {
             auto front = colfamqueue.front();
             auto src_cf_name = front.first;
             auto src_cf_opts = front.second;
             colfamqueue.pop();
+
+            tail = column_families.size();
             createDestinationColFamDescriptors(colfamqueue, src_cf_name, src_cf_opts, column_families, i);
+
+            std::vector<int> children;
+            for (size_t k = tail; k < column_families.size(); k++) {
+                children.push_back(k);
+            }
+
+            src_dest_pair_queue.push(std::make_pair(head, children));
+            head++;
         }
     }
+
+    return src_dest_pair_queue;
 }
 
 void MymBroker::createDestinationColFamDescriptors(std::queue<std::pair<std::string, ColumnFamilyOptions>>& cfq,
@@ -342,44 +360,85 @@ void MymBroker::createDestinationColFamDescriptors(std::queue<std::pair<std::str
 
 void MymBroker::saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column_family_descriptors,
                                 std::vector<ColumnFamilyHandle*> handles,
-                                std::string cfname, int num_splits)
+                                std::string cfname,
+                                std::queue<std::pair<int, std::vector<int>>> src_dest_pairs)
 {
     assert(column_family_descriptors.size()==handles.size());
 
-    int pre_group = 0;
-    int group = num_splits;
-    int level = 1;
-    int roundcount = 0;
-    for (size_t i = 0; i < column_family_descriptors.size(); i++) {
+    // Remove kDefaultColumnFamilyName from the descriptor and handle lists
+    for (size_t i = 0; i < column_family_descriptors.size(); ++i) {
         if (column_family_descriptors[i].name == kDefaultColumnFamilyName) {
-            continue;
-        }
-
-        if (column_family_descriptors[i].name == cfname) {
-            user_cf_meta_ = ColFamMeta(cfname, 0, handles[i], std::set<int>{});
-            continue;
-        }
-
-        if (num_splits == 1) {
-            int_cf_meta_[1][column_family_descriptors[i].name] = ColFamMeta(
-                column_family_descriptors[i].name, 1, handles[i], std::set<int>{});
-        } else {
-            std::set<int> colpos;
-            getColPositions(group, pre_group, options_.num_columns, colpos);
-            int_cf_meta_[level][column_family_descriptors[i].name] = ColFamMeta(
-                column_family_descriptors[i].name, level, handles[i], std::move(colpos)                    
-            );
-            pre_group++;
-            roundcount++;
-
-            if (roundcount == group) {
-                roundcount = 0;
-                pre_group = 0;
-                group *= num_splits;
-                level += 1;
-            }
+            column_family_descriptors.erase(column_family_descriptors.begin() + i);
+            handles.erase(handles.begin() + i);
+            break;
         }
     }
+
+    // Get the full list of columns
+    std::set<int> cols;
+    for (int i = 0; i < options_.num_columns; i++) {
+        cols.insert(i);
+    }
+    
+    // construct the metadata item for logical level 0
+    int_cf_meta_[0][cfname] = ColFamMeta(cfname, 0, handles[0], std::move(cols));
+
+    int srclevel = 0, level_start = 0, level_end = 0, destlevel = 1;
+    std::set<int> srccols;
+
+    std::queue<int> position_queue;
+    position_queue.push(0);
+
+    while (!src_dest_pairs.empty()) {
+        size_t position_queue_size = position_queue.size();
+
+        for (size_t i = 0; i < position_queue_size; i++) {
+            auto src_dest = src_dest_pairs.front();
+            src_dest_pairs.pop();
+            auto src = src_dest.first;
+            auto dests = src_dest.second;
+
+            for (auto dest : dests) {
+                position_queue.push(dest);
+            }
+        
+            srccols = int_cf_meta_[srclevel][column_family_descriptors[src].name].GetColumns();
+
+            auto splitColGroups = splitColumns(srccols, dests.size());
+
+            for (size_t k = 0; k < dests.size(); k++) {
+                int_cf_meta_[destlevel][column_family_descriptors[dests[k]].name] = 
+                        ColFamMeta(column_family_descriptors[dests[k]].name, 
+                        destlevel, handles[dests[k]], splitColGroups[k]);
+            }
+        }
+        srclevel = destlevel;
+        destlevel++;
+    }
+
+}
+
+std::vector<std::set<int>> MymBroker::splitColumns(std::set<int> srccols, int splits) {
+    std::vector<std::set<int>> result(splits);
+
+    if (srccols.empty() || splits <= 0) {
+        return result;
+    }
+
+    int total = srccols.size();
+    int base_size = total / splits;
+    int remainder = total % splits;
+
+    auto it = srccols.begin();
+    for (int i = 0; i < splits; ++i) {
+        int this_split_size = base_size + (i < remainder ? 1 : 0);  // distribute remainder
+
+        for (int j = 0; j < this_split_size && it != srccols.end(); ++j, ++it) {
+            result[i].insert(*it);
+        }
+    }
+
+    return result;
 }
 
 void MymBroker::getColPositions(int divide, int start, int total_cols, std::set<int>& col_pos)
