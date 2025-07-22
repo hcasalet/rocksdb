@@ -99,11 +99,7 @@ Status SubcompactionState::AddToOutput(
     const CompactionIterator& iter,
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func,
-    std::vector<std::shared_ptr<Transformer>> transformers,
-    TransformerType transformer_type,
-    InputOutputDataType inputDataType,
-    InputOutputDataType outputDataType,
-    std::string columnDataType,
+    ColumnFamilyData* cfd,
     uint64_t compactionJobId) {
   // update target output first
   is_current_penultimate_level_ = iter.output_to_penultimate_level();
@@ -113,8 +109,12 @@ Status SubcompactionState::AddToOutput(
     has_penultimate_level_outputs_ = true;
   }
 
-  return Current().AddToOutput(iter, open_file_func, close_file_func, transformers,
-                   transformer_type, inputDataType, outputDataType, columnDataType,
+  return Current().AddToOutput(iter, open_file_func, close_file_func, 
+                   cfd->ioptions()->transformers,
+                   cfd->ioptions()->transformers[0]->Supports(),
+                   cfd->ioptions()->schemaDescriptors[0]->InputType(),
+                   cfd->ioptions()->schemaDescriptors[0]->OutputType(),
+                   "numeric",
                    compactionJobId);
 }
 
