@@ -551,7 +551,7 @@ class ColumnFamilyData {
     return destination_cfds_.size();
   }
 
-  std::vector<ColumnFamilyData*> GetDestinationCfds() {
+  const std::vector<ColumnFamilyData*> GetDestinationCfds() {
     return destination_cfds_;
   }
 

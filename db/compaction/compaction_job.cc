@@ -165,7 +165,6 @@ CompactionJob::CompactionJob(
       bottommost_level_(false),
       write_hint_(Env::WLTH_NOT_SET),
       compaction_job_stats_(compaction_job_stats),
-      transformers_(compaction->column_family_data()->ioptions()->transformers),
       job_id_(job_id),
       dbname_(dbname),
       db_id_(db_id),
@@ -263,7 +262,7 @@ void CompactionJob::Prepare() {
 
   int splits = cfd->GetDestinationCfdSize();
 
-  if (cfd->GetName().find("_split_cf_") != std::string::npos) {
+  if (cfd->ioptions()->transformers.size() > 0) {
     EnsureInputOnlyOnLevel0(cfd);
     assert(cfd->current()->storage_info()->NumLevelFiles(0) > 0);
   } else {
@@ -841,21 +840,15 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
 
   ColumnFamilyData* cfd = compact_->compaction->column_family_data();
   assert(cfd);
-  int output_level = compact_->compaction->output_level();
 
-  //std::vector<ColumnFamilyData*> output_cfds;
-  if (transformers_.size() == 0 ||
-      to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::NOTRANSFORMATION) ||
-      to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::AUGMENTER) ||
-      (to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::DISTRIBUTOR) &&
-          cfd->GetDestinationCfdSize() == 1) ||
-      (to_underlying(cfd->ioptions()->transformer_type) == to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER) &&
-          cfd->GetDestinationCfdSize() == 1) ||
-      (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_converted_cf") != std::string::npos) ||
-      (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_indexed_data_cf") != std::string::npos) ||
-      (cfd->GetDestinationCfdSize() == 1 && cfd->GetDestinationCfds()[0]->GetName().find("_identtiy_cf") != std::string::npos)) {
-    cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_, compaction_stats_);
+  int output_level;
+  if (cfd->ioptions()->transformers.size() > 0) {
+    output_level = 1;
+  } else {
+    output_level = compact_->compaction->output_level();
   }
+  
+  cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_, compaction_stats_);
 
   if (status.ok()) {
     status = InstallCompactionResults(mutable_cf_options, cfd->GetDestinationCfds(), cfd);
@@ -1338,7 +1331,8 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     // and `close_file_func`.
     // TODO: it would be better to have the compaction file open/close moved
     // into `CompactionOutputs` which has the output file information.
-    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, transformers_,
+    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func,
+                              cfd->ioptions()->transformers,
                               cfd->ioptions()->transformer_type, cfd->ioptions()->input_data_type,
                               cfd->ioptions()->output_data_type, cfd->ioptions()->column_data_type,
                               compactionJobId);
@@ -1514,17 +1508,15 @@ Status CompactionJob::FinishCompactionOutputFile(
   assert(outputs.HasBuilder());
 
   Status s;
+  ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
+  assert(cfd->GetDestinationCfds().size() == outputs.GetOutputsSize());
+
   for (size_t i = 0; i < outputs.GetOutputsSize(); i++) {
     FileMetaData* meta = outputs.GetMetaData(i);
     uint64_t output_number = meta->fd.GetNumber();
     assert(output_number != 0);
 
-    ColumnFamilyData* cfd;
-    if (transformers_.size() > 0 && sub_compact->compaction->column_family_data()->GetDestinationCfds().size() > 0) {
-      cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i];
-    } else {
-      cfd = sub_compact->compaction->column_family_data();
-    }
+    cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i];
     
     std::string file_checksum = kUnknownFileChecksum;
     std::string file_checksum_func_name = kUnknownFileChecksumFuncName;
@@ -1848,7 +1840,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
                                                CompactionOutputs& outputs) {
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
   assert(sub_compact != nullptr);
-  if (transformers_.size() > 0) {
+  if (cfd->ioptions()->transformers.size() > 0) {
     if (cfd->GetName() == "default") {
       return Status::OK();
     }
@@ -1878,7 +1870,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
     std::string fname = GetTableFileName(file_number);
     // Fire events.
     ColumnFamilyData* dest_cfd;
-    if (transformers_.size() > 0 && cfd->GetDestinationCfds().size() > 0) {
+    if (cfd->ioptions()->transformers.size() > 0 && cfd->GetDestinationCfds().size() > 0) {
       dest_cfd = cfd->GetDestinationCfds()[i];
     } else {
       dest_cfd = cfd;

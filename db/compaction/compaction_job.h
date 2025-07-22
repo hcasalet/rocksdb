@@ -218,8 +218,6 @@ class CompactionJob {
 
   CompactionJobStats* compaction_job_stats_;
 
-  std::vector<std::shared_ptr<Transformer>> transformers_;
-
  private:
   friend class CompactionJobTestBase;
 
