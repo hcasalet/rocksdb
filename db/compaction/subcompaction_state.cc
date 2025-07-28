@@ -109,13 +109,7 @@ Status SubcompactionState::AddToOutput(
     has_penultimate_level_outputs_ = true;
   }
 
-  return Current().AddToOutput(iter, open_file_func, close_file_func, 
-                   cfd->ioptions()->transformers,
-                   cfd->ioptions()->transformers[0]->Supports(),
-                   cfd->ioptions()->schemaDescriptors[0]->InputType(),
-                   cfd->ioptions()->schemaDescriptors[0]->OutputType(),
-                   "numeric",
-                   compactionJobId);
+  return Current().AddToOutput(iter, open_file_func, close_file_func);
 }
 
 Status SubcompactionState::AddDerivedOutput(

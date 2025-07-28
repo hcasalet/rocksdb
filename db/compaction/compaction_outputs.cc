@@ -365,14 +365,15 @@ bool CompactionOutputs::ShouldStopBefore(const CompactionIterator& c_iter) {
 Status CompactionOutputs::AddToOutput(
     const CompactionIterator& c_iter,
     const CompactionFileOpenFunc& open_file_func,
-    const CompactionFileCloseFunc& close_file_func,
-    std::vector<std::shared_ptr<Transformer>> transformers,
-    TransformerType transformer_type, 
-    InputOutputDataType inputDataType,
-    InputOutputDataType outputDataType,
-    std::string columnDataType,
-    uint64_t compactionJobId) {
+    const CompactionFileCloseFunc& close_file_func) {
   Status s;
+  ColumnFamilyData* cfd = compaction_->column_family_data();
+  TransformerType transformer_type = cfd->ioptions()->transformers[0]->Supports();
+  std::vector<std::shared_ptr<Transformer>> transformers = cfd->ioptions()->transformers;
+  InputOutputDataType inputDataType = cfd->ioptions()->schemaDescriptors[0]->InputType();
+  InputOutputDataType outputDataType = cfd->ioptions()->schemaDescriptors[0]->OutputType();
+  std::string columnDataType = cfd->ioptions()->column_data_type;
+
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {
     // We don't consider range tombstone for bottommost level since:
