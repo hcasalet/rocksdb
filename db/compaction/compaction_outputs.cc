@@ -372,7 +372,6 @@ Status CompactionOutputs::AddToOutput(
   std::vector<std::shared_ptr<Transformer>> transformers = cfd->ioptions()->transformers;
   InputOutputDataType inputDataType = cfd->ioptions()->schemaDescriptors[0]->InputType();
   InputOutputDataType outputDataType = cfd->ioptions()->schemaDescriptors[0]->OutputType();
-  std::string columnDataType = cfd->ioptions()->column_data_type;
 
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {

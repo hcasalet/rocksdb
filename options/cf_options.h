@@ -70,17 +70,11 @@ struct ImmutableCFOptions {
 
   int num_columns;
 
-  std::string column_data_type; // mixed - default;  numeric, string
-
   TransformerType transformer_type;
 
   std::vector<std::shared_ptr<Transformer>> transformers;
   std::vector<std::shared_ptr<SchemaDescriptor>> schemaDescriptors;
   std::vector<std::string> destination_column_families;
-
-  InputOutputDataType input_data_type;
-
-  InputOutputDataType output_data_type;
 
   bool optimize_filters_for_hits;
 

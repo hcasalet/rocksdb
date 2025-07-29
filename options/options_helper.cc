@@ -299,10 +299,7 @@ void UpdateColumnFamilyOptions(const ImmutableCFOptions& ioptions,
       ioptions.level_compaction_dynamic_file_size;
   cf_opts->num_levels = ioptions.num_levels;
   cf_opts->num_columns = ioptions.num_columns;
-  cf_opts->column_data_type = ioptions.column_data_type;
   cf_opts->transformer_type = ioptions.transformer_type;
-  cf_opts->input_data_type = ioptions.input_data_type;
-  cf_opts->output_data_type = ioptions.output_data_type;
   cf_opts->optimize_filters_for_hits = ioptions.optimize_filters_for_hits;
   cf_opts->force_consistency_checks = ioptions.force_consistency_checks;
   cf_opts->memtable_insert_with_hint_prefix_extractor =
