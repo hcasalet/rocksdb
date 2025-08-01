@@ -65,7 +65,6 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       transform_while_compacting(options.transform_while_compacting),
       num_columns(options.num_columns),
       column_data_type(options.column_data_type),
-      transformer_type(options.transformer_type),
       level0_slowdown_writes_trigger(options.level0_slowdown_writes_trigger),
       level0_stop_writes_trigger(options.level0_stop_writes_trigger),
       target_file_size_base(options.target_file_size_base),
@@ -197,7 +196,6 @@ void ColumnFamilyOptions::Dump(Logger* log) const {
     ROCKS_LOG_HEADER(log, "            Options.compacting_level_within_column_family_group: %d", compacting_level_within_column_family_group);
     ROCKS_LOG_HEADER(log, "            Options.num_columns: %d", num_columns);
     ROCKS_LOG_HEADER(log, "            Options.column_data_type: %s", column_data_type.c_str());
-    ROCKS_LOG_HEADER(log, "            Options.transform_type: %d", static_cast<int>(transformer_type));
     ROCKS_LOG_HEADER(log, "       Options.min_write_buffer_number_to_merge: %d",
                      min_write_buffer_number_to_merge);
     ROCKS_LOG_HEADER(log, "    Options.max_write_buffer_number_to_maintain: %d",
@@ -635,11 +633,6 @@ ColumnFamilyOptions* ColumnFamilyOptions::OptimizeForPointLookup(
   table_factory.reset(new BlockBasedTableFactory(block_based_options));
   memtable_prefix_bloom_size_ratio = 0.02;
   memtable_whole_key_filtering = true;
-  return this;
-}
-
-ColumnFamilyOptions* ColumnFamilyOptions::SetTransformerType(TransformerType transformerType) {
-  transformer_type = transformerType;
   return this;
 }
 

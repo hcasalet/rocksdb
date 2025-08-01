@@ -70,8 +70,6 @@ struct ImmutableCFOptions {
 
   int num_columns;
 
-  TransformerType transformer_type;
-
   std::vector<std::shared_ptr<Transformer>> transformers;
   std::vector<std::shared_ptr<SchemaDescriptor>> schemaDescriptors;
   std::vector<std::string> destination_column_families;

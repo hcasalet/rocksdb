@@ -3601,8 +3601,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                        &earliest_write_conflict_snapshot, &snapshot_checker);
     assert(is_snapshot_supported_ || snapshots_.empty());
 
-    if (to_underlying(c->column_family_data()->ioptions()->transformer_type) != 
-            to_underlying(TransformerType::NOTRANSFORMATION) && !destination_cfds_computed_) {
+    if ((c->column_family_data()->ioptions()->transformers.size() > 0) && 
+        (!destination_cfds_computed_)) {
       return Status::Aborted();
     }
 
@@ -3953,8 +3953,7 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
     }
   }
 
-  if (to_underlying(cfd->ioptions()->transformer_type) != 
-        to_underlying(TransformerType::NOTRANSFORMATION) && !destination_cfds_computed_) {
+  if ((cfd->ioptions()->transformers.size() > 0) && (!destination_cfds_computed_)) {
     return;
   }
 

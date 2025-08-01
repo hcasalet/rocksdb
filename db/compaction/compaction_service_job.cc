@@ -264,7 +264,7 @@ Status CompactionServiceCompactionJob::Run() {
   int splits = 1;
   ColumnFamilyData* cfd = c->column_family_data();
   if (cfd->ioptions()->transformers.size() > 0) {
-    if (static_cast<int>(cfd->ioptions()->transformer_type) & 1) { // check whether DISTRIBUTOR as transformer_type is set
+    if (static_cast<int>(cfd->ioptions()->transformers[0]->Supports()) & 1) { // check whether DISTRIBUTOR as transformer_type is set
       if (cfd->GetName().find("_split_cf"+std::to_string(cfd->ioptions()->num_levels-1)) == std::string::npos) {
         splits = 2;
       }

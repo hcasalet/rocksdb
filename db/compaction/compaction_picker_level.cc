@@ -771,7 +771,9 @@ bool LevelCompactionBuilder::PickFileToCompact() {
 
   assert(start_level_ >= 0);
 
-  if (ioptions_.transformer_type == TransformerType::NOTRANSFORMATION && TryPickL0TrivialMove()) {
+  if ((ioptions_.transformers.size() == 0 || 
+          ioptions_.transformers[0]->Supports() == TransformerType::NOTRANSFORMATION) && 
+       TryPickL0TrivialMove()) {
     return true;
   }
 

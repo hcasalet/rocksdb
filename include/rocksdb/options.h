@@ -86,9 +86,6 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
   //
   ColumnFamilyOptions* OptimizeForPointLookup(uint64_t block_cache_size_mb);
 
-  // Sets the transformation type
-  ColumnFamilyOptions* SetTransformerType(TransformerType tranformerType);
-
   // Default values for some parameters in ColumnFamilyOptions are not
   // optimized for heavy workloads and big datasets, which means you might
   // observe write stalls under some conditions. As a starting point for tuning

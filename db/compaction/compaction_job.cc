@@ -1840,7 +1840,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
     if (cfd->GetName() == "default") {
       return Status::OK();
     }
-    switch (to_underlying(cfd->ioptions()->transformer_type)) {
+    switch (to_underlying(cfd->ioptions()->transformers[0]->Supports())) {
       case to_underlying(TransformerType::DISTRIBUTOR):
       case to_underlying(TransformerType::AUGMENTER):
         if (outputs.GetOutputsSize() < cfd->GetDestinationCfdSize()) {
@@ -1985,7 +1985,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         db_options_.stats, listeners, db_options_.file_checksum_gen_factory.get(),
         tmp_set.Contains(FileType::kTableFile), false), i);
 
-    if (cfd->ioptions()->transformer_type == TransformerType::NOTRANSFORMATION) {
+    if (cfd->ioptions()->transformers.size() == 0) {
       TableBuilderOptions tboptions(
         *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
         cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),
