@@ -369,7 +369,8 @@ Status CompactionOutputs::AddToOutput(
   Status s;
   ColumnFamilyData* cfd = compaction_->column_family_data();
   TransformerType transformer_type = cfd->ioptions()->transformers[0]->Supports();
-  std::vector<std::shared_ptr<Transformer>> transformers = cfd->ioptions()->transformers;
+  std::shared_ptr<Transformer> transformer = cfd->ioptions()->transformers[0];
+  std::shared_ptr<SchemaDescriptor> schemaDescriptor = cfd->ioptions()->schemaDescriptors[0];
   InputOutputDataType inputDataType = cfd->ioptions()->schemaDescriptors[0]->InputType();
   InputOutputDataType outputDataType = cfd->ioptions()->schemaDescriptors[0]->OutputType();
 
@@ -380,9 +381,8 @@ Status CompactionOutputs::AddToOutput(
     // 2. range tombstone may be dropped at bottommost level.
     return s;
   }
-  const Slice& key = c_iter.key();
-  if (to_underlying(transformer_type) != to_underlying(TransformerType::AUGMENTER) &&   
-      ShouldStopBefore(c_iter) && HasBuilder()) {
+  Slice key = c_iter.key();
+  if (ShouldStopBefore(c_iter) && HasBuilder()) {
     s = close_file_func(*this, c_iter.InputStatus(), key);
     if (!s.ok()) {
       return s;
@@ -424,253 +424,75 @@ Status CompactionOutputs::AddToOutput(
   // transform value
   std::vector<std::vector<uint8_t>> output_values;
   int output_cfds_size = static_cast<int>(c_iter.output_cfds().size());
-  const ParsedInternalKey& ikey = c_iter.ikey();
-
-  switch (to_underlying(transformer_type)) {
-    case to_underlying(TransformerType::NOTRANSFORMATION): {   // no transformations
-      s = current_output(0).validator.Add(key, value);
-      if (!s.ok()) {
-        return s;
-      }
-      builders_[0]->Add(key, value);
-      stats_.num_output_records++;
-      current_output_file_size_ = builders_[0]->EstimatedFileSize();
   
-      if (blob_garbage_meter_) {
-        s = blob_garbage_meter_->ProcessOutFlow(key, value);
-      }
-      if (!s.ok()) {
-        return s;
-      }
+  if (to_underlying(transformer_type) == to_underlying(TransformerType::NOTRANSFORMATION)) {
+    output_values.emplace_back(
+      reinterpret_cast<const uint8_t*>(value.data()),
+      reinterpret_cast<const uint8_t*>(value.data()) + value.size()
+    );
+  } else {
+    std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
+                                 reinterpret_cast<const uint8_t*>(value.data() + value.size()));
 
-      s = current_output(0).meta.UpdateBoundaries(key, value, ikey.sequence,
-                                                 ikey.type);
+    if (to_underlying(transformer_type) == to_underlying(TransformerType::AUGMENTER)) {
+      output_values.emplace_back(
+        reinterpret_cast<const uint8_t*>(value.data()),
+        reinterpret_cast<const uint8_t*>(value.data()) + value.size()
+      );
 
-      break;
+      std::string separator = "$$";
+      val_vec.insert(val_vec.end(),
+                     reinterpret_cast<const uint8_t*>(separator.data()),
+                     reinterpret_cast<const uint8_t*>(separator.data() + separator.size()));
+
+      val_vec.insert(val_vec.end(),
+                     reinterpret_cast<const uint8_t*>(key.data()),
+                     reinterpret_cast<const uint8_t*>(key.data() + key.size()));
     }
-    case to_underlying(TransformerType::DISTRIBUTOR): {
-      if (output_cfds_size > 0) {
-        auto input_proto = std::unique_ptr<google::protobuf::Message>(new data::Row());
-        std::vector<std::unique_ptr<google::protobuf::Message>> output_protos;
-        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp1()));
-        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp2()));
-        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp3()));
-        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp4()));
-
-        std::shared_ptr<SchemaDescriptor> splittingData = 
-                  std::make_shared<ProtobufDistributorSchema>(2, std::move(input_proto), std::move(output_protos));
-        std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
-                                  reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-        transformers[0]->Transform(val_vec, output_values, splittingData);
-      } else {
-        output_values.emplace_back(
-          reinterpret_cast<const uint8_t*>(value.data()),
-          reinterpret_cast<const uint8_t*>(value.data()) + value.size()
-        );
-      }
-  
-      for (size_t i = 0; i < output_values.size(); i++) {
-        s = current_output(i).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                       output_values[i].size()));
-        if (!s.ok()) {
-          return s;
-        }
-        builders_[i]->Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                     output_values[i].size()));
     
-        stats_.num_output_records++;
-        current_output_file_size_ = builders_[i]->EstimatedFileSize();
-  
-        if (blob_garbage_meter_) {
-          s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                     output_values[i].size()));
-        }
-        if (!s.ok()) {
-          return s;
-        }
-
-        s = current_output(i).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                        output_values[i].size()), ikey.sequence, ikey.type);
-      }
-      break;
-    }
-    case to_underlying(TransformerType::DISTRIBUTOR | TransformerType::CONVERTER): {
-      if (output_cfds_size > 0) {
-        auto input_proto = std::unique_ptr<google::protobuf::Message>(new data::Row());
-        std::vector<std::unique_ptr<google::protobuf::Message>> output_protos;
-        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp1()));
-        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp2()));
-        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp3()));
-        output_protos.emplace_back(std::unique_ptr<google::protobuf::Message>(new data::Grp4()));
-        std::shared_ptr<SchemaDescriptor> splittingData = 
-                  std::make_shared<ProtobufDistributorSchema>(2, std::move(input_proto), std::move(output_protos));
-        std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
-                                    reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-        transformers[0]->Transform(val_vec, output_values, splittingData);
-
-        std::unique_ptr<google::protobuf::Message> input_proto_template = std::make_unique<data::Row>();
-        const flatbuffers::TypeTable* fb_type_table = flat::FbRowTypeTable();
-        auto convertingData = std::make_shared<rocksdb::Protobuf2FlatbuffersSchema>(std::move(input_proto_template), fb_type_table);
-
-        std::vector<std::vector<uint8_t>> output_converted_values;
-        for (auto ovalue : output_values) {
-          std::vector<std::vector<uint8_t>> ovalues;
-          transformers[1]->Transform(ovalue, ovalues, convertingData);
-          output_converted_values.push_back(ovalues[0]);
-        }
-        output_values = output_converted_values;
-      } else {
-        output_values.emplace_back(
-          reinterpret_cast<const uint8_t*>(value.data()),
-          reinterpret_cast<const uint8_t*>(value.data()) + value.size()
-        );
-      }
-  
-      if (static_cast<int>(output_values.size()) == output_cfds_size) {
-        for (int i = 0; i < output_cfds_size; i++) {
-          s = current_output(i).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                         output_values[i].size()));
-          if (!s.ok()) {
-            return s;
-          }
-          builders_[i]->Add(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                       output_values[i].size()));
-    
-          stats_.num_output_records++;
-          current_output_file_size_ = builders_[i]->EstimatedFileSize();
-  
-          if (blob_garbage_meter_) {
-            s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                       output_values[i].size()));
-          }
-          if (!s.ok()) {
-            return s;
-          }
-
-          s = current_output(i).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                      output_values[i].size()), ikey.sequence, ikey.type);
-        }
-      }
-      
-      break;
-    }
-    case to_underlying(TransformerType::CONVERTER): {
-      std::unique_ptr<google::protobuf::Message> input_proto_template = std::make_unique<data::Row>();
-      const flatbuffers::TypeTable* fb_type_table = flat::FbRowTypeTable();
-      auto convertingData = std::make_shared<rocksdb::Protobuf2FlatbuffersSchema>(std::move(input_proto_template), fb_type_table);
-
-      std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
-                                  reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-      transformers[0]->Transform(val_vec, output_values, convertingData);
-      s = current_output(0).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
-                                          output_values[0].size()));
-      if (!s.ok()) {
-        return s;
-      }
-
-      builders_[0]->Add(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
-                                   output_values[0].size()));
-      stats_.num_output_records++;
-      current_output_file_size_ = builders_[0]->EstimatedFileSize();
-  
-      if (blob_garbage_meter_) {
-        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
-                                                   output_values[0].size()));
-      }
-      if (!s.ok()) {
-        return s;
-      }
-
-      s = current_output(0).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
-                                                  output_values[0].size()), ikey.sequence, ikey.type);
-      break;
-    }
-    case to_underlying(TransformerType::MYNOOPER): {
-      std::shared_ptr<SchemaDescriptor> mynooperSchema = std::make_shared<MynooperSchema>();
-      std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
-                                  reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-      transformers[0]->Transform(val_vec, output_values, mynooperSchema);
-      s = current_output(0).validator.Add(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
-                                          output_values[0].size()));
-      if (!s.ok()) {
-        return s;
-      }
-
-      builders_[0]->Add(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
-                                   output_values[0].size()));
-      stats_.num_output_records++;
-      current_output_file_size_ = builders_[0]->EstimatedFileSize();
-  
-      if (blob_garbage_meter_) {
-        s = blob_garbage_meter_->ProcessOutFlow(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
-                                                   output_values[0].size()));
-      }
-      if (!s.ok()) {
-        return s;
-      }
-
-      s = current_output(0).meta.UpdateBoundaries(key, Slice(reinterpret_cast<const char*>(output_values[0].data()),
-                                                  output_values[0].size()), ikey.sequence, ikey.type);
-      break;
-    }
-    case to_underlying(TransformerType::AUGMENTER): {
-      std::vector<uint8_t> indkey(reinterpret_cast<const uint8_t*>(value.data()),
-                                  reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-
-      output_values.emplace_back(key.data(), key.data()+key.size());
-
-      std::vector<std::string> keyfields; 
-      keyfields.push_back("field1");
-      std::vector<std::vector<std::string>> indexes;
-      indexes.push_back(keyfields);
-      std::shared_ptr<SchemaDescriptor> augmentingData = std::make_shared<ProtobufAugmenterSchema>(indexes, 
-                                                            std::make_unique<data::Row>());
-
-      transformers[0]->Transform(indkey, output_values, augmentingData);
-      
-      // handling primary data
-      s = current_output(0).validator.Add(key, value);
-      if (!s.ok()) {
-        return s;
-      }
-      builders_[0]->Add(key, value);
-      stats_.num_output_records++;
-      current_output_file_size_ = builders_[0]->EstimatedFileSize();
-      if (blob_garbage_meter_) {
-        s = blob_garbage_meter_->ProcessOutFlow(key, value);
-      }
-      if (!s.ok()) {
-        return s;
-      }
-      s = current_output(0).meta.UpdateBoundaries(key, value, ikey.sequence, ikey.type);
-
-      // handling secondary index data
-      for (size_t i = 0; i < output_values.size(); i++) {
-        s = current_output(i+1).validator.Add(Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                              output_values[i].size()), "");
-        if (!s.ok()) {
-          return s;
-        }
-        builders_[i+1]->Add(Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                              output_values[i].size()), "");
-        stats_.num_output_records++;
-        current_output_file_size_ = builders_[i+1]->EstimatedFileSize();
-        if (blob_garbage_meter_) {
-          s = blob_garbage_meter_->ProcessOutFlow(Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                       output_values[i].size()), "");
-        }
-        if (!s.ok()) {
-          return s;
-        }
-        s = current_output(i+1).meta.UpdateBoundaries(Slice(reinterpret_cast<const char*>(output_values[i].data()),
-                                                      output_values[i].size()), "", ikey.sequence,  ikey.type);
-      }
-      break;
-    }
-    default: {
-      break;
-    }
+    transformer->Transform(val_vec, output_values, schemaDescriptor);
   }
+
+  for (size_t i = 0; i < output_values.size(); i++) {
+    auto compacted_value = Slice(reinterpret_cast<const char*>(output_values[i].data()), output_values[i].size());
+    
+    ParsedInternalKey index_ikey;
+    const ParsedInternalKey* ikey_ptr = nullptr;
+
+    auto transtype = to_underlying(transformer_type);
+    if (transtype == to_underlying(TransformerType::AUGMENTER) && i > 0) {
+      if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
+        return Status::Corruption("Failed to parse internal key from compacted value");
+      }
+      ikey_ptr = &index_ikey;
+
+      key = compacted_value;
+      compacted_value = Slice();
+    } else {
+      ikey_ptr = &c_iter.ikey();
+    }
+
+    auto& oput = current_output(i);
+
+    s = oput.validator.Add(key, compacted_value);
+    if (!s.ok()) {
+      return s;
+    }
+    builders_[i]->Add(key, compacted_value);
+
+    stats_.num_output_records++;
+    current_output_file_size_ = builders_[i]->EstimatedFileSize();
+
+    if (blob_garbage_meter_) {
+      s = blob_garbage_meter_->ProcessOutFlow(key, compacted_value);
+      if (!s.ok()) return s;
+    }
+    
+
+    s = oput.meta.UpdateBoundaries(key, compacted_value, ikey_ptr->sequence, ikey_ptr->type);
+    if (!s.ok()) return s;
+  }
+
   return s;
 }
 
