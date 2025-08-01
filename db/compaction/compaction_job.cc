@@ -1331,8 +1331,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     // and `close_file_func`.
     // TODO: it would be better to have the compaction file open/close moved
     // into `CompactionOutputs` which has the output file information.
-    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func,
-                              cfd, compactionJobId);
+    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func);
     if (!exec_status.ok()) {
       break;
     }

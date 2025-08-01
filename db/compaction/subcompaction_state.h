@@ -216,9 +216,7 @@ class SubcompactionState {
   // Add compaction_iterator key/value to the `Current` output group.
   Status AddToOutput(const CompactionIterator& iter,
                      const CompactionFileOpenFunc& open_file_func,
-                     const CompactionFileCloseFunc& close_file_func,
-                     ColumnFamilyData* cfd,
-                     uint64_t compactionJobId);
+                     const CompactionFileCloseFunc& close_file_func);
 
   // Add derived output
   Status AddDerivedOutput(const std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,
