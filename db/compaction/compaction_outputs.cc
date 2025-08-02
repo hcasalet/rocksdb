@@ -368,11 +368,18 @@ Status CompactionOutputs::AddToOutput(
     const CompactionFileCloseFunc& close_file_func) {
   Status s;
   ColumnFamilyData* cfd = compaction_->column_family_data();
-  TransformerType transformer_type = cfd->ioptions()->transformers[0]->Supports();
-  std::shared_ptr<Transformer> transformer = cfd->ioptions()->transformers[0];
-  std::shared_ptr<SchemaDescriptor> schemaDescriptor = cfd->ioptions()->schemaDescriptors[0];
-  InputOutputDataType inputDataType = cfd->ioptions()->schemaDescriptors[0]->InputType();
-  InputOutputDataType outputDataType = cfd->ioptions()->schemaDescriptors[0]->OutputType();
+  const auto& opts = cfd->ioptions();
+  assert(opts->transformers.size() == opts->schemaDescriptors.size());
+
+  TransformerType transformer_type = TransformerType::NOTRANSFORMATION;
+  std::shared_ptr<Transformer> transformer = nullptr;
+  std::shared_ptr<SchemaDescriptor> schemaDescriptor = nullptr;
+
+  if (!opts->transformers.empty() && !opts->schemaDescriptors.empty()) {
+    transformer_type = opts->transformers[0]->Supports();
+    transformer = opts->transformers[0];
+    schemaDescriptor = opts->schemaDescriptors[0];
+  }
 
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {

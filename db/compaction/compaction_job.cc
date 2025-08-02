@@ -1505,14 +1505,18 @@ Status CompactionJob::FinishCompactionOutputFile(
 
   Status s;
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
-  assert(cfd->GetDestinationCfds().size() == outputs.GetOutputsSize());
+  if (!cfd->ioptions()->transformers.empty()) {
+    assert(cfd->GetDestinationCfds().size() == outputs.GetOutputsSize());
+  }
 
   for (size_t i = 0; i < outputs.GetOutputsSize(); i++) {
     FileMetaData* meta = outputs.GetMetaData(i);
     uint64_t output_number = meta->fd.GetNumber();
     assert(output_number != 0);
 
-    cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i];
+    if (!cfd->ioptions()->transformers.empty()) {
+      cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i];
+    }
     
     std::string file_checksum = kUnknownFileChecksum;
     std::string file_checksum_func_name = kUnknownFileChecksumFuncName;
