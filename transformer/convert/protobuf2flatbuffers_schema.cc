@@ -26,49 +26,14 @@ std::shared_ptr<void> Protobuf2FlatbuffersSchema::Parse(const ByteBuffer& data) 
 }
   
 ByteBuffer Protobuf2FlatbuffersSchema::Serialize(const std::shared_ptr<void>& obj) const {
-    auto* proto_msg = static_cast<google::protobuf::Message*>(obj.get());
-  
-    flatbuffers::FlatBufferBuilder builder;
-  
-    // Assuming flatbuffers table is FbRow with fields: numcols:[int32], strcols:[string]
-    std::vector<int32_t> numcols;
-    std::vector<flatbuffers::Offset<flatbuffers::String>> strcols;
-  
-    const google::protobuf::Descriptor* descriptor = proto_msg->GetDescriptor();
-    const google::protobuf::Reflection* reflection = proto_msg->GetReflection();
-  
-    for (int i = 0; i < descriptor->field_count(); ++i) {
-      const auto* field = descriptor->field(i);
-      if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_INT32) {
-        if (field->is_repeated()) {
-          int count = reflection->FieldSize(*proto_msg, field);
-          for (int j = 0; j < count; ++j) {
-            numcols.push_back(reflection->GetRepeatedInt32(*proto_msg, field, j));
-          }
-        } else {
-          numcols.push_back(reflection->GetInt32(*proto_msg, field));
-        }
-      } else if (field->cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_STRING) {
-        if (field->is_repeated()) {
-          int count = reflection->FieldSize(*proto_msg, field);
-          for (int j = 0; j < count; ++j) {
-            auto str = reflection->GetRepeatedString(*proto_msg, field, j);
-            strcols.push_back(builder.CreateString(str));
-          }
-        } else {
-          auto str = reflection->GetString(*proto_msg, field);
-          strcols.push_back(builder.CreateString(str));
-        }
-      }
-    }
-  
-    auto numcols_vec = builder.CreateVector(numcols);
-    auto strcols_vec = builder.CreateVector(strcols);
-  
-    auto fb_row = flat::CreateFbRow(builder, numcols_vec, strcols_vec);
-    builder.Finish(fb_row);
-  
-    return ByteBuffer(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+  auto* pr = static_cast<data::Row*>(obj.get());
+  flatbuffers::FlatBufferBuilder fbb;
+  auto row_off = BuildFbRow(fbb, *pr);
+  fbb.Finish(row_off);  // sets fbdata::Row as root (matches root_type)
+
+  auto* buf  = fbb.GetBufferPointer();
+  auto  size = fbb.GetSize();
+  return ByteBuffer(buf, buf + size); // copy out
 }
 
 void Protobuf2FlatbuffersSchema::BuildSchemas() {
@@ -88,6 +53,27 @@ void Protobuf2FlatbuffersSchema::BuildSchemas() {
     // For output, hardcoding to numcols and strcols
     output_field_schema_.push_back({"numcols", "repeated int32", 0});
     output_field_schema_.push_back({"strcols", "repeated string", 1});
+}
+
+flatbuffers::Offset<flat::Column> Protobuf2FlatbuffersSchema::BuildFbColumn(
+      flatbuffers::FlatBufferBuilder& fbb, const data::Column& pc) {
+  auto name_off = fbb.CreateString(pc.name());
+  const std::string& pv = pc.value();  // bytes -> std::string in C++ API
+  auto val_off  = fbb.CreateVector(
+      reinterpret_cast<const uint8_t*>(pv.data()), pv.size());
+  return flat::CreateColumn(fbb, name_off, val_off);
+}
+
+flatbuffers::Offset<flat::Row> Protobuf2FlatbuffersSchema::BuildFbRow(
+      flatbuffers::FlatBufferBuilder& fbb, const data::Row& pr) {
+  std::vector<flatbuffers::Offset<flat::Column>> cols;
+  cols.reserve(pr.columns_size());
+  for (const auto& c : pr.columns()) {
+    cols.push_back(BuildFbColumn(fbb, c));
+  }
+  auto cols_vec = fbb.CreateVector(cols);
+
+  return flat::CreateRow(fbb, cols_vec);
 }
 
 }

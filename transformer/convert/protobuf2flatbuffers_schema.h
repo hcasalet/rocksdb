@@ -7,6 +7,7 @@
 #include <google/protobuf/descriptor.h>
 #include "row_generated.h"
 #include "flatbuffers/flatbuffers.h"
+#include "data.pb.h"
 #include "rocksdb/transformer.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -35,6 +36,8 @@ class Protobuf2FlatbuffersSchema : public SchemaDescriptor {
 
   private:
     void BuildSchemas();
+    static flatbuffers::Offset<flat::Column> BuildFbColumn(flatbuffers::FlatBufferBuilder& fbb, const data::Column& pc);
+    static flatbuffers::Offset<flat::Row> BuildFbRow(flatbuffers::FlatBufferBuilder& fbb, const data::Row& pr);
 
     std::unique_ptr<google::protobuf::Message> input_proto_template_;
     const flatbuffers::TypeTable* flatbuffers_type_table_;
