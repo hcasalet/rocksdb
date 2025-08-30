@@ -36,8 +36,8 @@ class Protobuf2FlatbuffersSchema : public SchemaDescriptor {
 
   private:
     void BuildSchemas();
-    static flatbuffers::Offset<flat::Column> BuildFbColumn(flatbuffers::FlatBufferBuilder& fbb, const data::Column& pc);
-    static flatbuffers::Offset<flat::Row> BuildFbRow(flatbuffers::FlatBufferBuilder& fbb, const data::Row& pr);
+    static flatbuffers::Offset<flat::Column> BuildFbColumn(flatbuffers::FlatBufferBuilder& fbb, const data::ByteColumn& pc);
+    static flatbuffers::Offset<flat::Row> BuildFbRow(flatbuffers::FlatBufferBuilder& fbb, const data::ByteRow& pr);
 
     std::unique_ptr<google::protobuf::Message> input_proto_template_;
     const flatbuffers::TypeTable* flatbuffers_type_table_;

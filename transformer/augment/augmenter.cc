@@ -63,7 +63,7 @@ void Augmenter::Transform(const std::vector<uint8_t>& input,
     } else if (auto protoIndexSchema = std::dynamic_pointer_cast<ProtobufAugmenterSchema>(schema)) {
         auto index_keys = protoIndexSchema->GetIndexKeys();
     
-        data::Row row;
+        data::ByteRow row;
         if (!row.ParseFromArray(value.data(), value.size())) {
             throw std::runtime_error("Failed to parse row from input string.");
         }

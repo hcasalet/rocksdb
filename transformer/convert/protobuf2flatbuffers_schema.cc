@@ -26,10 +26,10 @@ std::shared_ptr<void> Protobuf2FlatbuffersSchema::Parse(const ByteBuffer& data) 
 }
   
 ByteBuffer Protobuf2FlatbuffersSchema::Serialize(const std::shared_ptr<void>& obj) const {
-  auto* pr = static_cast<data::Row*>(obj.get());
+  auto* pr = static_cast<data::ByteRow*>(obj.get());
   flatbuffers::FlatBufferBuilder fbb;
   auto row_off = BuildFbRow(fbb, *pr);
-  fbb.Finish(row_off);  // sets fbdata::Row as root (matches root_type)
+  fbb.Finish(row_off);  // sets fbdata:ByteRow as root (matches root_type)
 
   auto* buf  = fbb.GetBufferPointer();
   auto  size = fbb.GetSize();
@@ -56,19 +56,18 @@ void Protobuf2FlatbuffersSchema::BuildSchemas() {
 }
 
 flatbuffers::Offset<flat::Column> Protobuf2FlatbuffersSchema::BuildFbColumn(
-      flatbuffers::FlatBufferBuilder& fbb, const data::Column& pc) {
-  auto name_off = fbb.CreateString(pc.name());
+      flatbuffers::FlatBufferBuilder& fbb, const data::ByteColumn& pc) {
   const std::string& pv = pc.value();  // bytes -> std::string in C++ API
   auto val_off  = fbb.CreateVector(
       reinterpret_cast<const uint8_t*>(pv.data()), pv.size());
-  return flat::CreateColumn(fbb, name_off, val_off);
+  return flat::CreateColumn(fbb, val_off);
 }
 
 flatbuffers::Offset<flat::Row> Protobuf2FlatbuffersSchema::BuildFbRow(
-      flatbuffers::FlatBufferBuilder& fbb, const data::Row& pr) {
+      flatbuffers::FlatBufferBuilder& fbb, const data::ByteRow& pr) {
   std::vector<flatbuffers::Offset<flat::Column>> cols;
-  cols.reserve(pr.columns_size());
-  for (const auto& c : pr.columns()) {
+  cols.reserve(pr.values_size());
+  for (const auto& c : pr.values()) {
     cols.push_back(BuildFbColumn(fbb, c));
   }
   auto cols_vec = fbb.CreateVector(cols);
