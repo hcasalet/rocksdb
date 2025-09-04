@@ -158,6 +158,12 @@ int MymBroker::Scan(const std::string &begin_key, int scan_length, const std::se
 {
     int levels = int_cf_meta_.size() + 1;
 
+    // The following are configs for avoiding OOM issue
+    rocksdb::ReadOptions ro;
+    ro.fill_cache = false;
+    ro.pin_data   = false;
+    ro.readahead_size = 2 << 20;
+
     auto it = db_->NewIterator(ReadOptions(), user_cf_meta_.cf_handle_);
     it->SeekToFirst();
     for (int i = 0; it->Valid() && i < scan_length; i++) {
@@ -215,6 +221,8 @@ int MymBroker::Scan(const std::string &begin_key, int scan_length, const std::se
         }
         result.insert(result.end(), level_result.begin(), level_result.end());
     }
+
+    delete it;
 
     if (result.size() > 0) {
         return 0;
@@ -379,6 +387,7 @@ void MymBroker::saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column
     }
     
     // construct the metadata item for logical level 0
+    user_cf_meta_ = ColFamMeta(cfname, 0, handles[0], std::move(cols));
     int_cf_meta_[0][cfname] = ColFamMeta(cfname, 0, handles[0], std::move(cols));
 
     int srclevel = 0, level_start = 0, level_end = 0, destlevel = 1;
@@ -395,6 +404,7 @@ void MymBroker::saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column
             src_dest_pairs.pop();
             auto src = src_dest.first;
             auto dests = src_dest.second;
+            position_queue.pop();
 
             for (auto dest : dests) {
                 position_queue.push(dest);
