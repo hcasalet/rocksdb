@@ -3282,6 +3282,7 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name) {
     }
   }
 
+  destination_cfds_computed_ = true;
   return Status::OK();
 }
 /*
