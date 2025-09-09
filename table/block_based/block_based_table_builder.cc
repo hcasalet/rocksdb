@@ -965,7 +965,8 @@ void BlockBasedTableBuilder::Add(const Slice& key, const Slice& value) {
   ValueType value_type = ExtractValueType(key);
   if (IsValueType(value_type)) {
 #ifndef NDEBUG
-    if (r->props.num_entries > r->props.num_range_deletions) {
+    // value empty() is the secondary index case, for which we short circuit this checking
+    if (r->props.num_entries > r->props.num_range_deletions && !value.empty()) {
       assert(r->internal_comparator.Compare(key, Slice(r->last_key)) > 0);
     }
 #endif  // !NDEBUG
