@@ -140,20 +140,20 @@ class CompactionPicker {
   // Stores the minimal range that covers all entries in inputs in
   // *smallest, *largest.
   // REQUIRES: inputs is not empty
-  void GetRange(const CompactionInputFiles& inputs, InternalKey* smallest,
-                InternalKey* largest) const;
+  void GetRange(const std::string& cf_name, const CompactionInputFiles& inputs, 
+                InternalKey* smallest, InternalKey* largest) const;
 
   // Stores the minimal range that covers all entries in inputs1 and inputs2
   // in *smallest, *largest.
   // REQUIRES: inputs is not empty
-  void GetRange(const CompactionInputFiles& inputs1,
+  void GetRange(const std::string& cf_name, const CompactionInputFiles& inputs1,
                 const CompactionInputFiles& inputs2, InternalKey* smallest,
                 InternalKey* largest) const;
 
   // Stores the minimal range that covers all entries in inputs
   // in *smallest, *largest.
   // REQUIRES: inputs is not empty (at least on entry have one file)
-  void GetRange(const std::vector<CompactionInputFiles>& inputs,
+  void GetRange(const std::string& cf_name, const std::vector<CompactionInputFiles>& inputs,
                 InternalKey* smallest, InternalKey* largest,
                 int exclude_level) const;
 
@@ -182,6 +182,7 @@ class CompactionPicker {
   // Returns true if the key range that `inputs` files cover overlap with the
   // key range of a currently running compaction.
   bool FilesRangeOverlapWithCompaction(
+      const std::string& cf_name,
       const std::vector<CompactionInputFiles>& inputs, int level,
       int penultimate_level) const;
 
