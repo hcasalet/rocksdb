@@ -55,6 +55,19 @@ class ColFamMeta {
     std::set<int> GetColumns() { return colPositions_; }
 };
 
+struct CFNode {
+    std::string name;
+    ColumnFamilyOptions opts;
+    std::vector<std::string> children;  // names only
+    int level = 0;
+};
+  
+struct CFPlan {
+    std::string root;
+    std::vector<CFNode> nodes;                        // stable emission order
+    std::unordered_map<std::string, int> name2idx;    // name -> nodes[] index
+};
+
 class MymBroker {
     public :
         MymBroker(const std::string& cfname,
@@ -74,6 +87,10 @@ class MymBroker {
         int IndexRead(const std::string &key, const std::set<int>* positions, std::vector<std::string> &result);
 
         ~MymBroker() {};
+
+        static inline std::string make_child_name(const std::string& parent, std::string_view suffix) {
+            return parent + std::string(suffix);
+        }
     
     private:
         DB *db_;
@@ -81,19 +98,13 @@ class MymBroker {
         ColFamMeta user_cf_meta_;
         std::unordered_map<int, std::unordered_map<std::string, ColFamMeta>> int_cf_meta_;
         
-        std::queue<std::pair<int, std::vector<int>>> genIntColFamDescriptors(
-                                    const std::string& cfname,
-                                    std::vector<ColumnFamilyDescriptor>& column_families);
-        void saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column_family_descriptors,
-                                  std::vector<ColumnFamilyHandle*> handles,
-                                  std::string cfname,
-                                  std::queue<std::pair<int, std::vector<int>>> src_dest_pairs);
+        CFPlan buildPlan(const std::string& root_cf);
+        std::vector<ColumnFamilyDescriptor> emitDescriptors(const CFPlan& plan);
+        void saveColFamHandlesByName(const CFPlan& plan,
+                                    const std::vector<ColumnFamilyDescriptor>& descs,
+                                    const std::vector<ColumnFamilyHandle*>& handles,
+                                    const std::string& root_cf);
         std::vector<std::set<int>> splitColumns(std::set<int> srccols, int splits);
-        void createDestinationColFamDescriptors(std::queue<std::pair<std::string, ColumnFamilyOptions>>& cfq,
-                                                const std::string& cfname,
-                                                ColumnFamilyOptions& cfopts,
-                                                std::vector<ColumnFamilyDescriptor>& column_families,
-                                                size_t pos);
         void getColPositions(int divide, int start, int total_cols, std::set<int>& col_pos);
         int checkColumnSearch(ColFamMeta& cfmeta, const std::set<int>* column_positions);
         std::vector<std::string> parsePrimaryKeys(const std::string& keystr);

@@ -18,12 +18,10 @@ MymBroker::MymBroker(const std::string& cfname,
                      int num_splits)
     : options_(options)
 {
-    if (options.schemaDescriptors.size() > 4) {
-        throw std::runtime_error("Having more than 4 transformers is not supported.");
-    }
+    // Build once, then emit descriptors with parents correctly populated
+    CFPlan plan = buildPlan(cfname);
+    auto descriptors = emitDescriptors(plan);
 
-    std::vector<ColumnFamilyDescriptor> column_family_descriptors;
-    auto src_dest_pairs = genIntColFamDescriptors(cfname, column_family_descriptors);
     std::vector<ColumnFamilyHandle*> cf_handles;
     Status s;
 
@@ -31,22 +29,22 @@ MymBroker::MymBroker(const std::string& cfname,
         s = DB::Open(options_, dbfilepath, &db_);
         assert(s.ok());
 
-        s = db_->CreateColumnFamilies(column_family_descriptors, &cf_handles);
-        assert(s.ok());
-
-        s = db_->AddTransformingDestinationCfds(cfname);
+        s = db_->CreateColumnFamilies(descriptors, &cf_handles);
         assert(s.ok());
     } else {
-        column_family_descriptors.push_back(ColumnFamilyDescriptor(
-                    kDefaultColumnFamilyName, ColumnFamilyOptions(options_)));
-        s = DB::Open(options_, dbfilepath, column_family_descriptors, &cf_handles, &db_);
-        assert(s.ok());
+        // Opening an existing DB with all CFs present: include default explicitly first
+        std::vector<ColumnFamilyDescriptor> open_descs;
+        open_descs.emplace_back(kDefaultColumnFamilyName, ColumnFamilyOptions(options_));
+        open_descs.insert(open_descs.end(), descriptors.begin(), descriptors.end());
 
-        s = db_->AddTransformingDestinationCfds(cfname);
+        s = DB::Open(options_, dbfilepath, open_descs, &cf_handles, &db_);
         assert(s.ok());
     }
 
-    saveIntColFamHandles(column_family_descriptors, cf_handles, cfname, src_dest_pairs);
+    s = db_->AddTransformingDestinationCfds(cfname);
+    assert(s.ok());
+
+    saveColFamHandlesByName(plan, descriptors, cf_handles, cfname);
 }
 
 int MymBroker::Read(const std::string &key, const std::set<int>* positions, std::string &result)
@@ -248,180 +246,178 @@ int MymBroker::Delete(const std::string &key)
     return 1;
 }
 
-std::queue<std::pair<int, std::vector<int>>> MymBroker::genIntColFamDescriptors(
-            const std::string& cfname,
-            std::vector<ColumnFamilyDescriptor>& column_families)
+CFPlan MymBroker::buildPlan(const std::string& root_cf)
 {
     // Validate that each transformer has a schemaDescriptor
     if (options_.schemaDescriptors.size() != options_.transformers.size()) {
         throw std::runtime_error("Expected the number of transformers to equal the number of SchemaDescriptors.");
     }
-
-    // If no transformation is required, return
-    if (options_.transformers.size() == 0) {
-        column_families.push_back(ColumnFamilyDescriptor(cfname, ColumnFamilyOptions(options_)));
-        return std::queue<std::pair<int, std::vector<int>>>{};
+    if (options_.schemaDescriptors.size() > 4) {
+        throw std::runtime_error("Having more than 4 transformers is not supported.");
     }
 
-    // Generate ColumnFamilyDescriptor for root column family
-    ColumnFamilyOptions cf_opts(options_);
-    cf_opts.schemaDescriptors.clear();
-    cf_opts.schemaDescriptors.push_back(options_.schemaDescriptors[0]);
-    cf_opts.transformers.clear();
-    cf_opts.transformers.push_back(options_.transformers[0]);
-    column_families.push_back(ColumnFamilyDescriptor(cfname, cf_opts));
+    CFPlan plan;
+    plan.root = root_cf;
 
-    std::queue<std::pair<std::string, ColumnFamilyOptions>> colfamqueue;
-    colfamqueue.push(std::make_pair(cfname, cf_opts));
-    //In the following queue, each element has the 1st int to be its own position 
-    //in the ColumnFamilyDescriptors and handles list; the second vector of ints 
-    //are the positions of its destination column families
-    std::queue<std::pair<int, std::vector<int>>> src_dest_pair_queue;
-    size_t head = 0, tail;
+     // Seed root node with transformer[0]/schema[0]
+    {
+        CFNode root;
+        root.name = root_cf;
+        root.level = 0;
+        root.opts = ColumnFamilyOptions(options_);
+        root.opts.transformers.clear();
+        root.opts.schemaDescriptors.clear();
+        if (!options_.transformers.empty())   root.opts.transformers.push_back(options_.transformers[0]);
+        if (!options_.schemaDescriptors.empty()) root.opts.schemaDescriptors.push_back(options_.schemaDescriptors[0]);
 
-    for (size_t i = 0; i < options_.schemaDescriptors.size(); i++) {
-        size_t qsize = colfamqueue.size();   
+        plan.name2idx[root.name] = (int)plan.nodes.size();
+        plan.nodes.push_back(std::move(root));
+    }
 
-        for (size_t j = 0; j < qsize; j++) {
-            auto front = colfamqueue.front();
-            auto src_cf_name = front.first;
-            auto src_cf_opts = front.second;
-            colfamqueue.pop();
+    // BFS over layers of transformers; for each parent at layer i, create children for layer i+1
+    for (size_t i = 0; i < options_.transformers.size(); ++i) {
+        const auto* schema = options_.schemaDescriptors[i].get();
+        const bool has_next = (i + 1 < options_.transformers.size());
 
-            tail = column_families.size();
-            createDestinationColFamDescriptors(colfamqueue, src_cf_name, src_cf_opts, column_families, i);
+        // Grab snapshot of nodes size at start of this layer
+        const size_t layer_start = 0;   // we rely on each node.level
+        // Iterate all nodes at level==i
+        for (size_t n = 0; n < plan.nodes.size(); ++n) {
+            if (plan.nodes[n].level != (int)i) continue;
 
-            std::vector<int> children;
-            for (size_t k = tail; k < column_families.size(); k++) {
-                children.push_back(k);
+            const int parent_idx = static_cast<int>(n);
+            //CFNode& parent = plan.nodes[n];
+
+            // Prepare the "internal" options for children at the next layer
+            ColumnFamilyOptions child_opts(options_);
+            child_opts.transformers.clear();
+            child_opts.schemaDescriptors.clear();
+            if (has_next) {
+                child_opts.transformers.push_back(options_.transformers[i + 1]);
+                child_opts.schemaDescriptors.push_back(options_.schemaDescriptors[i + 1]);
             }
 
-            src_dest_pair_queue.push(std::make_pair(head, children));
-            head++;
+            // Depending on schema, add children and record them into parent's destination_column_families
+            std::vector<std::string> child_names;
+            const auto tmask = static_cast<int>(schema->SupportsTransformerType());
+            //auto& dests = parent.opts.destination_column_families; // mutate BEFORE emitting descriptors
+
+            if (tmask & static_cast<int>(TransformerType::DISTRIBUTOR)) {
+                const int splits = schema->GetNumSplits();
+                child_names.reserve(splits);
+                for (int k = 0; k < splits; ++k) {
+                    child_names.emplace_back(plan.nodes[parent_idx].name + "_split_cf_" + std::to_string(k));
+                }
+
+            } else if (tmask & static_cast<int>(TransformerType::CONVERTER)) {
+                child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_converted_cf"));
+
+            } else if (tmask & static_cast<int>(TransformerType::AUGMENTER)) {
+                child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_indexed_data_cf"));
+                // secondary index CFs (no further transformers)
+                for (size_t k = 0; k < schema->GetIndexKeys().size(); ++k) {
+                    child_names.emplace_back(plan.nodes[parent_idx].name + "_secondary_index_cf" + std::to_string(k));
+                }
+
+            } else if (tmask & static_cast<int>(TransformerType::MYNOOPER)) {
+                child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_identity_cf"));
+
+            } else {
+                // Unknown / no-op: no children
+            }
+
+            // 2) Update parent now (still safe; we haven't grown plan.nodes yet)
+            {
+                auto& parent = plan.nodes[parent_idx]; // re-fetch by index
+                parent.children.insert(parent.children.end(), child_names.begin(), child_names.end());
+                auto& dests = parent.opts.destination_column_families;
+                dests.insert(dests.end(), child_names.begin(), child_names.end());
+            }
+  
+            // 3) Append children AFTER parent updated (vector may reallocate; we won't touch parent again)
+            for (const auto& cname : child_names) {
+                CFNode child;
+                child.name  = cname;
+                child.level = static_cast<int>(i) + 1;
+  
+                if (cname.find("_secondary_index_cf") != std::string::npos) {
+                    ColumnFamilyOptions si_opts(options_);
+                    si_opts.transformers.clear();
+                    si_opts.schemaDescriptors.clear();
+                    si_opts.merge_operator = std::make_shared<SecondaryIndexMergeOperator>();
+                    child.opts = std::move(si_opts);
+                } else {
+                    child.opts = child_opts;
+                }
+  
+                plan.name2idx[cname] = static_cast<int>(plan.nodes.size());
+                plan.nodes.push_back(std::move(child));
+            }
         }
     }
 
-    return src_dest_pair_queue;
+  return plan;
 }
 
-void MymBroker::createDestinationColFamDescriptors(std::queue<std::pair<std::string, ColumnFamilyOptions>>& cfq,
-                                                   const std::string& cfname,
-                                                   ColumnFamilyOptions& cfopts,
-                                                   std::vector<ColumnFamilyDescriptor>& column_families,
-                                                   size_t pos) {
-    auto makeCfName = [&](const std::string& suffix) {
-        return cfname + suffix;
-    };
-
-    auto schema = options_.schemaDescriptors[pos];
-    
-    ColumnFamilyOptions int_cf_opts(options_);
-    int_cf_opts.transformers.clear();
-    int_cf_opts.schemaDescriptors.clear();
-    if (pos + 1 < options_.transformers.size()) {
-        int_cf_opts.transformers.push_back(options_.transformers[pos+1]);
-        int_cf_opts.schemaDescriptors.push_back(options_.schemaDescriptors[pos+1]);
-    }
-    
-    if (static_cast<int>(schema->SupportsTransformerType()) & static_cast<int>(TransformerType::DISTRIBUTOR)) {
-        int num_splits = schema->GetNumSplits();
-        
-        for (int k = 0; k < num_splits; k++) {
-            std::string cfname_child = cfname + "_split_cf_" + std::to_string(k);
-            column_families.push_back(ColumnFamilyDescriptor(cfname_child, int_cf_opts));
-            cfq.push(std::make_pair(cfname_child, int_cf_opts));
-            cfopts.destination_column_families.push_back(cfname_child);
-        }
-    } else if (static_cast<int>(schema->SupportsTransformerType()) & static_cast<int>(TransformerType::CONVERTER)) {
-        auto converted = makeCfName("_converted_cf");
-        column_families.push_back(ColumnFamilyDescriptor(converted, int_cf_opts));
-        cfq.push(std::make_pair(converted, int_cf_opts));
-        cfopts.destination_column_families.push_back(converted);
-    } else if (static_cast<int>(schema->SupportsTransformerType()) & static_cast<int>(TransformerType::AUGMENTER)) {
-        auto primaryindex = makeCfName("_indexed_data_cf");
-        column_families.push_back(ColumnFamilyDescriptor(primaryindex, int_cf_opts));
-        cfq.push(std::make_pair(primaryindex, int_cf_opts));
-        cfopts.destination_column_families.push_back(primaryindex);
-
-        for (size_t k=0; k < schema->GetIndexKeys().size(); k++) {
-            ColumnFamilyOptions secondary_index_opts(options_);
-            secondary_index_opts.merge_operator = std::make_shared<SecondaryIndexMergeOperator>();
-            secondary_index_opts.schemaDescriptors.clear();
-            secondary_index_opts.transformers.clear();
-
-            std::string secondaryindex = cfname + "_secondary_index_cf" + std::to_string(k);
-            column_families.push_back(rocksdb::ColumnFamilyDescriptor(secondaryindex, secondary_index_opts));
-            cfopts.destination_column_families.push_back(secondaryindex);
-        }
-    } else if (static_cast<int>(schema->SupportsTransformerType()) & static_cast<int>(TransformerType::MYNOOPER)) {
-        auto identity = makeCfName("_identity_cf");
-        column_families.push_back(ColumnFamilyDescriptor(identity, int_cf_opts));
-        cfopts.destination_column_families.push_back(identity);
-        cfq.push(std::make_pair(identity, int_cf_opts));
-    } else {
-        // handle unknown type
-        return; 
-    }
+std::vector<ColumnFamilyDescriptor> MymBroker::emitDescriptors(const CFPlan& plan) {
+  std::vector<ColumnFamilyDescriptor> descs;
+  descs.reserve(plan.nodes.size());
+  for (const auto& node : plan.nodes) {
+    descs.emplace_back(node.name, node.opts);  // parent already has destination_column_families populated
+  }
+  return descs;
 }
 
-void MymBroker::saveIntColFamHandles(std::vector<ColumnFamilyDescriptor>& column_family_descriptors,
-                                std::vector<ColumnFamilyHandle*> handles,
-                                std::string cfname,
-                                std::queue<std::pair<int, std::vector<int>>> src_dest_pairs)
+void MymBroker::saveColFamHandlesByName(const CFPlan& plan,
+                                        const std::vector<ColumnFamilyDescriptor>& descs,
+                                        const std::vector<ColumnFamilyHandle*>& handles,
+                                        const std::string& root_cf)
 {
-    assert(column_family_descriptors.size()==handles.size());
-
-    // Remove kDefaultColumnFamilyName from the descriptor and handle lists
-    for (size_t i = 0; i < column_family_descriptors.size(); ++i) {
-        if (column_family_descriptors[i].name == kDefaultColumnFamilyName) {
-            column_family_descriptors.erase(column_family_descriptors.begin() + i);
-            handles.erase(handles.begin() + i);
-            break;
-        }
+    // Build name -> handle map from the parallel vectors (Open/Create guarantee order)
+    std::unordered_map<std::string, ColumnFamilyHandle*> hmap;
+    hmap.reserve(descs.size());
+    for (size_t i = 0; i < descs.size(); ++i) {
+        hmap.emplace(descs[i].name, handles[i]);
     }
 
-    // Get the full list of columns
-    std::set<int> cols;
-    for (int i = 0; i < options_.num_columns; i++) {
-        cols.insert(i);
-    }
+    // Build the “logical level 0” metadata for the user CF
+    std::set<int> all_cols;
+    for (int i = 0; i < options_.num_columns; ++i) all_cols.insert(i);
+
+    auto* root_handle = hmap.at(root_cf);
+    user_cf_meta_ = ColFamMeta(root_cf, /*level=*/0, root_handle, all_cols);
+    int_cf_meta_[0][root_cf] = user_cf_meta_;
+
+    // BFS over the plan by names (stable and independent of descriptor vector edits)
+    int srclevel = 0;
+    int destlevel = 1;
+
+    std::queue<std::string> q;
+    q.push(root_cf);
+
+    while (!q.empty()) {
+        size_t qs = q.size();
+        for (size_t i = 0; i < qs; ++i) {
+          auto src_name = q.front(); q.pop();
     
-    // construct the metadata item for logical level 0
-    user_cf_meta_ = ColFamMeta(cfname, 0, handles[0], std::move(cols));
-    int_cf_meta_[0][cfname] = ColFamMeta(cfname, 0, handles[0], std::move(cols));
-
-    int srclevel = 0, level_start = 0, level_end = 0, destlevel = 1;
-    std::set<int> srccols;
-
-    std::queue<int> position_queue;
-    position_queue.push(0);
-
-    while (!src_dest_pairs.empty()) {
-        size_t position_queue_size = position_queue.size();
-
-        for (size_t i = 0; i < position_queue_size; i++) {
-            auto src_dest = src_dest_pairs.front();
-            src_dest_pairs.pop();
-            auto src = src_dest.first;
-            auto dests = src_dest.second;
-            position_queue.pop();
-
-            for (auto dest : dests) {
-                position_queue.push(dest);
-            }
-        
-            srccols = int_cf_meta_[srclevel][column_family_descriptors[src].name].GetColumns();
-
-            auto splitColGroups = splitColumns(srccols, dests.size());
-
-            for (size_t k = 0; k < dests.size(); k++) {
-                int_cf_meta_[destlevel][column_family_descriptors[dests[k]].name] = 
-                        ColFamMeta(column_family_descriptors[dests[k]].name, 
-                        destlevel, handles[dests[k]], splitColGroups[k]);
-            }
+          const CFNode& src_node = plan.nodes.at(plan.name2idx.at(src_name));
+          const auto& src_cols   = int_cf_meta_[srclevel][src_name].GetColumns();
+    
+          const auto& children = src_node.children;
+          auto splitColGroups = splitColumns(src_cols, (int)children.size());
+    
+          for (size_t k = 0; k < children.size(); ++k) {
+            const auto& child_name = children[k];
+            auto* h = hmap.at(child_name);
+    
+            int_cf_meta_[destlevel][child_name] =
+                ColFamMeta(child_name, destlevel, h, splitColGroups[k]);
+    
+            q.push(child_name);
+          }
         }
-        srclevel = destlevel;
-        destlevel++;
+        ++srclevel;
+        ++destlevel;
     }
 
 }
