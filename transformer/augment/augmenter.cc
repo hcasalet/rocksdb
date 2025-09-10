@@ -61,44 +61,24 @@ void Augmenter::Transform(const std::vector<uint8_t>& input,
             outputs.emplace_back(std::move(prefixIndexKey));
         }
     } else if (auto protoIndexSchema = std::dynamic_pointer_cast<ProtobufAugmenterSchema>(schema)) {
-        auto index_keys = protoIndexSchema->GetIndexKeys();
+        auto index_keys = protoIndexSchema->GetPositionedIndexKeys();
     
         data::ByteRow row;
         if (!row.ParseFromArray(value.data(), value.size())) {
             throw std::runtime_error("Failed to parse row from input string.");
         }
-        const auto* descriptor = row.GetDescriptor();
-        const auto* reflection = row.GetReflection();
 
-        for (const auto& key_fields : index_keys) {
+        for (const auto& index_key : index_keys) {
             std::vector<uint8_t> prefixIndexKey;
 
-            for (auto& field_name : key_fields) {
+            for (auto& position : index_key) {
                 if (!prefixIndexKey.empty()) {
                     prefixIndexKey.insert(prefixIndexKey.end(),
                                           reinterpret_cast<const uint8_t*>(key_field_separator.data()),
                                           reinterpret_cast<const uint8_t*>(key_field_separator.data() + key_field_separator.size()));
                 }
-                const auto* field = descriptor->FindFieldByName(field_name);
-                if (!field || !reflection->HasField(row, field)) {
-                    throw std::runtime_error("Missing or invalid field: " + field_name);
-                }
-
-                switch (field->cpp_type()) {
-                    case google::protobuf::FieldDescriptor::CPPTYPE_INT32: {
-                        std::string numstr = std::to_string(reflection->GetInt32(row, field));
-                        prefixIndexKey.insert(prefixIndexKey.end(), numstr.begin(), numstr.end());
-                        break;
-                    }
-                    case google::protobuf::FieldDescriptor::CPPTYPE_STRING: {
-                        std::string fieldstr = reflection->GetString(row, field);
-                        prefixIndexKey.insert(prefixIndexKey.end(), fieldstr.begin(), fieldstr.end());
-                        break;
-                    }
-                    default: {
-                        throw std::runtime_error("Unsupported field type for: " + field_name);
-                    }
-                }
+                const data::ByteColumn& field = row.values(position);
+                prefixIndexKey.insert(prefixIndexKey.end(), field.value().begin(), field.value().end());
             }
             prefixIndexKey.insert(prefixIndexKey.end(), original_key_separator.begin(), original_key_separator.end());
             prefixIndexKey.insert(prefixIndexKey.end(),

@@ -9,7 +9,7 @@ namespace ROCKSDB_NAMESPACE {
 
 class ProtobufAugmenterSchema : public SchemaDescriptor {
   public:
-    ProtobufAugmenterSchema(std::vector<std::vector<std::string>> index_keys,
+    ProtobufAugmenterSchema(std::vector<std::vector<int>> index_keys,
                             std::unique_ptr<google::protobuf::Message> input_template)
             : index_keys_(std::move(index_keys)),
               input_template_(std::move(input_template)) {
@@ -24,13 +24,13 @@ class ProtobufAugmenterSchema : public SchemaDescriptor {
     std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
     ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
 
-    std::vector<std::vector<std::string>> GetIndexKeys() const override { return index_keys_; }
+    std::vector<std::vector<int>> GetPositionedIndexKeys() const override { return index_keys_; }
 
     std::vector<FieldSchema> GetInputFieldSchema() const override { return input_field_schema_; }
 
   private:
     void BuildInputSchema();
-    std::vector<std::vector<std::string>> index_keys_;
+    std::vector<std::vector<int>> index_keys_;
     std::unique_ptr<google::protobuf::Message> input_template_;
     std::vector<FieldSchema> input_field_schema_;
 };

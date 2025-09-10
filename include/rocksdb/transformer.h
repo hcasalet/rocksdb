@@ -85,6 +85,7 @@ class SchemaDescriptor {
    virtual std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const { return {};} // temporary
    virtual int GetNumSplits() const { return 0; }
    virtual std::vector<std::vector<std::string>> GetIndexKeys() const { return {}; }
+   virtual std::vector<std::vector<int>> GetPositionedIndexKeys() const { return {}; }
 
  };
 

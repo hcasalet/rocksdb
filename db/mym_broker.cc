@@ -305,7 +305,11 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
             } else if (tmask & static_cast<int>(TransformerType::AUGMENTER)) {
                 child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_indexed_data_cf"));
                 // secondary index CFs (no further transformers)
-                for (size_t k = 0; k < schema->GetIndexKeys().size(); ++k) {
+                size_t index_num = schema->GetIndexKeys().size();
+                if (index_num < 1) {
+                    index_num = schema->GetPositionedIndexKeys().size();
+                }
+                for (size_t k = 0; k < index_num; ++k) {
                     child_names.emplace_back(plan.nodes[parent_idx].name + "_secondary_index_cf" + std::to_string(k));
                 }
 
