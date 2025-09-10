@@ -22,7 +22,7 @@ void Augmenter::Transform(const std::vector<uint8_t>& input,
     Slice key(reinterpret_cast<const char*>(input.data() + sep_pos + sep_len),
                                             input.size() - sep_pos - sep_len);
     const std::string key_field_separator = "%%";
-    const std::string original_key_separator = "$$$";
+    const std::string original_key_separator = "$$$KEY$$$";
    
     if (auto jsonIndexSchema = std::dynamic_pointer_cast<JsonAugmenterSchema>(schema)) {
         const auto& index_keys = jsonIndexSchema->GetIndexKeys();
