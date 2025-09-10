@@ -570,6 +570,9 @@ struct AdvancedColumnFamilyOptions {
   // Number of columns for this database
   int num_columns = 1;
 
+  // Column family name
+  std::string cf_name = "";
+
   // Column data type is by default valued 0 (mixed)
   std::string column_data_type = "mixed";
 

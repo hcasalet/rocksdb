@@ -350,7 +350,7 @@ void LevelCompactionBuilder::SetupOtherFilesWithRoundRobinExpansion() {
   size_t start_index = vstorage_->FilesByCompactionPri(start_level_)[0];
   InternalKey smallest, largest;
   // Constraint 4 (No need to check again later)
-  compaction_picker_->GetRange(start_level_inputs_, &smallest, &largest);
+  compaction_picker_->GetRange(cf_name_, start_level_inputs_, &smallest, &largest);
   CompactionInputFiles output_level_inputs;
   output_level_inputs.level = output_level_;
   vstorage_->GetOverlappingInputs(output_level_, &smallest, &largest,
@@ -381,6 +381,7 @@ void LevelCompactionBuilder::SetupOtherFilesWithRoundRobinExpansion() {
     if (!compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_,
                                                     &tmp_start_level_inputs) ||
         compaction_picker_->FilesRangeOverlapWithCompaction(
+            cf_name_,
             {tmp_start_level_inputs}, output_level_,
             Compaction::EvaluatePenultimateLevel(
                 vstorage_, ioptions_, start_level_, output_level_))) {
@@ -395,7 +396,7 @@ void LevelCompactionBuilder::SetupOtherFilesWithRoundRobinExpansion() {
     }
 
     // Check whether any output level files are locked
-    compaction_picker_->GetRange(tmp_start_level_inputs, &smallest, &largest);
+    compaction_picker_->GetRange(cf_name_, tmp_start_level_inputs, &smallest, &largest);
     vstorage_->GetOverlappingInputs(output_level_, &smallest, &largest,
                                     &output_level_inputs.files);
     if (!output_level_inputs.empty() &&
@@ -456,6 +457,7 @@ bool LevelCompactionBuilder::SetupOtherInputsIfNeeded() {
     // (2) AddFile ingest a new file into the LSM tree
     // We need to disallow this from happening.
     if (compaction_picker_->FilesRangeOverlapWithCompaction(
+            cf_name_,
             compaction_inputs_, output_level_,
             Compaction::EvaluatePenultimateLevel(
                 vstorage_, ioptions_, start_level_, output_level_))) {
@@ -809,6 +811,7 @@ bool LevelCompactionBuilder::PickFileToCompact() {
     if (!compaction_picker_->ExpandInputsToCleanCut(cf_name_, vstorage_,
                                                     &start_level_inputs_) ||
         compaction_picker_->FilesRangeOverlapWithCompaction(
+            cf_name_,
             {start_level_inputs_}, output_level_,
             Compaction::EvaluatePenultimateLevel(
                 vstorage_, ioptions_, start_level_, output_level_))) {
@@ -829,7 +832,7 @@ bool LevelCompactionBuilder::PickFileToCompact() {
     // level files are locked, not just the extra ones pulled in for user-key
     // overlap.
     InternalKey smallest, largest;
-    compaction_picker_->GetRange(start_level_inputs_, &smallest, &largest);
+    compaction_picker_->GetRange(cf_name_, start_level_inputs_, &smallest, &largest);
     CompactionInputFiles output_level_inputs;
     output_level_inputs.level = output_level_;
     vstorage_->GetOverlappingInputs(output_level_, &smallest, &largest,

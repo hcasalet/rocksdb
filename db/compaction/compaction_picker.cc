@@ -357,10 +357,11 @@ Compaction* CompactionPicker::CompactFiles(
     }
   }
 
-  auto& cf_name = vstorage->cfd()->GetName();
+  auto& cf_name = ioptions_.cf_name;
   if (cf_name.find("secondary_index") == std::string::npos) {
     assert(output_level == 0 ||
            !FilesRangeOverlapWithCompaction(
+               cf_name,
                input_files, output_level,
                Compaction::EvaluatePenultimateLevel(vstorage, ioptions_,
                                                     start_level, output_level)));
@@ -592,7 +593,7 @@ void CompactionPicker::GetGrandparents(
     const CompactionInputFiles& output_level_inputs,
     std::vector<FileMetaData*>* grandparents) {
   InternalKey start, limit;
-  auto& cf_name = vstorage->cfd()->GetName();
+  auto& cf_name = ioptions_.cf_name;
   GetRange(cf_name, inputs, output_level_inputs, &start, &limit);
   // Compute the set of grandparent files that overlap this compaction
   // (parent == level+1; grandparent == level+2 or the first
@@ -1131,10 +1132,9 @@ void CompactionPicker::RegisterCompaction(Compaction* c) {
   if (c == nullptr) {
     return;
   }
-  auto& cf_name = c->column_family_data()->GetName();
   assert(ioptions_.compaction_style != kCompactionStyleLevel ||
          c->output_level() == 0 ||
-         !FilesRangeOverlapWithCompaction(cf_name, *c->inputs(), c->output_level(),
+         !FilesRangeOverlapWithCompaction(ioptions_.cf_name, *c->inputs(), c->output_level(),
                                           c->GetPenultimateLevel()));
                                           
   // CompactionReason::kExternalSstIngestion's start level is just a placeholder
@@ -1214,7 +1214,7 @@ bool CompactionPicker::GetOverlappingL0Files(
   // about files on level 0 being compacted.
   assert(level0_compactions_in_progress()->empty());
   InternalKey smallest, largest;
-  auto& cf_name = vstorage->cfd()->GetName();
+  auto& cf_name = ioptions_.cf_name;
   GetRange(cf_name, *start_level_inputs, &smallest, &largest);
   // Note that the next call will discard the file we placed in
   // c->inputs_[0] earlier and replace it with an overlapping set

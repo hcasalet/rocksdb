@@ -64,6 +64,7 @@ AdvancedColumnFamilyOptions::AdvancedColumnFamilyOptions(const Options& options)
       compacting_column_family_num_levels(options.compacting_column_family_num_levels),
       transform_while_compacting(options.transform_while_compacting),
       num_columns(options.num_columns),
+      cf_name(options.cf_name),
       column_data_type(options.column_data_type),
       level0_slowdown_writes_trigger(options.level0_slowdown_writes_trigger),
       level0_stop_writes_trigger(options.level0_stop_writes_trigger),
@@ -195,6 +196,7 @@ void ColumnFamilyOptions::Dump(Logger* log) const {
     ROCKS_LOG_HEADER(log, "            Options.compacting_column_family_num_levels: %d", compacting_column_family_num_levels);
     ROCKS_LOG_HEADER(log, "            Options.compacting_level_within_column_family_group: %d", compacting_level_within_column_family_group);
     ROCKS_LOG_HEADER(log, "            Options.num_columns: %d", num_columns);
+    ROCKS_LOG_HEADER(log, "            Options.cf_nane: %s", cf_name.c_str());
     ROCKS_LOG_HEADER(log, "            Options.column_data_type: %s", column_data_type.c_str());
     ROCKS_LOG_HEADER(log, "       Options.min_write_buffer_number_to_merge: %d",
                      min_write_buffer_number_to_merge);

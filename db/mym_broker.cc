@@ -269,6 +269,7 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
         root.opts.schemaDescriptors.clear();
         if (!options_.transformers.empty())   root.opts.transformers.push_back(options_.transformers[0]);
         if (!options_.schemaDescriptors.empty()) root.opts.schemaDescriptors.push_back(options_.schemaDescriptors[0]);
+        root.opts.cf_name = root_cf;
 
         plan.name2idx[root.name] = (int)plan.nodes.size();
         plan.nodes.push_back(std::move(root));
@@ -286,22 +287,11 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
             if (plan.nodes[n].level != (int)i) continue;
 
             const int parent_idx = static_cast<int>(n);
-            //CFNode& parent = plan.nodes[n];
-
-            // Prepare the "internal" options for children at the next layer
-            ColumnFamilyOptions child_opts(options_);
-            child_opts.transformers.clear();
-            child_opts.schemaDescriptors.clear();
-            if (has_next) {
-                child_opts.transformers.push_back(options_.transformers[i + 1]);
-                child_opts.schemaDescriptors.push_back(options_.schemaDescriptors[i + 1]);
-            }
-
-            // Depending on schema, add children and record them into parent's destination_column_families
+           
+            // 1) Depending on schema, add children and record them into parent's destination_column_families
             std::vector<std::string> child_names;
             const auto tmask = static_cast<int>(schema->SupportsTransformerType());
-            //auto& dests = parent.opts.destination_column_families; // mutate BEFORE emitting descriptors
-
+            
             if (tmask & static_cast<int>(TransformerType::DISTRIBUTOR)) {
                 const int splits = schema->GetNumSplits();
                 child_names.reserve(splits);
@@ -345,9 +335,18 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
                     si_opts.transformers.clear();
                     si_opts.schemaDescriptors.clear();
                     si_opts.merge_operator = std::make_shared<SecondaryIndexMergeOperator>();
+                    si_opts.cf_name = cname;
                     child.opts = std::move(si_opts);
                 } else {
-                    child.opts = child_opts;
+                    ColumnFamilyOptions child_opts(options_);
+                    child_opts.transformers.clear();
+                    child_opts.schemaDescriptors.clear();
+                    if (has_next) {
+                        child_opts.transformers.push_back(options_.transformers[i + 1]);
+                        child_opts.schemaDescriptors.push_back(options_.schemaDescriptors[i + 1]);
+                    }
+                    child_opts.cf_name = cname;
+                    child.opts = std::move(child_opts);
                 }
   
                 plan.name2idx[cname] = static_cast<int>(plan.nodes.size());

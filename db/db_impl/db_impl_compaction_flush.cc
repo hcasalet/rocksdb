@@ -1700,7 +1700,7 @@ Status DBImpl::ReFitLevel(ColumnFamilyData* cfd, int level, int target_level) {
     }
     InternalKey refit_level_smallest;
     InternalKey refit_level_largest;
-    cfd->compaction_picker()->GetRange(input[0], &refit_level_smallest,
+    cfd->compaction_picker()->GetRange(cfd->GetName(), input[0], &refit_level_smallest,
                                        &refit_level_largest);
     if (to_level > level) {
       if (level == 0) {
