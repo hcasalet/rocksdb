@@ -438,23 +438,30 @@ Status CompactionOutputs::AddToOutput(
       reinterpret_cast<const uint8_t*>(value.data()) + value.size()
     );
   } else {
-    std::vector<uint8_t> val_vec(reinterpret_cast<const uint8_t*>(value.data()),
-                                 reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-
+    std::vector<uint8_t> val_vec;
+    
     if (to_underlying(transformer_type) == to_underlying(TransformerType::AUGMENTER)) {
       output_values.emplace_back(
         reinterpret_cast<const uint8_t*>(value.data()),
         reinterpret_cast<const uint8_t*>(value.data()) + value.size()
       );
 
-      std::string separator = "$$";
+      val_vec.reserve(value.size() + key.size() + 10);
+
+      std::string lenbuf;
+      rocksdb::PutVarint32(&lenbuf, static_cast<uint32_t>(value.size()));
+      val_vec.insert(val_vec.end(), lenbuf.begin(), lenbuf.end()); 
       val_vec.insert(val_vec.end(),
-                     reinterpret_cast<const uint8_t*>(separator.data()),
-                     reinterpret_cast<const uint8_t*>(separator.data() + separator.size()));
+                     reinterpret_cast<const uint8_t*>(value.data()),
+                     reinterpret_cast<const uint8_t*>(value.data() + value.size()));
 
       val_vec.insert(val_vec.end(),
                      reinterpret_cast<const uint8_t*>(key.data()),
                      reinterpret_cast<const uint8_t*>(key.data() + key.size()));
+    } else {
+      val_vec.insert(val_vec.end(),
+                     reinterpret_cast<const uint8_t*>(value.data()),
+                     reinterpret_cast<const uint8_t*>(value.data() + value.size()));
     }
     
     transformer->Transform(val_vec, output_values, schemaDescriptor);

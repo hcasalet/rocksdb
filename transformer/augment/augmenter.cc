@@ -1,6 +1,7 @@
 #include <sstream>
 #include <nlohmann/json.hpp>
 #include "rocksdb/slice.h"
+#include "util/coding.h"
 #include "augmenter.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -8,19 +9,22 @@ namespace ROCKSDB_NAMESPACE {
 void Augmenter::Transform(const std::vector<uint8_t>& input,
                           std::vector<std::vector<uint8_t>>& outputs,
                           const std::shared_ptr<SchemaDescriptor>& schema) const {
-    const std::string separator = "$$";
-    auto it = std::search(input.begin(), input.end(), separator.begin(), separator.end());
+    const uint8_t* p = input.data();
+    const uint8_t* end = p + input.size();
+    uint32_t vlen = 0;
 
-    if (it == input.end()) {
-        throw std::runtime_error("Separator '$$' not found in input");
+    const char* after_len_c = rocksdb::GetVarint32Ptr(
+        reinterpret_cast<const char*>(p),
+        reinterpret_cast<const char*>(end), &vlen);
+    if (after_len_c == nullptr) {
+        throw std::runtime_error("Bad length prefix or truncated buffer");
     }
+    const uint8_t* after_len = reinterpret_cast<const uint8_t*>(after_len_c);
 
-    size_t sep_pos = std::distance(input.begin(), it);
-    size_t sep_len = separator.size();
+    Slice value(reinterpret_cast<const char*>(after_len), vlen);
+    Slice key(reinterpret_cast<const char*>(after_len + vlen),
+                       static_cast<size_t>(end - after_len - vlen));
 
-    Slice value(reinterpret_cast<const char*>(input.data()), sep_pos);
-    Slice key(reinterpret_cast<const char*>(input.data() + sep_pos + sep_len),
-                                            input.size() - sep_pos - sep_len);
     const std::string key_field_separator = "%%";
     const std::string original_key_separator = "$$$KEY$$$";
    
