@@ -16,11 +16,13 @@ void Distributor::Transform(const ByteBuffer& input,
     
     auto proto_schema = std::static_pointer_cast<const ProtobufDistributorSchema>(schema);
     if (proto_schema) {
-        std::shared_ptr<Message> parsed = std::static_pointer_cast<Message>(proto_schema->Parse(input));
-        const Reflection* refl = parsed->GetReflection();
-        const auto* desc = parsed->GetDescriptor();
+        data::ByteRow row;
+        if (!row.ParseFromArray(input.data(), input.size())) {
+            std::cout << "parsing value input into Protobuf schema had an error." << std::endl;
+            return;
+        }
 
-        int field_count = desc->field_count();
+        int field_count = row.values_size();
         int num_outputs = proto_schema->GetNumSplits();
         if (field_count == 0 || num_outputs == 0) {
             outputs.push_back(input);
@@ -35,77 +37,22 @@ void Distributor::Transform(const ByteBuffer& input,
                 proto_schema->GetOutputSchemaSpecs()[i]->New()));
         }
 
-        for (int i = 0; i < field_count; ++i) {
-            const FieldDescriptor* field = desc->field(i);
-            int target = i / fields_per_output;
-            if (target >= num_outputs) target = num_outputs - 1;
+        for (int g = 0; g < num_outputs; ++g) {
+            data::ByteRow groupRow;
 
-            Message* dst = output_msgs[target].get();
-
-            if (field->is_repeated()) {
-                int count = refl->FieldSize(*parsed, field);
-                for (int j = 0; j < count; ++j) {
-                    switch (field->cpp_type()) {
-                        case FieldDescriptor::CPPTYPE_STRING:
-                            refl->AddString(dst, field, refl->GetRepeatedString(*parsed, field, j));
-                            break;
-                        case FieldDescriptor::CPPTYPE_INT32:
-                            refl->AddInt32(dst, field, refl->GetRepeatedInt32(*parsed, field, j));
-                            break;
-                        case FieldDescriptor::CPPTYPE_INT64:
-                            refl->AddInt64(dst, field, refl->GetRepeatedInt64(*parsed, field, j));
-                            break;
-                        case FieldDescriptor::CPPTYPE_BOOL:
-                            refl->AddBool(dst, field, refl->GetRepeatedBool(*parsed, field, j));
-                            break;
-                        case FieldDescriptor::CPPTYPE_FLOAT:
-                            refl->AddFloat(dst, field, refl->GetRepeatedFloat(*parsed, field, j));
-                            break;
-                        case FieldDescriptor::CPPTYPE_DOUBLE:
-                            refl->AddDouble(dst, field, refl->GetRepeatedDouble(*parsed, field, j));
-                            break;
-                        case FieldDescriptor::CPPTYPE_MESSAGE:
-                            refl->AddMessage(dst, field)->CopyFrom(refl->GetRepeatedMessage(*parsed, field, j));
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            } else if (refl->HasField(*parsed, field)) {
-                switch (field->cpp_type()) {
-                    case FieldDescriptor::CPPTYPE_STRING:
-                        refl->SetString(dst, field, refl->GetString(*parsed, field));
-                        break;
-                    case FieldDescriptor::CPPTYPE_INT32:
-                        refl->SetInt32(dst, field, refl->GetInt32(*parsed, field));
-                        break;
-                    case FieldDescriptor::CPPTYPE_INT64:
-                        refl->SetInt64(dst, field, refl->GetInt64(*parsed, field));
-                        break;
-                    case FieldDescriptor::CPPTYPE_BOOL:
-                        refl->SetBool(dst, field, refl->GetBool(*parsed, field));
-                        break;
-                    case FieldDescriptor::CPPTYPE_FLOAT:
-                        refl->SetFloat(dst, field, refl->GetFloat(*parsed, field));
-                        break;
-                    case FieldDescriptor::CPPTYPE_DOUBLE:
-                        refl->SetDouble(dst, field, refl->GetDouble(*parsed, field));
-                        break;
-                    case FieldDescriptor::CPPTYPE_MESSAGE:
-                        refl->MutableMessage(dst, field)->CopyFrom(refl->GetMessage(*parsed, field));
-                        break;
-                    default:
-                        break;
-                }
+            const int start = g * fields_per_output;
+            const int end   = std::min(start + fields_per_output, field_count);
+            for (int i = start; i < end; ++i) {
+                const auto& src = row.values(i);
+                auto* c = groupRow.add_values();
+                c->set_value(src.value());
             }
-        }
 
-        // Serialize each output message
-        outputs.clear();
-        for (const auto& msg : output_msgs) {
-            std::string buf;
-            msg->SerializeToString(&buf);
-            outputs.emplace_back(ByteBuffer(buf.begin(), buf.end()));
+            std::string serialized;
+            serialized.reserve(groupRow.ByteSizeLong());   // optional, avoids reallocs
+            groupRow.SerializeToString(&serialized);
+
+            outputs.emplace_back(ByteBuffer(serialized.begin(), serialized.end()));            
         }
 
         return;

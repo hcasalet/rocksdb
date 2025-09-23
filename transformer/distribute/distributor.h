@@ -4,6 +4,8 @@
 #pragma once
 
 #include <memory>
+#include "row_generated.h"
+#include "data.pb.h"
 #include "rocksdb/transformer.h"
 #include "protobuf_distributor_schema.h"
 
