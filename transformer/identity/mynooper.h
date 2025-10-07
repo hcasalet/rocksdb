@@ -13,7 +13,7 @@ class MynooperSchema : public SchemaDescriptor {
 
     ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
 
-    TransformerType SupportsTransformerType() const override { return TransformerType::NOTRANSFORMATION; }
+    TransformerType SupportsTransformerType() const override { return TransformerType::MYNOOPER; }
 };
 
 class Mynooper : public Transformer {
