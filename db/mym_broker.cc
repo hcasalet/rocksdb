@@ -49,13 +49,18 @@ MymBroker::MymBroker(const std::string& cfname,
 
 int MymBroker::Read(const std::string &key, const std::set<int>* positions, std::string &result)
 {
-    Status s = db_->Get(ReadOptions(), user_cf_meta_.cf_handle_, key, &result);
-    if (s.ok()) {
-        return 0;
+    rocksdb::ReadOptions ro; 
+    for (const auto& [lvl, handles] : int_cf_meta_) {
+        if (handles.empty()) continue;
+        for (const auto& [name, meta] : handles) {
+            Status s = db_->Get(ro, meta.cf_handle_, key, &result);
+            if (s.ok()) {
+                return 0;
+            }
+            break;
+        }
     }
-
-    int level = 1;
-    while (true) {
+    /*while (true) {
         std::unordered_map<std::string, ColFamMeta> level_handles = int_cf_meta_[level];
         if (level_handles.size() == 0) {
             break;
@@ -95,11 +100,8 @@ int MymBroker::Read(const std::string &key, const std::set<int>* positions, std:
         if (s.ok()) {
             return 0;
         }
-    }
+    }*/
     
-    if (result != "") {
-        return 0;
-    }
     return 1;
 }
 
@@ -154,22 +156,26 @@ int MymBroker::IndexRead(const std::string &key, const std::set<int>* positions,
 int MymBroker::Scan(const std::string &begin_key, int scan_length, const std::set<int> *positions,
                  std::vector<std::string> &result)
 {
-    int levels = int_cf_meta_.size() + 1;
-
     // The following are configs for avoiding OOM issue
     rocksdb::ReadOptions ro;
     ro.fill_cache = false;
     ro.pin_data   = false;
     ro.readahead_size = 2 << 20;
 
-    auto it = db_->NewIterator(ReadOptions(), user_cf_meta_.cf_handle_);
-    it->SeekToFirst();
-    for (int i = 0; it->Valid() && i < scan_length; i++) {
-        result.push_back(it->value().ToString());
-        it->Next();
+    for (const auto& [lvl, handles] : int_cf_meta_) {
+        if (handles.empty()) continue;
+        for (const auto& [name, meta] : handles) {
+            std::unique_ptr<rocksdb::Iterator> it(db_->NewIterator(ro, meta.cf_handle_));
+            it->SeekToFirst();
+            for (int i = 0; it->Valid() && i < scan_length; i++) {
+                result.push_back(it->value().ToString());
+                it->Next();
+            }
+            break;
+        }
     }
     
-    int level = 1;
+    /*int level = 1;
     while (true) {
         std::unordered_map<std::string, ColFamMeta> level_handles = int_cf_meta_[level];
         if (level_handles.size() == 0) {
@@ -224,8 +230,8 @@ int MymBroker::Scan(const std::string &begin_key, int scan_length, const std::se
 
     if (result.size() > 0) {
         return 0;
-    }
-    return 1;
+    }*/
+    return 0;
 }
 
 int MymBroker::Insert(const std::string &key, std::string &values)
