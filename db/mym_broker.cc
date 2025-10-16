@@ -49,17 +49,18 @@ MymBroker::MymBroker(const std::string& cfname,
 
 int MymBroker::Read(const std::string &key, const std::set<int>* positions, std::string &result)
 {
-    rocksdb::ReadOptions ro; 
-    for (const auto& [lvl, handles] : int_cf_meta_) {
-        if (handles.empty()) continue;
-        for (const auto& [name, meta] : handles) {
-            Status s = db_->Get(ro, meta.cf_handle_, key, &result);
-            if (s.ok()) {
-                return 0;
-            }
-            break;
+    rocksdb::ReadOptions ro;
+    Status s;
+    size_t n_levels=int_cf_meta_.size();
+    for (size_t level=0; level < n_levels; level++) {
+        auto handles = int_cf_meta_.find(level);
+        if (handles != int_cf_meta_.end() && !handles->second.empty()) {
+            const auto& [name, meta] = *handles->second.begin();
+            s = db_->Get(ro, meta.cf_handle_, key, &result);
+            if (s.ok()) return 0;
         }
     }
+    
     /*while (true) {
         std::unordered_map<std::string, ColFamMeta> level_handles = int_cf_meta_[level];
         if (level_handles.size() == 0) {
