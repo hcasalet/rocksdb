@@ -486,28 +486,39 @@ Status CompactionOutputs::AddToOutput(
       ikey_ptr = &c_iter.ikey();
     }
 
-    auto& oput = current_output(i);
-
-    s = oput.validator.Add(key, compacted_value);
-    if (!s.ok()) {
-      return s;
-    }
-    builders_[i]->Add(key, compacted_value);
-
-    stats_.num_output_records++;
-    current_output_file_size_ = builders_[i]->EstimatedFileSize();
-
-    if (blob_garbage_meter_) {
-      s = blob_garbage_meter_->ProcessOutFlow(key, compacted_value);
-      if (!s.ok()) return s;
-    }
-    
-
-    s = oput.meta.UpdateBoundaries(key, compacted_value, ikey_ptr->sequence, ikey_ptr->type);
+    s = EmitOne(i, key, compacted_value, ikey_ptr);
     if (!s.ok()) return s;
   }
 
   return s;
+}
+
+Status CompactionOutputs::EmitOne(
+    size_t output_index,
+    const Slice& key,
+    const Slice& value,
+    const ParsedInternalKey* ikey_ptr) {
+  Status s;
+
+  auto& oput = current_output(output_index);
+
+  s = oput.validator.Add(key, value);
+  if (!s.ok()) return s;
+
+  builders_[output_index]->Add(key, value);
+
+  stats_.num_output_records++;
+  current_output_file_size_ = builders_[output_index]->EstimatedFileSize();
+
+  if (blob_garbage_meter_) {
+    s = blob_garbage_meter_->ProcessOutFlow(key, value);
+    if (!s.ok()) return s;
+  }
+
+  s = oput.meta.UpdateBoundaries(key, value, ikey_ptr->sequence, ikey_ptr->type);
+  if (!s.ok()) return s;
+
+  return Status::OK();
 }
 
 Status CompactionOutputs::AddDerivedOutput(

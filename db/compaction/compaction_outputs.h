@@ -279,6 +279,12 @@ class CompactionOutputs {
   Status AddToOutput(const CompactionIterator& c_iter,
                      const CompactionFileOpenFunc& open_file_func,
                      const CompactionFileCloseFunc& close_file_func);
+
+  // Factored out helper function to AddToOutput for batch mode
+  Status EmitOne(size_t output_index,
+                 const Slice& key,
+                 const Slice& value,
+                 const ParsedInternalKey* ikey_ptr);
   
   // Add derived data to the output file
   Status AddDerivedOutput(std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,
