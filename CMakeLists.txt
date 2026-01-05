@@ -1136,12 +1136,28 @@ set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
 configure_file(util/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
 
 find_package(jsoncpp CONFIG REQUIRED)
+find_package(Arrow CONFIG REQUIRED)
+
+if (NOT TARGET Arrow::arrow)
+  if (TARGET Arrow::arrow_shared)
+    add_library(Arrow::arrow ALIAS Arrow::arrow_shared)
+  elseif (TARGET Arrow::arrow_static)
+    add_library(Arrow::arrow ALIAS Arrow::arrow_static)
+  elseif (TARGET arrow_shared)
+    add_library(Arrow::arrow ALIAS arrow_shared)
+  elseif (TARGET arrow_static)
+    add_library(Arrow::arrow ALIAS arrow_static)
+  else()
+    message(FATAL_ERROR "Arrow CONFIG found but no Arrow library targets were exported")
+  endif()
+endif()
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
 target_include_directories(
   ${ROCKSDB_STATIC_LIB} PUBLIC ${PROTO_GEN_DIR} ${FLATBUFFERS_GEN_DIR})
 target_link_libraries(${ROCKSDB_STATIC_LIB} PRIVATE 
-proto_generated flatbuffers_generated ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} ${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} jsoncpp_lib)
+proto_generated flatbuffers_generated ${THIRDPARTY_LIBS} ${SYSTEM_LIBS} 
+${Protobuf_LIBRARIES} ${FLATBUFFERS_LIBRARY} jsoncpp_lib Arrow::arrow)
 
 set(ROCKSDB_BUILD_SHARED OFF)
 if(ROCKSDB_BUILD_SHARED)
