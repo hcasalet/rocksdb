@@ -6,7 +6,29 @@
 
 #include "rocksdb/slice.h"
 
+#ifdef LZ4
+  #pragma push_macro("LZ4")
+  #undef LZ4
+  #define ROCKSDB_RESTORE_LZ4_MACRO
+#endif
+
+#ifdef ZSTD
+  #pragma push_macro("ZSTD")
+  #undef ZSTD
+  #define ROCKSDB_RESTORE_ZSTD_MACRO
+#endif
+
 #include <arrow/api.h>
+
+#ifdef ROCKSDB_RESTORE_ZSTD_MACRO
+  #pragma pop_macro("ZSTD")
+  #undef ROCKSDB_RESTORE_ZSTD_MACRO
+#endif
+
+#ifdef ROCKSDB_RESTORE_LZ4_MACRO
+  #pragma pop_macro("LZ4")
+  #undef ROCKSDB_RESTORE_LZ4_MACRO
+#endif
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -15,12 +37,13 @@ namespace ROCKSDB_NAMESPACE {
 // It is NOT wired into compaction yet (Step 2 only).
 class ArrowCompactionBatcher {
  public:
-  struct Options {
+  struct BatcherOptions {
     std::size_t max_rows  = 4096;
     std::size_t max_bytes = 16ULL << 20;  // 16 MiB (keys+values) threshold
   };
 
-  explicit ArrowCompactionBatcher(Options opts = Options());
+  ArrowCompactionBatcher();  // default options
+  explicit ArrowCompactionBatcher(BatcherOptions batopts);
 
   // Add a row. Copies bytes into Arrow builders.
   arrow::Status Add(const Slice& internal_key, const Slice& user_key,
@@ -37,7 +60,7 @@ class ArrowCompactionBatcher {
   std::size_t num_bytes() const { return num_bytes_; }
 
  private:
-  Options opts_;
+  BatcherOptions batopts_;
   std::size_t num_rows_ = 0;
   std::size_t num_bytes_ = 0;
 

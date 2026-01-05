@@ -6,7 +6,10 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-ArrowCompactionBatcher::ArrowCompactionBatcher(Options opts) : opts_(opts) {
+ArrowCompactionBatcher::ArrowCompactionBatcher()
+    : ArrowCompactionBatcher(BatcherOptions{}) {}
+
+ArrowCompactionBatcher::ArrowCompactionBatcher(BatcherOptions batopts) : batopts_(batopts) {
   schema_ = arrow::schema({
       arrow::field("internal_key", arrow::binary()),
       arrow::field("user_key", arrow::binary()),
@@ -58,7 +61,7 @@ arrow::Status ArrowCompactionBatcher::Add(const Slice& internal_key,
 
 bool ArrowCompactionBatcher::ShouldFlush() const {
   if (num_rows_ == 0) return false;
-  return (num_rows_ >= opts_.max_rows) || (num_bytes_ >= opts_.max_bytes);
+  return (num_rows_ >= batopts_.max_rows) || (num_bytes_ >= batopts_.max_bytes);
 }
 
 arrow::Status ArrowCompactionBatcher::Flush(std::shared_ptr<arrow::RecordBatch>* out) {
