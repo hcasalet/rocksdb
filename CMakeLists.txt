@@ -870,6 +870,7 @@ set(SOURCES
         transformer/augment/json_index_schema.cc
         transformer/identity/mynooper.cc
         transformer/transformer_factory.cc
+        transformer/arrow_compaction_batcher.cc
         transformer/distribute/protobuf_distributor_schema.cc
         transformer/distribute/json_distributor_schema.cc
         transformer/distribute/avro_distributor_schema.cc
