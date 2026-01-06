@@ -31,7 +31,6 @@ arrow::Status ArrowCompactionBatcher::ResetBuilders() {
 }
 
 arrow::Status ArrowCompactionBatcher::Add(const Slice& internal_key,
-                                         const Slice& user_key,
                                          const Slice& value) {
   // Arrow BinaryBuilder::Append expects (const uint8_t*, int32_t)
   // Guard size conversion; RocksDB values can exceed 2GB in theory, but in
@@ -44,18 +43,15 @@ arrow::Status ArrowCompactionBatcher::Add(const Slice& internal_key,
   };
 
   ARROW_ASSIGN_OR_RAISE(int32_t ik_sz, to_i32(internal_key.size()));
-  ARROW_ASSIGN_OR_RAISE(int32_t uk_sz, to_i32(user_key.size()));
   ARROW_ASSIGN_OR_RAISE(int32_t v_sz,  to_i32(value.size()));
 
   ARROW_RETURN_NOT_OK(internal_key_b_->Append(
       reinterpret_cast<const uint8_t*>(internal_key.data()), ik_sz));
-  ARROW_RETURN_NOT_OK(user_key_b_->Append(
-      reinterpret_cast<const uint8_t*>(user_key.data()), uk_sz));
   ARROW_RETURN_NOT_OK(value_b_->Append(
       reinterpret_cast<const uint8_t*>(value.data()), v_sz));
 
   num_rows_ += 1;
-  num_bytes_ += internal_key.size() + user_key.size() + value.size();
+  num_bytes_ += internal_key.size() + value.size();
   return arrow::Status::OK();
 }
 

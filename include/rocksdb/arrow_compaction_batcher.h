@@ -46,8 +46,7 @@ class ArrowCompactionBatcher {
   explicit ArrowCompactionBatcher(BatcherOptions batopts);
 
   // Add a row. Copies bytes into Arrow builders.
-  arrow::Status Add(const Slice& internal_key, const Slice& user_key,
-                    const Slice& value);
+  arrow::Status Add(const Slice& internal_key, const Slice& value);
 
   // Whether we should flush based on thresholds.
   bool ShouldFlush() const;

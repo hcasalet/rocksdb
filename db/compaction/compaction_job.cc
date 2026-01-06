@@ -1314,7 +1314,12 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
           const_cast<Compaction*>(sub_compact->compaction)));
 
   const bool use_batched_transform = !cfd->ioptions()->transformers.empty() && 
-                                     /* your condition */ false;
+                                      /* your condition */ false;
+  rocksdb::ArrowCompactionBatcher::BatcherOptions batch_opts;
+  batch_opts.max_rows  = 4096;
+  batch_opts.max_bytes = 16ULL << 20;
+  rocksdb::ArrowCompactionBatcher batcher(batch_opts);
+
   while (exec_status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
     // Invariant: c_iter.status() is guaranteed to be OK if c_iter->Valid()
     // returns true.
@@ -1329,8 +1334,23 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     }
 
     // if we batch for transformations
-    if (use_batched_transform) {
+    if (use_batched_transform && !c_iter->IsDeleteRangeSentinelKey()) {
+      auto st = batcher.Add(c_iter->key(), c_iter->value());
+      if (!st.ok()) {
+        exec_status = Status::Corruption(st.ToString());
+        break;
+      }
 
+      if (batcher.ShouldFlush()) {
+        // Build Arrow batch for validation
+        std::shared_ptr<arrow::RecordBatch> batch;
+        auto a_st = batcher.Flush(&batch);
+
+        if (!a_st.ok()) {
+          exec_status = Status::Corruption(a_st.ToString());
+          break;
+        }
+      }
     }
 
     // Add current compaction_iterator key to target compaction output, if the
@@ -1350,6 +1370,14 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     c_iter->Next();
     if (c_iter->status().IsManualCompactionPaused()) {
       break;
+    }
+  }
+
+  if (use_batched_transform && exec_status.ok() && batcher.num_rows() > 0) {
+    std::shared_ptr<arrow::RecordBatch> batch;
+    auto a_st = batcher.Flush(&batch);
+    if (!a_st.ok()) {
+      exec_status = Status::Corruption(a_st.ToString());
     }
   }
 
