@@ -3,8 +3,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <charconv>
+#include <system_error>
+#include <google/protobuf/dynamic_message.h>
+#include <google/protobuf/message.h>
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/reflection.h>
 
 #include "rocksdb/slice.h"
+#include "rocksdb/transformer.h"
 
 #ifdef LZ4
   #pragma push_macro("LZ4")
@@ -32,6 +39,48 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+struct ParsedFields {
+    std::string name;
+    std::shared_ptr<arrow::Scalar> scalar;
+    std::shared_ptr<arrow::DataType> declared_type;
+};
+
+struct ParsedRow {
+    std::vector<ParsedFields> fields;
+};
+
+class ValueParser {
+  public:
+    enum class Format { kJson, kCsv, kProtobuf };
+
+    struct FormatOptions {
+      // Detection policy:
+      // - If set, skip detection and always parse as forced_format.
+      std::optional<Format> forced_format;
+
+      // CSV options (if needed)
+      char csv_delim = ',';
+      // Optional: schema for CSV / JSON (recommended for stability)
+      // e.g., vector of {name, datatype}
+    };
+
+    explicit ValueParser(FormatOptions opts) : fmt_opts_(std::move(opts)) {}
+    arrow::Result<ParsedRow> Parse(const Slice& value,
+            const SchemaDescriptor& descriptor) const;
+
+  private:
+    FormatOptions fmt_opts_;
+
+    // Detection
+    arrow::Result<Format> DetectFormat(const Slice& value) const;
+
+    // Parsers (as private helpers)
+    arrow::Result<ParsedRow> ParseJson(const Slice& value) const;
+    arrow::Result<ParsedRow> ParseCsv(const Slice& value) const;
+    arrow::Result<ParsedRow> ParseProtobuf(const Slice& value,
+            std::unique_ptr<google::protobuf::Message>& msg) const;
+};
+
 // A small utility that batches compaction K/V pairs into an Arrow RecordBatch.
 // This is intentionally "lossless": it stores keys/values as opaque bytes.
 // It is NOT wired into compaction yet (Step 2 only).
@@ -43,10 +92,15 @@ class ArrowCompactionBatcher {
   };
 
   ArrowCompactionBatcher();  // default options
-  explicit ArrowCompactionBatcher(BatcherOptions batopts);
+  explicit ArrowCompactionBatcher(BatcherOptions batopts, ValueParser::FormatOptions fmtopts);
 
   // Add a row. Copies bytes into Arrow builders.
-  arrow::Status Add(const Slice& internal_key, const Slice& value);
+  arrow::Status Add(const Slice& internal_key, 
+                    const Slice& value,
+                    const SchemaDescriptor& schema);
+
+  // Helper function to append 
+  arrow::Status AppendScalarToBuilder(arrow::ArrayBuilder* b, const arrow::Scalar& s);
 
   // Whether we should flush based on thresholds.
   bool ShouldFlush() const;
@@ -66,9 +120,11 @@ class ArrowCompactionBatcher {
   std::shared_ptr<arrow::Schema> schema_;
 
   std::unique_ptr<arrow::BinaryBuilder> internal_key_b_;
-  std::unique_ptr<arrow::BinaryBuilder> user_key_b_;
-  std::unique_ptr<arrow::BinaryBuilder> value_b_;
-
+  std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders_;
+  std::vector<std::shared_ptr<arrow::Field>> fields_;
+  ValueParser parser_;
+  std::unordered_map<std::string, int> col_index_;
+  
   arrow::Status ResetBuilders();
 };
 

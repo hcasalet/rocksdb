@@ -1315,11 +1315,14 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
 
   const bool use_batched_transform = !cfd->ioptions()->transformers.empty() && 
                                       /* your condition */ false;
-  rocksdb::ArrowCompactionBatcher::BatcherOptions batch_opts;
+  ArrowCompactionBatcher::BatcherOptions batch_opts;
   batch_opts.max_rows  = 4096;
   batch_opts.max_bytes = 16ULL << 20;
-  rocksdb::ArrowCompactionBatcher batcher(batch_opts);
+  ValueParser::FormatOptions fmt_opts;
+  fmt_opts.forced_format = ValueParser::Format::kCsv;
+  rocksdb::ArrowCompactionBatcher batcher(batch_opts, fmt_opts);
 
+  auto schema_ptr = cfd->ioptions()->schemaDescriptors[0];
   while (exec_status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
     // Invariant: c_iter.status() is guaranteed to be OK if c_iter->Valid()
     // returns true.
@@ -1335,7 +1338,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
 
     // if we batch for transformations
     if (use_batched_transform && !c_iter->IsDeleteRangeSentinelKey()) {
-      auto st = batcher.Add(c_iter->key(), c_iter->value());
+      auto st = batcher.Add(c_iter->key(), c_iter->value(), *schema_ptr);
       if (!st.ok()) {
         exec_status = Status::Corruption(st.ToString());
         break;
@@ -1351,17 +1354,17 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
           break;
         }
       }
-    }
-
-    // Add current compaction_iterator key to target compaction output, if the
-    // output file needs to be close or open, it will call the `open_file_func`
-    // and `close_file_func`.
-    // TODO: it would be better to have the compaction file open/close moved
-    // into `CompactionOutputs` which has the output file information.
-    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func);
-    if (!exec_status.ok()) {
-      break;
-    }
+    } else {
+      // Add current compaction_iterator key to target compaction output, if the
+      // output file needs to be close or open, it will call the `open_file_func`
+      // and `close_file_func`.
+      // TODO: it would be better to have the compaction file open/close moved
+      // into `CompactionOutputs` which has the output file information.
+      exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func);
+      if (!exec_status.ok()) {
+        break;
+      }
+    }  
 
     TEST_SYNC_POINT_CALLBACK(
         "CompactionJob::Run():PausingManualCompaction:2",
