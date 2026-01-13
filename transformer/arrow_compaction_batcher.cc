@@ -9,63 +9,26 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-static inline const char* SkipWS(const char* p, const char* end) {
-  while (p < end) {
-    unsigned char c = static_cast<unsigned char>(*p);
-    if (c != ' ' && c != '\t' && c != '\n' && c != '\r') break;
-    ++p;
-  }
-  return p;
-}
-
 arrow::Result<ParsedRow> ValueParser::Parse(const rocksdb::Slice& value,
     const SchemaDescriptor& schema) const {
-  Format fmt;
-  if (fmt_opts_.forced_format.has_value()) {
-    fmt = *fmt_opts_.forced_format;
-  } else {
-    ARROW_ASSIGN_OR_RAISE(fmt, DetectFormat(value));
-  }
-
+  InputOutputDataType fmt = schema.InputType();
+  
   switch (fmt) {
-    case Format::kJson:     return ParseJson(value);
-    case Format::kCsv:      return ParseCsv(value);
-    case Format::kProtobuf: {
+    case InputOutputDataType::JSON:     return ParseJson(value);
+    case InputOutputDataType::CSV:      return ParseCsv(value);
+    case InputOutputDataType::PROTOBUF: {
         auto* proto_schema = dynamic_cast<const ProtobufDistributorSchema*>(&schema);
         auto spec = proto_schema->GetInputSchemaSpec();
         return ParseProtobuf(value, spec);
     }
+    case InputOutputDataType::FLATBUFFERS:
+    case InputOutputDataType::AVRO:
+    case InputOutputDataType::PARQUET:
+    case InputOutputDataType::UNKNOWN:
+    default:
+      return arrow::Status::Invalid("Unknown format");
   }
   return arrow::Status::Invalid("Unknown format");
-}
-
-arrow::Result<ValueParser::Format>
-ValueParser::DetectFormat(const rocksdb::Slice& value) const {
-  const char* p = value.data();
-  const char* end = value.data() + value.size();
-  p = SkipWS(p, end);
-  if (p == end) return arrow::Status::Invalid("Empty value");
-
-  // JSON: object/array start
-  if (*p == '{' || *p == '[') {
-    return Format::kJson;
-  }
-
-  // CSV heuristic: contains delimiter and no NUL bytes; also mostly printable.
-  // Only do this if you actually expect CSV in this DB/CF.
-  bool has_delim = false;
-  for (const char* q = p; q < end; ++q) {
-    unsigned char c = static_cast<unsigned char>(*q);
-    if (c == 0) return Format::kProtobuf;  // likely binary
-    if (c == static_cast<unsigned char>(fmt_opts_.csv_delim)) has_delim = true;
-    // If you want to be stricter, reject if lots of non-printables.
-  }
-  if (has_delim) {
-    return Format::kCsv;
-  }
-
-  // Fallback: protobuf (but only if parse succeeds in ParseProtobuf)
-  return Format::kProtobuf;
 }
 
 arrow::Result<ParsedFields> ValueToParsedField(const std::string& name,
@@ -269,9 +232,10 @@ arrow::Result<ParsedRow> ValueParser::ParseCsv(const rocksdb::Slice& value) cons
   // Split the line into tokens (very simple splitter; extend for quotes if needed)
   std::vector<std::string_view> tokens;
   const char* start = p;
+  const char delim = ',';
 
   while (p < end) {
-    if (*p == fmt_opts_.csv_delim) {
+    if (*p == delim) {
       tokens.emplace_back(start, static_cast<size_t>(p - start));
       start = p + 1;
     }
@@ -340,30 +304,56 @@ arrow::Result<ParsedRow> ValueParser::ParseProtobuf(const rocksdb::Slice& value,
   return out;
 }
 
-ArrowCompactionBatcher::ArrowCompactionBatcher()
-    : ArrowCompactionBatcher(BatcherOptions{}, ValueParser::FormatOptions{}) {}
-
-ArrowCompactionBatcher::ArrowCompactionBatcher(BatcherOptions batopts,
-                        ValueParser::FormatOptions fmtopts) 
-              : batopts_(std::move(batopts)),
-                parser_(std::move(fmtopts)) {
-  schema_ = arrow::schema({
-      arrow::field("internal_key", arrow::binary()),
-      arrow::field("value", arrow::binary()),
-  });
+ArrowCompactionBatcher::ArrowCompactionBatcher() {
   // Build initial builders
-  (void)ResetBuilders();  // ignore status here; builders will be checked on use
+  (void)Clear();  // ignore status here; builders will be checked on use
 }
 
-arrow::Status ArrowCompactionBatcher::ResetBuilders() {
+// Init is to get the structure with a particular schema passed in.
+arrow::Status ArrowCompactionBatcher::Init(const SchemaDescriptor& schema) {
+  auto st = Clear();
+  if (!st.ok()) return st;
+
+  auto input_fields = schema.GetInputFieldSchema();
+  fields_.reserve(1 + input_fields.size());
+  builders_.reserve(1 + input_fields.size());
+
+  fields_.push_back(arrow::field("key", arrow::binary(), /*nullable=*/false));
+  builders_.push_back(std::make_unique<arrow::BinaryBuilder>());
+
+  
+  for (const auto& f : input_fields) {
+    if (f.type == "string") {
+      fields_.push_back(arrow::field(f.name, arrow::utf8(), true));
+      builders_.push_back(std::make_unique<arrow::StringBuilder>());
+    } else if (f.type == "numeric") {
+      fields_.push_back(arrow::field(f.name, arrow::int64(), true));
+      builders_.push_back(std::make_unique<arrow::Int64Builder>());
+    } else {
+      return arrow::Status::Invalid("Unsupported field type: ", f.type,
+                                   " for field: ", f.name);
+    }
+  }
+  schema_ = arrow::schema(fields_);
+  return arrow::Status::OK();
+}
+
+// Clear is to clean up everything (get a clean slate)
+arrow::Status ArrowCompactionBatcher::Clear() {
   num_rows_ = 0;
   num_bytes_ = 0;
 
-  if (internal_key_b_) {
-    internal_key_b_->Reset();
-  } else {
-    internal_key_b_ = std::make_unique<arrow::BinaryBuilder>();
-  }
+  fields_.clear();
+  builders_.clear();
+  schema_.reset();
+
+  return arrow::Status::OK();
+}
+
+// Reset is just to clear the data but keeps the structure
+arrow::Status ArrowCompactionBatcher::Reset() {
+  num_rows_ = 0;
+  num_bytes_ = 0;
 
   for (auto& b : builders_) {
     if (b) b->Reset();
@@ -386,39 +376,15 @@ arrow::Status ArrowCompactionBatcher::Add(const Slice& internal_key,
   };
 
   ARROW_ASSIGN_OR_RAISE(int32_t ik_sz, to_i32(internal_key.size()));
-  ARROW_RETURN_NOT_OK(internal_key_b_->Append(
+  auto* key_b = static_cast<arrow::BinaryBuilder*>(builders_[0].get());
+  ARROW_RETURN_NOT_OK(key_b->Append(
       reinterpret_cast<const uint8_t*>(internal_key.data()), ik_sz));
 
   ARROW_ASSIGN_OR_RAISE(ParsedRow row, parser_.Parse(value, schema));
-  std::vector<bool> touched(builders_.size(), false);
 
+  int col_idx = 1;
   for (const auto& f : row.fields) {
-    int col_idx = -1;
-
-    auto it = col_index_.find(f.name);
-    if (it == col_index_.end()) {
-        std::shared_ptr<arrow::DataType> dtype = f.declared_type ? f.declared_type : f.scalar->type;
-
-        col_idx = static_cast<int>(builders_.size());
-        col_index_.emplace(f.name, col_idx);
-        fields_.push_back(arrow::field(f.name, dtype, /*nullable=*/true));
-
-        std::unique_ptr<arrow::ArrayBuilder> b;
-        ARROW_RETURN_NOT_OK(arrow::MakeBuilder(arrow::default_memory_pool(), dtype, &b));
-        builders_.push_back(std::move(b));
-        touched.push_back(false);
-    } else {
-        col_idx = it->second;
-    }
-
-    ARROW_RETURN_NOT_OK(AppendScalarToBuilder(builders_[col_idx].get(), *f.scalar));
-    touched[col_idx] = true;
-  }
-
-  for (size_t i = 0; i < builders_.size(); ++i) {
-    if (!touched[i]) {
-      ARROW_RETURN_NOT_OK(builders_[i]->AppendNull());
-    }
+    ARROW_RETURN_NOT_OK(AppendScalarToBuilder(builders_[col_idx++].get(), *f.scalar));
   }
 
   num_rows_ += 1;
@@ -466,11 +432,6 @@ arrow::Status ArrowCompactionBatcher::AppendScalarToBuilder(
   }
 }
 
-bool ArrowCompactionBatcher::ShouldFlush() const {
-  if (num_rows_ == 0) return false;
-  return (num_rows_ >= batopts_.max_rows) || (num_bytes_ >= batopts_.max_bytes);
-}
-
 arrow::Status ArrowCompactionBatcher::Flush(std::shared_ptr<arrow::RecordBatch>* out) {
   if (!out) return arrow::Status::Invalid("out is null");
   if (num_rows_ == 0) {
@@ -478,13 +439,8 @@ arrow::Status ArrowCompactionBatcher::Flush(std::shared_ptr<arrow::RecordBatch>*
     return arrow::Status::OK();
   }
 
-  std::shared_ptr<arrow::Array> ik_arr;
-  ARROW_RETURN_NOT_OK(internal_key_b_->Finish(&ik_arr));
-
   std::vector<std::shared_ptr<arrow::Array>> arrays;
-  arrays.reserve(1 + builders_.size());
-  arrays.push_back(ik_arr);
-
+  arrays.reserve(builders_.size());
   for (auto& b : builders_) {
     std::shared_ptr<arrow::Array> arr;
     ARROW_RETURN_NOT_OK(b->Finish(&arr));
@@ -492,8 +448,7 @@ arrow::Status ArrowCompactionBatcher::Flush(std::shared_ptr<arrow::RecordBatch>*
   }
 
   *out = arrow::RecordBatch::Make(schema_, static_cast<int64_t>(num_rows_), std::move(arrays));
-
-  return ResetBuilders();
+  return Reset();
 }
 
 }  // namespace rocksdb

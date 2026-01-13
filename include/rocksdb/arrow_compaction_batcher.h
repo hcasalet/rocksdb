@@ -53,27 +53,11 @@ class ValueParser {
   public:
     enum class Format { kJson, kCsv, kProtobuf };
 
-    struct FormatOptions {
-      // Detection policy:
-      // - If set, skip detection and always parse as forced_format.
-      std::optional<Format> forced_format;
-
-      // CSV options (if needed)
-      char csv_delim = ',';
-      // Optional: schema for CSV / JSON (recommended for stability)
-      // e.g., vector of {name, datatype}
-    };
-
-    explicit ValueParser(FormatOptions opts) : fmt_opts_(std::move(opts)) {}
+    ValueParser() {}
     arrow::Result<ParsedRow> Parse(const Slice& value,
             const SchemaDescriptor& descriptor) const;
 
   private:
-    FormatOptions fmt_opts_;
-
-    // Detection
-    arrow::Result<Format> DetectFormat(const Slice& value) const;
-
     // Parsers (as private helpers)
     arrow::Result<ParsedRow> ParseJson(const Slice& value) const;
     arrow::Result<ParsedRow> ParseCsv(const Slice& value) const;
@@ -86,13 +70,7 @@ class ValueParser {
 // It is NOT wired into compaction yet (Step 2 only).
 class ArrowCompactionBatcher {
  public:
-  struct BatcherOptions {
-    std::size_t max_rows  = 4096;
-    std::size_t max_bytes = 16ULL << 20;  // 16 MiB (keys+values) threshold
-  };
-
-  ArrowCompactionBatcher();  // default options
-  explicit ArrowCompactionBatcher(BatcherOptions batopts, ValueParser::FormatOptions fmtopts);
+  ArrowCompactionBatcher();
 
   // Add a row. Copies bytes into Arrow builders.
   arrow::Status Add(const Slice& internal_key, 
@@ -102,9 +80,6 @@ class ArrowCompactionBatcher {
   // Helper function to append 
   arrow::Status AppendScalarToBuilder(arrow::ArrayBuilder* b, const arrow::Scalar& s);
 
-  // Whether we should flush based on thresholds.
-  bool ShouldFlush() const;
-
   // Produce a RecordBatch and reset the builders.
   // If there are no rows, returns an OK status with *out = nullptr.
   arrow::Status Flush(std::shared_ptr<arrow::RecordBatch>* out);
@@ -113,19 +88,17 @@ class ArrowCompactionBatcher {
   std::size_t num_bytes() const { return num_bytes_; }
 
  private:
-  BatcherOptions batopts_;
   std::size_t num_rows_ = 0;
   std::size_t num_bytes_ = 0;
 
-  std::shared_ptr<arrow::Schema> schema_;
-
-  std::unique_ptr<arrow::BinaryBuilder> internal_key_b_;
-  std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders_;
-  std::vector<std::shared_ptr<arrow::Field>> fields_;
   ValueParser parser_;
-  std::unordered_map<std::string, int> col_index_;
+  std::vector<std::shared_ptr<arrow::Field>> fields_;
+  std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders_;
+  std::shared_ptr<arrow::Schema> schema_;
   
-  arrow::Status ResetBuilders();
+  arrow::Status Init(const SchemaDescriptor& schema);
+  arrow::Status Clear();
+  arrow::Status Reset();
 };
 
 }  // namespace rocksdb

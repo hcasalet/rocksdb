@@ -1313,16 +1313,6 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       reinterpret_cast<void*>(
           const_cast<Compaction*>(sub_compact->compaction)));
 
-  const bool use_batched_transform = !cfd->ioptions()->transformers.empty() && 
-                                      /* your condition */ false;
-  ArrowCompactionBatcher::BatcherOptions batch_opts;
-  batch_opts.max_rows  = 4096;
-  batch_opts.max_bytes = 16ULL << 20;
-  ValueParser::FormatOptions fmt_opts;
-  fmt_opts.forced_format = ValueParser::Format::kCsv;
-  rocksdb::ArrowCompactionBatcher batcher(batch_opts, fmt_opts);
-
-  auto schema_ptr = cfd->ioptions()->schemaDescriptors[0];
   while (exec_status.ok() && !cfd->IsDropped() && c_iter->Valid()) {
     // Invariant: c_iter.status() is guaranteed to be OK if c_iter->Valid()
     // returns true.
@@ -1337,34 +1327,34 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     }
 
     // if we batch for transformations
-    if (use_batched_transform && !c_iter->IsDeleteRangeSentinelKey()) {
-      auto st = batcher.Add(c_iter->key(), c_iter->value(), *schema_ptr);
-      if (!st.ok()) {
-        exec_status = Status::Corruption(st.ToString());
-        break;
-      }
+    //if (use_batched_transform && !c_iter->IsDeleteRangeSentinelKey()) {
+    //  auto st = batcher.Add(c_iter->key(), c_iter->value(), *schema_ptr);
+    //  if (!st.ok()) {
+    //    exec_status = Status::Corruption(st.ToString());
+    //    break;
+    //  }
 
-      if (batcher.ShouldFlush()) {
+    //  if (batcher.ShouldFlush()) {
         // Build Arrow batch for validation
-        std::shared_ptr<arrow::RecordBatch> batch;
-        auto a_st = batcher.Flush(&batch);
+    //    std::shared_ptr<arrow::RecordBatch> batch;
+    //    auto a_st = batcher.Flush(&batch);
 
-        if (!a_st.ok()) {
-          exec_status = Status::Corruption(a_st.ToString());
-          break;
-        }
-      }
-    } else {
+    //    if (!a_st.ok()) {
+    //      exec_status = Status::Corruption(a_st.ToString());
+    //      break;
+    //    }
+    //  }
+   // } else {
       // Add current compaction_iterator key to target compaction output, if the
       // output file needs to be close or open, it will call the `open_file_func`
       // and `close_file_func`.
       // TODO: it would be better to have the compaction file open/close moved
       // into `CompactionOutputs` which has the output file information.
-      exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func);
-      if (!exec_status.ok()) {
-        break;
-      }
-    }  
+    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func);
+    if (!exec_status.ok()) {
+      break;
+    }
+    //}  
 
     TEST_SYNC_POINT_CALLBACK(
         "CompactionJob::Run():PausingManualCompaction:2",
@@ -1373,14 +1363,6 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     c_iter->Next();
     if (c_iter->status().IsManualCompactionPaused()) {
       break;
-    }
-  }
-
-  if (use_batched_transform && exec_status.ok() && batcher.num_rows() > 0) {
-    std::shared_ptr<arrow::RecordBatch> batch;
-    auto a_st = batcher.Flush(&batch);
-    if (!a_st.ok()) {
-      exec_status = Status::Corruption(a_st.ToString());
     }
   }
 

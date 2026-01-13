@@ -438,6 +438,16 @@ Status CompactionOutputs::AddToOutput(
       reinterpret_cast<const uint8_t*>(value.data()) + value.size()
     );
   } else {
+    //ArrowCompactionBatcher::BatcherOptions batch_opts;
+    //batch_opts.max_rows  = 4096;
+    //batch_opts.max_bytes = 16ULL << 20;
+    //ValueParser::FormatOptions fmt_opts;
+    //fmt_opts.forced_format = ValueParser::Format::kCsv;
+    //rocksdb::ArrowCompactionBatcher batcher(batch_opts, fmt_opts);
+
+    //auto schema_ptr = cfd->ioptions()->schemaDescriptors[0];
+
+
     std::vector<uint8_t> val_vec;
     
     if (to_underlying(transformer_type) == to_underlying(TransformerType::AUGMENTER)) {
@@ -466,6 +476,15 @@ Status CompactionOutputs::AddToOutput(
     
     transformer->Transform(val_vec, output_values, schemaDescriptor);
   }
+
+  //  if (use_batched_transform && exec_status.ok() && batcher.num_rows() > 0) {
+  //  std::shared_ptr<arrow::RecordBatch> batch;
+  //    auto a_st = batcher.Flush(&batch);
+  //    if (!a_st.ok()) {
+  //      exec_status = Status::Corruption(a_st.ToString());
+  //    }
+  //}
+
 
   for (size_t i = 0; i < output_values.size(); i++) {
     auto compacted_value = Slice(reinterpret_cast<const char*>(output_values[i].data()), output_values[i].size());
