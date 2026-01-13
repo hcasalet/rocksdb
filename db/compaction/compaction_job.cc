@@ -1072,6 +1072,17 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   uint64_t prev_cpu_micros = db_options_.clock->CPUMicros();
 
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
+  std::unique_ptr<ArrowCompactionBatcher> arrow_batcher;
+  const auto& schema_descs = cfd->ioptions()->schemaDescriptors;
+  if (!schema_descs.empty() && schema_descs[0]) {
+    auto res = ArrowCompactionBatcher::Create(*schema_descs[0]);
+    if (!res.ok()) {
+      sub_compact->status = Status::InvalidArgument(
+                  "ArrowCompactionBatcher init failed: " + res.status().ToString());
+      return;
+    }
+    arrow_batcher = std::move(*res);
+  }
 
   // Create compaction filter and fail the compaction if
   // IgnoreSnapshots() = false because it is not supported anymore
@@ -1350,7 +1361,8 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       // and `close_file_func`.
       // TODO: it would be better to have the compaction file open/close moved
       // into `CompactionOutputs` which has the output file information.
-    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func);
+    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, 
+                    arrow_batcher ? arrow_batcher.get() : nullptr);
     if (!exec_status.ok()) {
       break;
     }

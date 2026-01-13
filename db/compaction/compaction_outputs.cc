@@ -365,7 +365,8 @@ bool CompactionOutputs::ShouldStopBefore(const CompactionIterator& c_iter) {
 Status CompactionOutputs::AddToOutput(
     const CompactionIterator& c_iter,
     const CompactionFileOpenFunc& open_file_func,
-    const CompactionFileCloseFunc& close_file_func) {
+    const CompactionFileCloseFunc& close_file_func,
+    ArrowCompactionBatcher* arrow_batcher) {
   Status s;
   ColumnFamilyData* cfd = compaction_->column_family_data();
   const auto& opts = cfd->ioptions();

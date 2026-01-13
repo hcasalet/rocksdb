@@ -9,15 +9,14 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-arrow::Result<ParsedRow> ValueParser::Parse(const rocksdb::Slice& value,
-    const SchemaDescriptor& schema) const {
-  InputOutputDataType fmt = schema.InputType();
+arrow::Result<ParsedRow> ValueParser::Parse(const rocksdb::Slice& value) const {
+  InputOutputDataType fmt = schema_.InputType();
   
   switch (fmt) {
     case InputOutputDataType::JSON:     return ParseJson(value);
     case InputOutputDataType::CSV:      return ParseCsv(value);
     case InputOutputDataType::PROTOBUF: {
-        auto* proto_schema = dynamic_cast<const ProtobufDistributorSchema*>(&schema);
+        auto* proto_schema = dynamic_cast<const ProtobufDistributorSchema*>(&schema_);
         auto spec = proto_schema->GetInputSchemaSpec();
         return ParseProtobuf(value, spec);
     }
@@ -304,15 +303,21 @@ arrow::Result<ParsedRow> ValueParser::ParseProtobuf(const rocksdb::Slice& value,
   return out;
 }
 
-ArrowCompactionBatcher::ArrowCompactionBatcher() {
-  // Build initial builders
-  (void)Clear();  // ignore status here; builders will be checked on use
+ArrowCompactionBatcher::ArrowCompactionBatcher(const SchemaDescriptor& schema) 
+    : parser_(schema) {}
+
+arrow::Result<std::unique_ptr<ArrowCompactionBatcher>> ArrowCompactionBatcher::Create(const SchemaDescriptor& schema)
+{
+  auto ptr = std::unique_ptr<ArrowCompactionBatcher>(
+      new ArrowCompactionBatcher(schema));
+  ARROW_RETURN_NOT_OK(ptr->BuildFromSchema(schema));
+  return ptr;
 }
 
-// Init is to get the structure with a particular schema passed in.
-arrow::Status ArrowCompactionBatcher::Init(const SchemaDescriptor& schema) {
-  auto st = Clear();
-  if (!st.ok()) return st;
+arrow::Status ArrowCompactionBatcher::BuildFromSchema(const SchemaDescriptor& schema) {
+  fields_.clear();
+  builders_.clear();
+  schema_.reset();
 
   auto input_fields = schema.GetInputFieldSchema();
   fields_.reserve(1 + input_fields.size());
@@ -321,19 +326,19 @@ arrow::Status ArrowCompactionBatcher::Init(const SchemaDescriptor& schema) {
   fields_.push_back(arrow::field("key", arrow::binary(), /*nullable=*/false));
   builders_.push_back(std::make_unique<arrow::BinaryBuilder>());
 
-  
   for (const auto& f : input_fields) {
     if (f.type == "string") {
-      fields_.push_back(arrow::field(f.name, arrow::utf8(), true));
+      fields_.push_back(arrow::field(f.name, arrow::utf8(), /*nullable=*/true));
       builders_.push_back(std::make_unique<arrow::StringBuilder>());
     } else if (f.type == "numeric") {
-      fields_.push_back(arrow::field(f.name, arrow::int64(), true));
+      fields_.push_back(arrow::field(f.name, arrow::int64(), /*nullable=*/true));
       builders_.push_back(std::make_unique<arrow::Int64Builder>());
     } else {
       return arrow::Status::Invalid("Unsupported field type: ", f.type,
-                                   " for field: ", f.name);
+                                    " for field: ", f.name);
     }
   }
+
   schema_ = arrow::schema(fields_);
   return arrow::Status::OK();
 }
@@ -363,8 +368,7 @@ arrow::Status ArrowCompactionBatcher::Reset() {
 }
 
 arrow::Status ArrowCompactionBatcher::Add(const Slice& internal_key,
-                                         const Slice& value,
-                                         const SchemaDescriptor& schema) {
+                                         const Slice& value) {
   // Arrow BinaryBuilder::Append expects (const uint8_t*, int32_t)
   // Guard size conversion; RocksDB values can exceed 2GB in theory, but in
   // practice are far smaller. We fail loudly if someone hits this.
@@ -380,7 +384,7 @@ arrow::Status ArrowCompactionBatcher::Add(const Slice& internal_key,
   ARROW_RETURN_NOT_OK(key_b->Append(
       reinterpret_cast<const uint8_t*>(internal_key.data()), ik_sz));
 
-  ARROW_ASSIGN_OR_RAISE(ParsedRow row, parser_.Parse(value, schema));
+  ARROW_ASSIGN_OR_RAISE(ParsedRow row, parser_.Parse(value));
 
   int col_idx = 1;
   for (const auto& f : row.fields) {

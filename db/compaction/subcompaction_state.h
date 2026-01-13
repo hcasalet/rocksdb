@@ -20,6 +20,7 @@
 #include "db/internal_stats.h"
 #include "db/output_validator.h"
 #include "db/range_del_aggregator.h"
+#include "rocksdb/arrow_compaction_batcher.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -216,7 +217,8 @@ class SubcompactionState {
   // Add compaction_iterator key/value to the `Current` output group.
   Status AddToOutput(const CompactionIterator& iter,
                      const CompactionFileOpenFunc& open_file_func,
-                     const CompactionFileCloseFunc& close_file_func);
+                     const CompactionFileCloseFunc& close_file_func,
+                     ArrowCompactionBatcher* arrow_batcher);
 
   // Add derived output
   Status AddDerivedOutput(const std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,

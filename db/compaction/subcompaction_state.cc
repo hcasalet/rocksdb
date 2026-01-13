@@ -98,7 +98,8 @@ Slice SubcompactionState::LargestUserKey() const {
 Status SubcompactionState::AddToOutput(
     const CompactionIterator& iter,
     const CompactionFileOpenFunc& open_file_func,
-    const CompactionFileCloseFunc& close_file_func) {
+    const CompactionFileCloseFunc& close_file_func,
+    ArrowCompactionBatcher* arrow_batcher) {
   // update target output first
   is_current_penultimate_level_ = iter.output_to_penultimate_level();
   current_outputs_ = is_current_penultimate_level_ ? &penultimate_level_outputs_
@@ -107,7 +108,7 @@ Status SubcompactionState::AddToOutput(
     has_penultimate_level_outputs_ = true;
   }
 
-  return Current().AddToOutput(iter, open_file_func, close_file_func);
+  return Current().AddToOutput(iter, open_file_func, close_file_func, arrow_batcher);
 }
 
 Status SubcompactionState::AddDerivedOutput(

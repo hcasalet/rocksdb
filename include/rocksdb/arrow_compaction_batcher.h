@@ -53,11 +53,12 @@ class ValueParser {
   public:
     enum class Format { kJson, kCsv, kProtobuf };
 
-    ValueParser() {}
-    arrow::Result<ParsedRow> Parse(const Slice& value,
-            const SchemaDescriptor& descriptor) const;
+    ValueParser(const SchemaDescriptor& schema) : schema_(schema) {}
+    arrow::Result<ParsedRow> Parse(const Slice& value) const;
 
   private:
+    const SchemaDescriptor& schema_;
+
     // Parsers (as private helpers)
     arrow::Result<ParsedRow> ParseJson(const Slice& value) const;
     arrow::Result<ParsedRow> ParseCsv(const Slice& value) const;
@@ -70,12 +71,12 @@ class ValueParser {
 // It is NOT wired into compaction yet (Step 2 only).
 class ArrowCompactionBatcher {
  public:
-  ArrowCompactionBatcher();
+  static arrow::Result<std::unique_ptr<ArrowCompactionBatcher>> Create(
+      const SchemaDescriptor& schema);
 
   // Add a row. Copies bytes into Arrow builders.
   arrow::Status Add(const Slice& internal_key, 
-                    const Slice& value,
-                    const SchemaDescriptor& schema);
+                    const Slice& value);
 
   // Helper function to append 
   arrow::Status AppendScalarToBuilder(arrow::ArrayBuilder* b, const arrow::Scalar& s);
@@ -96,7 +97,8 @@ class ArrowCompactionBatcher {
   std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders_;
   std::shared_ptr<arrow::Schema> schema_;
   
-  arrow::Status Init(const SchemaDescriptor& schema);
+  explicit ArrowCompactionBatcher(const SchemaDescriptor& schema);
+  arrow::Status BuildFromSchema(const SchemaDescriptor& schema);
   arrow::Status Clear();
   arrow::Status Reset();
 };
