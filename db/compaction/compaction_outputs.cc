@@ -506,6 +506,13 @@ Status CompactionOutputs::AddToOutput(
       ikey_ptr = &c_iter.ikey();
     }
 
+    if (arrow_batcher) {
+      auto a_st = arrow_batcher->Add(key, compacted_value);
+      if (!a_st.ok()) {
+        s = Status::Corruption("Arrow batcher Add failed: " + a_st.ToString());
+      }
+    }
+    
     s = EmitOne(i, key, compacted_value, ikey_ptr);
     if (!s.ok()) return s;
   }
