@@ -16,29 +16,31 @@ bool Protobuf2FlatbuffersSchema::Validate(const ByteBuffer& input_data) const {
     return true;
 }
 
-std::shared_ptr<void> Protobuf2FlatbuffersSchema::Parse(const ByteBuffer& data) const {
-    auto message = input_proto_template_->New();
-    if (!message->ParseFromArray(data.data(), data.size())) {
-      delete message;
-      return nullptr;
-    }
-    return std::shared_ptr<google::protobuf::Message>(message);
+std::unique_ptr<ParsedObject> Protobuf2FlatbuffersSchema::Parse(const ByteBuffer& data) const {
+  if (data.empty()) return nullptr;
+
+  auto msg = std::make_unique<data::ByteRow>();
+  if (!msg->ParseFromArray(data.data(), static_cast<int>(data.size()))) {
+    return nullptr;
+  }
+  return std::make_unique<Protobuf2FlatbuffersParsedObject>(std::move(msg));
 }
   
-ByteBuffer Protobuf2FlatbuffersSchema::Serialize(const std::shared_ptr<void>& obj) const {
-  auto* pr = static_cast<data::ByteRow*>(obj.get());
-  flatbuffers::FlatBufferBuilder fbb;
-  auto row_off = BuildFbRow(fbb, *pr);
-  fbb.Finish(row_off);  // sets fbdata:ByteRow as root (matches root_type)
+ByteBuffer Protobuf2FlatbuffersSchema::Serialize(const ParsedObject& obj) const {
+  const auto* p = dynamic_cast<const Protobuf2FlatbuffersParsedObject*>(&obj);
+  if (!p || !p->message) return {};
 
-  auto* buf  = fbb.GetBufferPointer();
-  auto  size = fbb.GetSize();
-  return ByteBuffer(buf, buf + size); // copy out
+  flatbuffers::FlatBufferBuilder fbb;
+  auto row_off = BuildFbRow(fbb, *p->message);  // now matches: const data::ByteRow&
+  fbb.Finish(row_off);
+
+  const uint8_t* buf = fbb.GetBufferPointer();
+  size_t size = fbb.GetSize();
+  return ByteBuffer(buf, buf + size);
 }
 
 void Protobuf2FlatbuffersSchema::BuildSchemas() {
     input_field_schema_.clear();
-    output_field_schema_.clear();
   
     const google::protobuf::Descriptor* descriptor = input_proto_template_->GetDescriptor();
     for (int i = 0; i < descriptor->field_count(); ++i) {
@@ -49,10 +51,6 @@ void Protobuf2FlatbuffersSchema::BuildSchemas() {
       schema.type = field->cpp_type_name();
       input_field_schema_.push_back(schema);
     }
-  
-    // For output, hardcoding to numcols and strcols
-    output_field_schema_.push_back({"numcols", "repeated int32", 0});
-    output_field_schema_.push_back({"strcols", "repeated string", 1});
 }
 
 flatbuffers::Offset<flat::Column> Protobuf2FlatbuffersSchema::BuildFbColumn(

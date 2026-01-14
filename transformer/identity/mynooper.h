@@ -7,13 +7,22 @@ namespace ROCKSDB_NAMESPACE {
 
 class MynooperSchema : public SchemaDescriptor {
   public:
-    MynooperSchema() {}
+    MynooperSchema(InputOutputDataType inT, std::vector<FieldSchema> inSchema) 
+        : input_type_(inT), input_schema_(inSchema) {}
 
-    std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
+    std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
 
-    ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
+    ByteBuffer Serialize(const ParsedObject& obj) const override;
 
     TransformerType SupportsTransformerType() const override { return TransformerType::MYNOOPER; }
+
+    InputOutputDataType InputType() const override { return input_type_; }
+
+    const std::vector<FieldSchema>& GetInputFieldSchema() const override { return input_schema_; }
+  private:
+    InputOutputDataType input_type_;
+    std::vector<FieldSchema> input_schema_;
+    
 };
 
 class Mynooper : public Transformer {

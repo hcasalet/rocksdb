@@ -6,23 +6,33 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-std::shared_ptr<void> ProtobufDistributorSchema::Parse(const ByteBuffer& data) const {
-    if (!input_proto_msgtype_ || data.empty()) return nullptr;
+std::unique_ptr<ParsedObject> ProtobufDistributorSchema::Parse(const ByteBuffer& data) const {
+  if (!input_proto_msgtype_ || data.empty()) return nullptr;
 
-    std::unique_ptr<google::protobuf::Message> msg(input_proto_msgtype_->New());
-    if (!msg->ParseFromArray(data.data(), static_cast<int>(data.size()))) {
-        return nullptr;
-    }
-    return std::shared_ptr<void>(msg.release()); // hand over ownership
+  auto msg = std::unique_ptr<google::protobuf::Message>(input_proto_msgtype_->New());
+  if (!msg->ParseFromArray(data.data(), static_cast<int>(data.size()))) {
+    return nullptr;
+  }
+
+  return std::make_unique<ProtobufDistributorParsedObject>(std::move(msg));
 }
 
-ByteBuffer ProtobufDistributorSchema::Serialize(const std::shared_ptr<void>& obj) const {
-    auto* msg = static_cast<google::protobuf::Message*>(obj.get());
-    ByteBuffer buffer;
-    size_t size = msg->ByteSizeLong();
-    buffer.resize(size);
-    msg->SerializeToArray(buffer.data(), static_cast<int>(size));
-    return buffer;
+ByteBuffer ProtobufDistributorSchema::Serialize(const ParsedObject& obj) const {
+  const auto* p = dynamic_cast<const ProtobufDistributorParsedObject*>(&obj);
+  if (!p || !p->message) {
+    return {};
+  }
+
+  const size_t size = p->message->ByteSizeLong();
+  if (size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+    return {};  // defensive: SerializeToArray takes int
+  }
+
+  ByteBuffer buffer(size);
+  if (!p->message->SerializeToArray(buffer.data(), static_cast<int>(size))) {
+    return {};
+  }
+  return buffer;
 }
 
 bool ProtobufDistributorSchema::Validate(const ByteBuffer& input_data) const {

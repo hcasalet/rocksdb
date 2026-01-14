@@ -11,29 +11,102 @@ bool CsvDistributorSchema::Validate(const ByteBuffer& data) const {
      static_cast<size_t>(std::count(line.begin(), line.end(), ',') + 1) == header_.size();
 }
 
-std::shared_ptr<void> CsvDistributorSchema::Parse(const ByteBuffer& data) const {
-  auto parsed = std::make_shared<std::vector<std::string>>();
-  std::string line(data.begin(), data.end());
-  std::stringstream ss(line);
-  std::string token;
+inline void TrimLineEnd(std::string& s) {
+  while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) {
+    s.pop_back();
+  }
+}
 
-  while (std::getline(ss, token, ',')) {
-    parsed->emplace_back(token);
+std::vector<std::string> ParseCsvRecord(std::string_view line) {
+  std::vector<std::string> out;
+  std::string cur;
+  cur.reserve(line.size());
+
+  bool in_quotes = false;
+
+  for (size_t i = 0; i < line.size(); ++i) {
+    char c = line[i];
+
+    if (in_quotes) {
+      if (c == '"') {
+        // Either end quote or escaped quote.
+        if (i + 1 < line.size() && line[i + 1] == '"') {
+          cur.push_back('"');
+          ++i;  // consume second quote
+        } else {
+          in_quotes = false;
+        }
+      } else {
+        cur.push_back(c);
+      }
+    } else {
+      if (c == ',') {
+        out.emplace_back(std::move(cur));
+        cur.clear();
+      } else if (c == '"') {
+        in_quotes = true;
+      } else {
+        cur.push_back(c);
+      }
+    }
   }
 
-  return parsed;
+  out.emplace_back(std::move(cur));
+  return out;
+}
+
+// Escape a field for CSV output if needed.
+std::string EscapeCsvField(std::string_view field) {
+  bool needs_quotes = false;
+  for (char c : field) {
+    if (c == ',' || c == '"' || c == '\n' || c == '\r') {
+      needs_quotes = true;
+      break;
+    }
+  }
+  if (!needs_quotes) return std::string(field);
+
+  std::string out;
+  out.reserve(field.size() + 2);
+  out.push_back('"');
+  for (char c : field) {
+    if (c == '"') out.append("\"\"");  // escape quote
+    else out.push_back(c);
+  }
+  out.push_back('"');
+  return out;
+}
+
+std::unique_ptr<ParsedObject> CsvDistributorSchema::Parse(const ByteBuffer& data) const {
+  try {
+    std::string line(data.begin(), data.end());
+    TrimLineEnd(line);
+
+    auto fields = ParseCsvRecord(line);
+    return std::make_unique<CsvParsedObject>(std::move(fields));
+  } catch (...) {
+    return nullptr;
+  }
 }
   
-ByteBuffer CsvDistributorSchema::Serialize(const std::shared_ptr<void>& obj) const {
-  //const auto& fields = *std::static_pointer_cast<std::vector<std::string>>(obj);
-  auto* fields = static_cast<std::vector<std::string>*>(obj.get());
-  std::ostringstream oss;
-  for (size_t i = 0; i < fields->size(); ++i) {
-    if (i > 0) oss << ",";
-    oss << (*fields)[i];
+ByteBuffer CsvDistributorSchema::Serialize(const ParsedObject& obj) const {
+  try {
+    const auto* p = dynamic_cast<const CsvParsedObject*>(&obj);
+    if (!p) {
+      return {};  // wrong ParsedObject type
+    }
+
+    std::ostringstream oss;
+    for (size_t i = 0; i < p->fields.size(); ++i) {
+      if (i > 0) oss << ',';
+      oss << EscapeCsvField(p->fields[i]);
+    }
+
+    std::string result = oss.str();
+    return ByteBuffer(result.begin(), result.end());
+  } catch (...) {
+    return {};
   }
-  std::string result = oss.str();
-  return ByteBuffer(result.begin(), result.end());
 }
 
 void CsvDistributorSchema::BuildSchemas() {

@@ -6,6 +6,13 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+  struct ProtobufDistributorParsedObject final : ParsedObject {
+   explicit ProtobufDistributorParsedObject(std::unique_ptr<google::protobuf::Message> m)
+      : message(std::move(m)) {}
+
+   std::unique_ptr<google::protobuf::Message> message;
+  };
+
   class ProtobufDistributorSchema : public SchemaDescriptor {
     public:
       ProtobufDistributorSchema(int splits,
@@ -24,8 +31,8 @@ namespace ROCKSDB_NAMESPACE {
 
       bool Validate(const ByteBuffer& input_data) const override;
   
-      std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
-      ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
+      std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
+      ByteBuffer Serialize(const ParsedObject& obj) const override;
 
       int GetNumSplits() const override { return splits_; }
 
@@ -41,11 +48,11 @@ namespace ROCKSDB_NAMESPACE {
         return clones;
       }
 
-      std::vector<FieldSchema> GetInputFieldSchema() const override {
+      const std::vector<FieldSchema>& GetInputFieldSchema() const override {
         return input_field_schema_;
       }
     
-      std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const override {
+      const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const override {
         return output_field_schemas_;
       }
 

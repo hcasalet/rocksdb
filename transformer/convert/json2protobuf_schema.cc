@@ -14,32 +14,28 @@ bool Json2ProtobufSchema::Validate(const ByteBuffer& input_data) const {
   }
 }
 
-std::shared_ptr<void> Json2ProtobufSchema::Parse(const ByteBuffer& data) const {
-  auto proto = output_message_template_->New();
+std::unique_ptr<ParsedObject> Json2ProtobufSchema::Parse(const ByteBuffer& data) const {
   std::string json_str(reinterpret_cast<const char*>(data.data()), data.size());
-  google::protobuf::util::JsonParseOptions options;
-  options.ignore_unknown_fields = true;
 
-  auto status = google::protobuf::util::JsonStringToMessage(json_str, proto, options);
-  if (!status.ok()) {
-    delete proto;
-    return nullptr;
-  }
-  return std::shared_ptr<google::protobuf::Message>(proto);
+  return std::make_unique<Json2ProtobufParsedObject>(std::move(json_str));
 }
 
-ByteBuffer Json2ProtobufSchema::Serialize(const std::shared_ptr<void>& obj) const {
-  auto* message = static_cast<google::protobuf::Message*>(obj.get());
-  std::string out;
-  google::protobuf::util::JsonPrintOptions options;
-  options.add_whitespace = false;
-  options.always_print_primitive_fields = true;
-
-  auto status = google::protobuf::util::MessageToJsonString(*message, &out, options);
-  if (!status.ok()) {
+ByteBuffer Json2ProtobufSchema::Serialize(const ParsedObject& obj) const {
+  const auto* p = dynamic_cast<const Json2ProtobufParsedObject*>(&obj);
+  if (p == nullptr) {
     return {};
   }
 
+  std::unique_ptr<google::protobuf::Message> proto(output_message_template_->New());
+
+  google::protobuf::util::JsonParseOptions options;
+  options.ignore_unknown_fields = true;
+
+  auto status = google::protobuf::util::JsonStringToMessage(p->json, proto.get(), options);
+  if (!status.ok()) return {};
+
+  std::string out;
+  if (!proto->SerializeToString(&out)) return {};
   return ByteBuffer(out.begin(), out.end());
 }
 
@@ -61,14 +57,16 @@ void Json2ProtobufSchema::BuildSchemas() {
 
   // Build output schema from protobuf descriptor
   const auto* descriptor = output_message_template_->GetDescriptor();
+  std::vector<FieldSchema> ofs;
   for (int i = 0; i < descriptor->field_count(); ++i) {
     const auto* field = descriptor->field(i);
-    output_field_schema_.push_back({
+    ofs.push_back({
       field->name(),
       field->type_name(),
       field->number()
     });
   }
+  output_field_schema_.push_back(ofs);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

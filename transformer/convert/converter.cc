@@ -16,7 +16,8 @@ void Converter::Transform(const std::vector<uint8_t>& input,
     // Case 1: JSON to Protobuf
     if (auto json2pb = std::dynamic_pointer_cast<Json2ProtobufSchema>(schema)) {
         auto parsed = json2pb->Parse(input);
-        ByteBuffer serialized = json2pb->Serialize(parsed);
+        if (!parsed) return;
+        ByteBuffer serialized = json2pb->Serialize(*parsed);
         outputs.push_back(serialized);
         return;
     }
@@ -24,7 +25,8 @@ void Converter::Transform(const std::vector<uint8_t>& input,
     // Case 2: Protobuf to FlatBuffers
     if (auto pb2fb = std::dynamic_pointer_cast<Protobuf2FlatbuffersSchema>(schema)) {
         auto parsed = pb2fb->Parse(input);
-        ByteBuffer serialized = pb2fb->Serialize(parsed);
+        if (!parsed) return;
+        ByteBuffer serialized = pb2fb->Serialize(*parsed);
         outputs.push_back(serialized);
         return;
     }

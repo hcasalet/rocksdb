@@ -1,24 +1,45 @@
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
+
 #include "json_distributor_schema.h"
-#include <nlohmann/json.hpp>
 
 namespace ROCKSDB_NAMESPACE {
 
-using json = nlohmann::json;
-
-std::shared_ptr<void> JsonDistributorSchema::Parse(const ByteBuffer& data) const {
+std::unique_ptr<ParsedObject> JsonDistributorSchema::Parse(const ByteBuffer& data) const {
     try {
-        auto str = std::string(data.begin(), data.end());
-        auto parsed_json = std::make_shared<json>(json::parse(str));
-        return parsed_json;
+      std::string json(reinterpret_cast<const char*>(data.data()), data.size());
+
+      auto parsed = std::make_unique<JsonDistParsedObject>();
+      // Parse in-situ would mutate the buffer; use normal Parse on std::string data.
+      parsed->doc.Parse(json.c_str());
+
+      if (parsed->doc.HasParseError()) {
+        return nullptr;
+      }
+      return parsed;  
     } catch (...) {
         return nullptr;
     }
 }
   
-ByteBuffer JsonDistributorSchema::Serialize(const std::shared_ptr<void>& obj) const {
-    auto json_ptr = std::static_pointer_cast<json>(obj);
-    auto s = json_ptr->dump();
-    return ByteBuffer(s.begin(), s.end());
+ByteBuffer JsonDistributorSchema::Serialize(const ParsedObject& obj) const {
+  try {
+    const auto* p = dynamic_cast<const JsonDistParsedObject*>(&obj);
+    if (!p) {
+      return {};  // wrong ParsedObject type
+    }
+
+    rapidjson::StringBuffer sb;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+    p->doc.Accept(writer);
+
+    const char* s = sb.GetString();
+    const size_t n = sb.GetSize();
+    return ByteBuffer(reinterpret_cast<const std::uint8_t*>(s),
+                      reinterpret_cast<const std::uint8_t*>(s) + n);
+  } catch (...) {
+    return {};
+  }
 }
   
 bool JsonDistributorSchema::Validate(const ByteBuffer& data) const {
@@ -27,12 +48,20 @@ bool JsonDistributorSchema::Validate(const ByteBuffer& data) const {
     }
 
     try {
-      nlohmann::json j = nlohmann::json::parse(data.begin(), data.end());
-    
-      if (!j.is_object() && !j.is_array()) {
+      rapidjson::Document doc;
+
+      // Ensure null-termination by parsing from a std::string.
+      std::string json(reinterpret_cast<const char*>(data.data()), data.size());
+      doc.Parse(json.c_str());
+
+      if (doc.HasParseError()) {
         return false;
       }
-    
+
+      if (!doc.IsObject() && !doc.IsArray()) {
+        return false;
+      }
+
       return true;
     } catch (const std::exception& e) {
       // Invalid JSON
@@ -41,13 +70,19 @@ bool JsonDistributorSchema::Validate(const ByteBuffer& data) const {
 }
 
 void JsonDistributorSchema::BuildSchemasFromExampleJson(
-        const nlohmann::json& input_example,
-        const std::vector<nlohmann::json>& output_examples) {
+        const rapidjson::Value& input_example,
+        const std::vector<rapidjson::Value*>& output_examples) {
   input_field_schema_ = ExtractFieldSchemasFromJson(input_example);
   output_field_schemas_.clear();
+  output_field_schemas_.reserve(output_examples.size());
 
-  for (const auto& out : output_examples) {
-    output_field_schemas_.push_back(ExtractFieldSchemasFromJson(out));
+  for (const rapidjson::Value* out : output_examples) {
+    if (out == nullptr) {
+      // If you prefer to hard-fail, you could throw or return here instead.
+      output_field_schemas_.push_back({});
+      continue;
+    }
+    output_field_schemas_.push_back(ExtractFieldSchemasFromJson(*out));
   }
 }
 

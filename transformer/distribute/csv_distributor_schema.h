@@ -7,6 +7,10 @@
 #include <algorithm>
 
 namespace ROCKSDB_NAMESPACE {
+struct CsvParsedObject final : ParsedObject {
+  explicit CsvParsedObject(std::vector<std::string> f) : fields(std::move(f)) {}
+  std::vector<std::string> fields;
+};
 
 class CsvDistributorSchema : public SchemaDescriptor {
   public:
@@ -22,13 +26,13 @@ class CsvDistributorSchema : public SchemaDescriptor {
     InputOutputDataType OutputType() const override { return InputOutputDataType::CSV; }
     bool Validate(const ByteBuffer& data) const override;
 
-    std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
-    ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
+    std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
+    ByteBuffer Serialize(const ParsedObject& obj) const override;
 
     int GetNumSplits() const override { return splits_; }
     
-    std::vector<FieldSchema> GetInputFieldSchema() const override { return input_schema_; }
-    std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const override { return output_schemas_; }
+    const std::vector<FieldSchema>& GetInputFieldSchema() const override { return input_schema_; }
+    const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const override { return output_schemas_; }
     
  private:
     std::vector<std::string> header_;

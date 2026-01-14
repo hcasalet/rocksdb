@@ -27,31 +27,38 @@ bool AvroDistributorSchema::Validate(const ByteBuffer& input_data) const {
   }
 }
 
-std::shared_ptr<void> AvroDistributorSchema::Parse(const ByteBuffer& data) const {
+std::unique_ptr<ParsedObject> AvroDistributorSchema::Parse(const ByteBuffer& data) const {
   try {
     auto decoder = avro::binaryDecoder();
-    std::unique_ptr<avro::InputStream> in = avro::memoryInputStream(data.data(), data.size());
+    auto in = avro::memoryInputStream(data.data(), data.size());
     decoder->init(*in);
-    auto datum = std::make_shared<avro::GenericDatum>(input_schema_);
-    avro::decode(*decoder, *datum);
-    return datum;
+
+    auto parsed = std::make_unique<AvroParsedObject>(input_schema_);
+    avro::decode(*decoder, parsed->datum);
+    return parsed;
   } catch (...) {
     return nullptr;
   }
 }
 
-ByteBuffer AvroDistributorSchema::Serialize(const std::shared_ptr<void>& obj) const {
+ByteBuffer AvroDistributorSchema::Serialize(const ParsedObject& obj) const {
   try {
-    auto datum = std::static_pointer_cast<avro::GenericDatum>(obj);
-    std::unique_ptr<avro::OutputStream> out = avro::memoryOutputStream();
+    const auto* p = dynamic_cast<const AvroParsedObject*>(&obj);
+    if (!p) {
+      return {};  // wrong ParsedObject type
+    }
+
+    auto out = avro::memoryOutputStream();
     auto encoder = avro::binaryEncoder();
     encoder->init(*out);
-    avro::encode(*encoder, *datum);
 
-    std::unique_ptr<avro::InputStream> in = avro::memoryInputStream(*out);
+    avro::encode(*encoder, p->datum);
+    encoder->flush();  // important: finalize encoder output into the stream
+
+    auto in = avro::memoryInputStream(*out);
     ByteBuffer buffer;
-    const uint8_t* buf;
-    size_t len;
+    const uint8_t* buf = nullptr;
+    size_t len = 0;
     while (in->next(&buf, &len)) {
       buffer.insert(buffer.end(), buf, buf + len);
     }
@@ -89,11 +96,11 @@ void AvroDistributorSchema::BuildFieldSchemas() {
   }
 }
 
-std::vector<FieldSchema> AvroDistributorSchema::GetInputFieldSchema() const {
+const std::vector<FieldSchema>& AvroDistributorSchema::GetInputFieldSchema() const {
   return input_field_schema_;
 }
 
-std::vector<std::vector<FieldSchema>> AvroDistributorSchema::GetOutputFieldSchemas() const {
+const std::vector<std::vector<FieldSchema>>& AvroDistributorSchema::GetOutputFieldSchemas() const {
   return output_field_schemas_;
 }
    

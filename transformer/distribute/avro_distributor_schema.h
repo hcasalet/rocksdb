@@ -11,6 +11,13 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+struct AvroParsedObject final : ParsedObject {
+  explicit AvroParsedObject(const avro::ValidSchema& schema)
+      : datum(schema) {}
+
+  avro::GenericDatum datum;
+};
+
 class AvroDistributorSchema : public SchemaDescriptor {
   public:
     AvroDistributorSchema(int splits, 
@@ -23,11 +30,11 @@ class AvroDistributorSchema : public SchemaDescriptor {
     InputOutputDataType OutputType() const override { return InputOutputDataType::AVRO; }
     bool Validate(const ByteBuffer& input_data) const override;
   
-    std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
-    ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
+    std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
+    ByteBuffer Serialize(const ParsedObject& obj) const override;
   
-    std::vector<FieldSchema> GetInputFieldSchema() const override;
-    std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const override;
+    const std::vector<FieldSchema>& GetInputFieldSchema() const override;
+    const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const override;
 
     int GetNumSplits() const override { return splits_; }
   

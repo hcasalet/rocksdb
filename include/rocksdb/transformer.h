@@ -37,6 +37,7 @@ enum class InputOutputDataType {
   AVRO             = 1 << 3,
   PARQUET          = 1 << 4,
   CSV              = 1 << 5,
+  FIXEDBIN64       = 1 << 6,
 };
 
 constexpr TransformerType operator|(TransformerType lhs, TransformerType rhs) {
@@ -61,6 +62,9 @@ struct FieldSchema {
   int field_number;
 };
 
+struct ParsedObject {
+  virtual ~ParsedObject() = default;
+};
 // A schema descriptor defines how to interpret or transform input data.
 class SchemaDescriptor {
   public:
@@ -69,25 +73,26 @@ class SchemaDescriptor {
    virtual TransformerType SupportsTransformerType() const = 0;
 
    // Shows the data format before and after the transformation
-   /*virtual InputOutputDataType InputType() const = 0;
-   virtual InputOutputDataType OutputType() const = 0;
-   virtual bool Validate(const ByteBuffer& input_data) const = 0;*/
-   virtual InputOutputDataType InputType() const { return InputOutputDataType::UNKNOWN; } // temporary
-   virtual InputOutputDataType OutputType() const { return InputOutputDataType::UNKNOWN; } // temporary
-   virtual bool Validate(const ByteBuffer& input_data) const { return true; } // temporary
+   virtual InputOutputDataType InputType() const {return InputOutputDataType::UNKNOWN; }
+   virtual InputOutputDataType OutputType() const {return InputOutputDataType::UNKNOWN; }
+   virtual bool Validate(const ByteBuffer& input_data) const {return true; } 
 
-   virtual std::shared_ptr<void> Parse(const ByteBuffer& data) const = 0;
-   virtual ByteBuffer Serialize(const std::shared_ptr<void>& obj) const = 0;
+   virtual std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const = 0;
+   virtual ByteBuffer Serialize(const ParsedObject& obj) const = 0;
 
-   /*virtual std::vector<FieldSchema> GetInputFieldSchema() const = 0;
-   virtual std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const = 0;*/
-   virtual std::vector<FieldSchema> GetInputFieldSchema() const { return {}; } // temporary
-   virtual std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const { return {};} // temporary
-   virtual int GetNumSplits() const { return 0; }
-   virtual std::vector<std::vector<std::string>> GetIndexKeys() const { return {}; }
-   virtual std::vector<std::vector<int>> GetPositionedIndexKeys() const { return {}; }
+   virtual const std::vector<FieldSchema>& GetInputFieldSchema() const {
+    static const std::vector<FieldSchema> kEmpty;
+    return kEmpty;
+   }
+   virtual const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const {
+    static const std::vector<std::vector<FieldSchema>> kEmpty;
+    return kEmpty;
+   }
+   virtual int GetNumSplits() const {return 0;}
+   virtual std::vector<std::vector<std::string>> GetIndexKeys() const {return {}; }
+   virtual std::vector<std::vector<int>> GetPositionedIndexKeys() const {return {}; }
 
- };
+};
 
 class Transformer {
  public:

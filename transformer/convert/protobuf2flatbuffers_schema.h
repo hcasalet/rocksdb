@@ -12,6 +12,13 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+struct Protobuf2FlatbuffersParsedObject final : ParsedObject {
+  explicit Protobuf2FlatbuffersParsedObject(std::unique_ptr<data::ByteRow> m)
+      : message(std::move(m)) {}
+
+  std::unique_ptr<data::ByteRow> message;
+};
+
 class Protobuf2FlatbuffersSchema : public SchemaDescriptor {
   public:
     Protobuf2FlatbuffersSchema(std::unique_ptr<google::protobuf::Message> input_proto_template,
@@ -28,11 +35,11 @@ class Protobuf2FlatbuffersSchema : public SchemaDescriptor {
 
     bool Validate(const ByteBuffer& input_data) const override;
 
-    std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
-    ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
+    std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
+    ByteBuffer Serialize(const ParsedObject& obj) const override;
 
-    std::vector<FieldSchema> GetInputFieldSchema() const override { return input_field_schema_; }
-    std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const override { return {output_field_schema_}; }
+    const std::vector<FieldSchema>& GetInputFieldSchema() const override { return input_field_schema_; }
+    const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const override { return {output_field_schema_}; }
 
   private:
     void BuildSchemas();
@@ -43,7 +50,7 @@ class Protobuf2FlatbuffersSchema : public SchemaDescriptor {
     const flatbuffers::TypeTable* flatbuffers_type_table_;
 
     std::vector<FieldSchema> input_field_schema_;
-    std::vector<FieldSchema> output_field_schema_;
+    std::vector<std::vector<FieldSchema>> output_field_schema_;
 };
 
 } // namespace ROCKSDB_NAMESPACE

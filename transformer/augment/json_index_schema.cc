@@ -16,19 +16,26 @@ void JsonAugmenterSchema::BuildInputSchema() {
     }
 }
 
-std::shared_ptr<void> JsonAugmenterSchema::Parse(const ByteBuffer& data) const {
+std::unique_ptr<ParsedObject> JsonAugmenterSchema::Parse(const ByteBuffer& data) const {
     std::string json_str(data.begin(), data.end());
     try {
-        auto parsed = std::make_shared<nlohmann::json>(nlohmann::json::parse(json_str));
-        return parsed;
+        auto j = std::make_unique<nlohmann::json>(nlohmann::json::parse(json_str));
+        return std::make_unique<JsonIndexParsedObject>(std::move(j));
     } catch (const std::exception& e) {
         throw std::runtime_error("JSON parse error: " + std::string(e.what()));
     }
 }
 
-ByteBuffer JsonAugmenterSchema::Serialize(const std::shared_ptr<void>& obj) const {
-    auto json_obj = std::static_pointer_cast<nlohmann::json>(obj);
-    std::string json_str = json_obj->dump();
+ByteBuffer JsonAugmenterSchema::Serialize(const ParsedObject& obj) const {
+    const auto* p = dynamic_cast<const JsonIndexParsedObject*>(&obj);
+    if (!p) {
+      throw std::invalid_argument("JsonAugmenterSchema::Serialize: wrong ParsedObject type");
+    }
+    if (!p->message) {
+      throw std::invalid_argument("JsonAugmenterSchema::Serialize: null JSON message");
+    }
+
+    std::string json_str = p->message->dump();
     return ByteBuffer(json_str.begin(), json_str.end());
 }
 

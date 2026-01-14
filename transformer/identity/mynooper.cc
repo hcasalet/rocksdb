@@ -3,11 +3,11 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-std::shared_ptr<void> MynooperSchema::Parse(const ByteBuffer& data) const {
+std::unique_ptr<ParsedObject> MynooperSchema::Parse(const ByteBuffer& data) const {
     return nullptr;
 }
 
-ByteBuffer MynooperSchema::Serialize(const std::shared_ptr<void>& obj) const {
+ByteBuffer MynooperSchema::Serialize(const ParsedObject& obj) const {
     return {};
 }
 

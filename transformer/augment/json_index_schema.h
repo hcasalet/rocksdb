@@ -7,6 +7,13 @@
 
 namespace ROCKSDB_NAMESPACE {
 
+struct JsonIndexParsedObject final : ParsedObject {
+  explicit JsonIndexParsedObject(std::unique_ptr<nlohmann::json> m)
+      : message(std::move(m)) {}
+
+  std::unique_ptr<nlohmann::json> message;
+};
+
 class JsonAugmenterSchema : public SchemaDescriptor {
   public:
     JsonAugmenterSchema(std::vector<std::vector<std::string>> index_keys,
@@ -21,12 +28,12 @@ class JsonAugmenterSchema : public SchemaDescriptor {
     InputOutputDataType InputType() const override { return InputOutputDataType::JSON; }
     InputOutputDataType OutputType() const override { return InputOutputDataType::JSON; }
 
-    std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
-    ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
+    std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
+    ByteBuffer Serialize(const ParsedObject& obj) const override;
 
     std::vector<std::vector<std::string>> GetIndexKeys() const override { return index_keys_; }
 
-    std::vector<FieldSchema> GetInputFieldSchema() const override { return input_field_schema_; }
+    const std::vector<FieldSchema>& GetInputFieldSchema() const override { return input_field_schema_; }
 
   private:
     void BuildInputSchema();

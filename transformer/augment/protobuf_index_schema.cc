@@ -19,21 +19,30 @@ void ProtobufAugmenterSchema::BuildInputSchema() {
     }
 }
 
-std::shared_ptr<void> ProtobufAugmenterSchema::Parse(const ByteBuffer& data) const {
-    auto message = std::unique_ptr<google::protobuf::Message>(input_template_->New());
-    if (!message->ParseFromArray(data.data(), static_cast<int>(data.size()))) {
+std::unique_ptr<ParsedObject> ProtobufAugmenterSchema::Parse(const ByteBuffer& data) const {
+    auto msg = std::unique_ptr<google::protobuf::Message>(input_template_->New());
+    if (!msg->ParseFromArray(data.data(), static_cast<int>(data.size()))) {
       return nullptr;
     }
-    return std::shared_ptr<void>(message.release());
+    return std::make_unique<ProtobufIndexParsedObject>(std::move(msg));
 }
 
-ByteBuffer ProtobufAugmenterSchema::Serialize(const std::shared_ptr<void>& obj) const {
-    auto* message = static_cast<google::protobuf::Message*>(obj.get());
-    std::string buffer;
-    if (!message->SerializeToString(&buffer)) {
-      return {};
-    }
-    return ByteBuffer(buffer.begin(), buffer.end());
+ByteBuffer ProtobufAugmenterSchema::Serialize(const ParsedObject& obj) const {
+  const auto* p = dynamic_cast<const ProtobufIndexParsedObject*>(&obj);
+  if (!p) {
+    throw std::invalid_argument(
+        "ProtobufAugmenterSchema::Serialize: wrong ParsedObject type");
+  }
+  if (!p->message) {
+    throw std::invalid_argument(
+        "ProtobufAugmenterSchema::Serialize: null protobuf message");
+  }
+  
+  std::string buffer;
+  if (!p->message->SerializeToString(&buffer)) {
+    return {};
+  }
+  return ByteBuffer(buffer.begin(), buffer.end());
 }
 
 }

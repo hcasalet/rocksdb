@@ -2,10 +2,17 @@
 
 #include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
+#include <rapidjson/document.h>
 #include "rocksdb/transformer.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+  struct JsonDistParsedObject final : ParsedObject {
+    JsonDistParsedObject() = default;
+    explicit JsonDistParsedObject(rapidjson::Document d) : doc(std::move(d)) {}
+
+    rapidjson::Document doc;
+  };
 
   class JsonDistributorSchema : public SchemaDescriptor {
     public:
@@ -23,19 +30,19 @@ namespace ROCKSDB_NAMESPACE {
 
       bool Validate(const ByteBuffer& input_data) const override;
 
-      std::shared_ptr<void> Parse(const ByteBuffer& data) const override;
-      ByteBuffer Serialize(const std::shared_ptr<void>& obj) const override;
+      std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
+      ByteBuffer Serialize(const ParsedObject& obj) const override;
 
       int GetNumSplits() const override { return splits_; }
 
-      void BuildSchemasFromExampleJson(const nlohmann::json& input_example,
-                                       const std::vector<nlohmann::json>& output_examples);
+      void BuildSchemasFromExampleJson(const rapidjson::Value& input_example,
+                                       const std::vector<rapidjson::Value*>& output_examples);
 
-      std::vector<FieldSchema> GetInputFieldSchema() const override {
+      const std::vector<FieldSchema>& GetInputFieldSchema() const override {
         return input_field_schema_;
       }
     
-      std::vector<std::vector<FieldSchema>> GetOutputFieldSchemas() const override {
+      const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const override {
         return output_field_schemas_;
       }
 
@@ -44,30 +51,37 @@ namespace ROCKSDB_NAMESPACE {
       std::vector<FieldSchema> input_field_schema_;
       std::vector<std::vector<FieldSchema>> output_field_schemas_;
 
-      static std::vector<FieldSchema> ExtractFieldSchemasFromJson(const nlohmann::json& obj) {
+      static std::vector<FieldSchema> ExtractFieldSchemasFromJson(const rapidjson::Value& obj) {
         std::vector<FieldSchema> fields;
         int field_number = 1;
-        if (!obj.is_object()) return fields;
+        if (!obj.IsObject()) return fields;
+        fields.reserve(obj.MemberCount());
       
-        for (auto it = obj.begin(); it != obj.end(); ++it) {
+        for (auto it = obj.MemberBegin(); it != obj.MemberEnd(); ++it) {
+          const rapidjson::Value& v = it->value;
           std::string field_type;
-          if (it.value().is_string()) {
+          if (v.IsString()) {
             field_type = "string";
-          } else if (it.value().is_number_integer()) {
+          } else if (v.IsInt64() || v.IsUint64()) {
             field_type = "int";
-          } else if (it.value().is_number_float()) {
+          } else if (v.IsDouble()) {
             field_type = "float";
-          } else if (it.value().is_boolean()) {
+          } else if (v.IsBool()) {
             field_type = "bool";
-          } else if (it.value().is_array()) {
+          } else if (v.IsArray()) {
             field_type = "array";
-          } else if (it.value().is_object()) {
+          } else if (v.IsObject()) {
             field_type = "object";
+          } else if (v.IsNull()) {
+            field_type = "null";
           } else {
             field_type = "unknown";
           }
-      
-          fields.push_back(FieldSchema{it.key(), field_type, field_number++});
+
+          const auto& name = it->name;
+          std::string key(name.GetString(), name.GetStringLength());
+
+          fields.push_back(FieldSchema{std::move(key), std::move(field_type), field_number++});
         }
 
         return fields;
