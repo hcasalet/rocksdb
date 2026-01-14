@@ -20,6 +20,7 @@ arrow::Result<ParsedRow> ValueParser::Parse(const rocksdb::Slice& value) const {
         auto spec = proto_schema->GetInputSchemaSpec();
         return ParseProtobuf(value, spec);
     }
+    case InputOutputDataType::FIXEDBIN64:  return ParseBin64(value);
     case InputOutputDataType::FLATBUFFERS:
     case InputOutputDataType::AVRO:
     case InputOutputDataType::PARQUET:
@@ -197,6 +198,18 @@ ScalarForProtoField(const google::protobuf::Message& msg,
   }
 }
 
+inline std::uint64_t LoadFixed64LE(const std::uint8_t* p) {
+  // Little-endian decode, explicit (portable).
+  return (static_cast<std::uint64_t>(p[0])      ) |
+         (static_cast<std::uint64_t>(p[1]) <<  8) |
+         (static_cast<std::uint64_t>(p[2]) << 16) |
+         (static_cast<std::uint64_t>(p[3]) << 24) |
+         (static_cast<std::uint64_t>(p[4]) << 32) |
+         (static_cast<std::uint64_t>(p[5]) << 40) |
+         (static_cast<std::uint64_t>(p[6]) << 48) |
+         (static_cast<std::uint64_t>(p[7]) << 56);
+}
+
 arrow::Result<ParsedRow> ValueParser::ParseJson(const rocksdb::Slice& value) const {
     rapidjson::Document d;
     d.Parse(value.data(), value.size());
@@ -303,6 +316,38 @@ arrow::Result<ParsedRow> ValueParser::ParseProtobuf(const rocksdb::Slice& value,
   return out;
 }
 
+arrow::Result<ParsedRow> ValueParser::ParseBin64(const rocksdb::Slice& value) const {
+  ParsedRow row;
+
+  const auto n = static_cast<std::size_t>(value.size());
+  if (n == 0) return row;
+
+  if ((n % 8) != 0) {
+    return arrow::Status::Invalid(
+        "ParseBin: value length must be a multiple of 8 bytes (uint64_t), got ",
+        n);
+  }
+
+  const std::size_t num_cols = n / 8;
+  row.fields.reserve(num_cols);
+
+  const auto* bytes = reinterpret_cast<const std::uint8_t*>(value.data());
+  const auto dtype = arrow::uint64();
+
+  for (std::size_t i = 0; i < num_cols; ++i) {
+    const std::uint64_t v = LoadFixed64LE(bytes + (i * 8));
+
+    ParsedFields f;
+    f.name = "col" + std::to_string(i);              
+    f.declared_type = dtype;             
+    f.scalar = std::make_shared<arrow::UInt64Scalar>(v);
+
+    row.fields.emplace_back(std::move(f));
+  }
+
+  return row;
+}
+
 ArrowCompactionBatcher::ArrowCompactionBatcher(const SchemaDescriptor& schema) 
     : parser_(schema) {}
 
@@ -327,7 +372,10 @@ arrow::Status ArrowCompactionBatcher::BuildFromSchema(const SchemaDescriptor& sc
   builders_.push_back(std::make_unique<arrow::BinaryBuilder>());
 
   for (const auto& f : input_fields) {
-    if (f.type == "string") {
+    if (f.type == "fixedbin64") {
+      fields_.push_back(arrow::field(f.name, arrow::uint64(), /*nullable=*/true));
+      builders_.push_back(std::make_unique<arrow::UInt64Builder>()); 
+    } else if (f.type == "string") {
       fields_.push_back(arrow::field(f.name, arrow::utf8(), /*nullable=*/true));
       builders_.push_back(std::make_unique<arrow::StringBuilder>());
     } else if (f.type == "numeric") {

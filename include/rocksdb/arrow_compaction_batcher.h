@@ -64,6 +64,7 @@ class ValueParser {
     arrow::Result<ParsedRow> ParseCsv(const Slice& value) const;
     arrow::Result<ParsedRow> ParseProtobuf(const Slice& value,
             std::unique_ptr<google::protobuf::Message>& msg) const;
+    arrow::Result<ParsedRow> ParseBin64(const rocksdb::Slice& value) const;
 };
 
 // A small utility that batches compaction K/V pairs into an Arrow RecordBatch.
