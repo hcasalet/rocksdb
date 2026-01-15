@@ -868,6 +868,11 @@ set(SOURCES
         transformer/augment/augmenter.cc
         transformer/augment/protobuf_index_schema.cc
         transformer/augment/json_index_schema.cc
+        transformer/common/parser/json_parser.cc
+        transformer/common/parser/csv_parser.cc
+        transformer/common/parser/fixedbin64_parser.cc
+        transformer/common/parser/flatbuffers_parser.cc
+        transformer/common/parser/protobuf_parser.cc
         transformer/identity/mynooper.cc
         transformer/transformer_factory.cc
         transformer/arrow_compaction_batcher.cc

@@ -5,6 +5,9 @@
 #include <map>
 #include <type_traits>
 #include <memory>
+#include <typeindex>
+#include <typeinfo>
+#include <utility>
 
 #include "rocksdb/rocksdb_namespace.h"
 
@@ -62,9 +65,77 @@ struct FieldSchema {
   int field_number;
 };
 
+// Type-erased payload with a checked downcast.
+struct ParsedPayload {
+  InputOutputDataType format;     // e.g., JSON / PROTOBUF / FLATBUFFERS / ...
+  std::type_index     type{typeid(void)};
+  std::shared_ptr<void> ptr;
+
+  ParsedPayload() : format(InputOutputDataType::UNKNOWN) {}
+
+  template <class T>
+  static ParsedPayload Make(InputOutputDataType fmt, std::unique_ptr<T> p) {
+    ParsedPayload out;
+    out.format = fmt;
+    out.type   = std::type_index(typeid(T));
+    // Move unique_ptr<T> into shared_ptr<void> with correct deleter.
+    out.ptr = std::shared_ptr<T>(p.release());
+    return out;
+  }
+
+  template <class T>
+  T* As() const {
+    if (type != std::type_index(typeid(T))) {
+      return nullptr;
+    }
+    return static_cast<T*>(ptr.get());
+  }
+
+  explicit operator bool() const { return static_cast<bool>(ptr); }
+};
+
 struct ParsedObject {
   virtual ~ParsedObject() = default;
+  ParsedPayload payload;
 };
+
+class Parser {
+ public:
+  virtual ~Parser() = default;
+
+  // Which on-the-wire format this parser accepts.
+  virtual InputOutputDataType InputType() const = 0;
+
+  // Optional quick validation (cheap checks).
+  virtual bool Validate(const ByteBuffer& input_data) const { return true; }
+
+  // Parse bytes into an in-memory representation.
+  virtual std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const = 0;
+
+  // Optional: expose schema of the parsed representation (if you have it).
+  virtual const std::vector<FieldSchema>& GetInputFieldSchema() const {
+    static const std::vector<FieldSchema> kEmpty;
+    return kEmpty;
+  }
+};
+
+class Encoder {
+ public:
+  virtual ~Encoder() = default;
+
+  // Which on-the-wire format this encoder produces.
+  virtual InputOutputDataType OutputType() const = 0;
+
+  // Encode an in-memory representation into bytes.
+  virtual ByteBuffer Serialize(const ParsedObject& obj) const = 0;
+
+  // Optional: describe outputs (useful for distributor/augmenter cases).
+  virtual const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const {
+    static const std::vector<std::vector<FieldSchema>> kEmpty;
+    return kEmpty;
+  }
+};
+
 // A schema descriptor defines how to interpret or transform input data.
 class SchemaDescriptor {
   public:
