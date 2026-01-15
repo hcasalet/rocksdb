@@ -873,6 +873,11 @@ set(SOURCES
         transformer/common/parser/fixedbin64_parser.cc
         transformer/common/parser/flatbuffers_parser.cc
         transformer/common/parser/protobuf_parser.cc
+        transformer/common/encoder/csv_encoder.cc
+        transformer/common/encoder/fixedbin64_encoder.cc
+        transformer/common/encoder/flatbuffers_encoder.cc
+        transformer/common/encoder/json_encoder.cc
+        transformer/common/encoder/protobuf_encoder.cc
         transformer/identity/mynooper.cc
         transformer/transformer_factory.cc
         transformer/arrow_compaction_batcher.cc
