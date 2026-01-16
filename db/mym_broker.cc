@@ -122,7 +122,7 @@ int MymBroker::IndexRead(const std::string &key, const std::set<int>* positions,
         }
     }
 
-    ColumnFamilyHandle* primary_hdl;
+    ColumnFamilyHandle* primary_hdl = nullptr;
     for (auto pri_hdl : level_1_handles) {
         if (pri_hdl.first.find("_indexed_data_cf") != std::string::npos) {
             primary_hdl = pri_hdl.second.cf_handle_;
@@ -139,9 +139,11 @@ int MymBroker::IndexRead(const std::string &key, const std::set<int>* positions,
                 continue;
             }
 
-            s = db_->Get(ReadOptions(), primary_hdl, valkey, &valresult);
-            if (valresult != "") {
-                result.push_back(valresult);
+            if (primary_hdl != nullptr) {
+                s = db_->Get(ReadOptions(), primary_hdl, valkey, &valresult);
+                if (valresult != "") {
+                    result.push_back(valresult);
+                }
             }
         }   
     }

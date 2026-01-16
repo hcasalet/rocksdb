@@ -10,7 +10,7 @@ DistributorSchemaDescriptor::DistributorSchemaDescriptor(
     std::vector<FieldSchema> input_schema,
     SplitByPosition splits)
     : codec_(std::move(codec)),
-      input_schema_(std::move(input_schema)),
+      input_schema_(std::make_shared<const std::vector<FieldSchema>>(std::move(input_schema))),
       splits_(std::move(splits)) {
   NormalizeAndValidate_();
 }
@@ -24,25 +24,21 @@ void DistributorSchemaDescriptor::NormalizeAndValidate_() {
     throw std::invalid_argument("DistributorSchemaDescriptor: codec.encoder is null");
   }
 
+  // Validate indices if we have a known schema size.
+  const int n = input_schema_ ? static_cast<int>(input_schema_->size()) : 0;
+  const bool can_validate = (n > 0);
+
   // Default: if no splits specified, produce 1 output containing all columns.
   if (splits_.empty()) {
-    if (!input_schema_.empty()) {
+    if (n > 0) {
       std::vector<int> all;
-      all.reserve(input_schema_.size());
-      for (int i = 0; i < static_cast<int>(input_schema_.size()); ++i) {
-        all.push_back(i);
-      }
+      all.reserve(n);
+      for (int i = 0; i < n; ++i) all.push_back(i);
       splits_.push_back(std::move(all));
     } else {
-      // If schema unknown, choose single "identity" split with empty selection.
-      // Encoders may interpret empty selection as "all columns".
       splits_.push_back({});
     }
   }
-
-  // Validate indices if we have a known schema size.
-  const int n = static_cast<int>(input_schema_.size());
-  const bool can_validate = (n > 0);
 
   for (const auto& group : splits_) {
     // Check duplicates (always).
@@ -63,14 +59,14 @@ void DistributorSchemaDescriptor::NormalizeAndValidate_() {
   }
 }
 
-bool DistributorTransformer::IsDistributorSchema_(
+bool Distributor::IsDistributorSchema_(
     const std::shared_ptr<SchemaDescriptor>& schema) {
   if (!schema) return false;
   return (schema->SupportsTransformerType() & TransformerType::DISTRIBUTOR) !=
          TransformerType::NOTRANSFORMATION;
 }
 
-std::unique_ptr<ParsedObject> DistributorTransformer::MakeProjectedObject_(
+std::unique_ptr<ParsedObject> Distributor::MakeProjectedObject_(
     std::shared_ptr<const ParsedObject> base,
     const std::vector<int>& cols,
     std::shared_ptr<const std::vector<FieldSchema>> input_schema,
@@ -83,7 +79,7 @@ std::unique_ptr<ParsedObject> DistributorTransformer::MakeProjectedObject_(
   return out;
 }
 
-std::vector<ByteBuffer> DistributorTransformer::Transform(
+std::vector<ByteBuffer> Distributor::Transform(
     const ByteBuffer& input_bytes,
     const std::shared_ptr<SchemaDescriptor>& schema) const {
   std::vector<ByteBuffer> outputs;
@@ -110,19 +106,10 @@ std::vector<ByteBuffer> DistributorTransformer::Transform(
   const auto& splits = dist_schema->GetSplits();
   outputs.reserve(splits.size());
 
-  // Provide schema metadata to encoders if available.
-  std::shared_ptr<const std::vector<FieldSchema>> input_schema_ptr;
-  if (!dist_schema->GetInputFieldSchema().empty()) {
-    // Note: copies vector<FieldSchema>. If you want to avoid copying, you can
-    // instead store input_schema_ in a shared_ptr inside DistributorSchemaDescriptor.
-    input_schema_ptr = std::make_shared<const std::vector<FieldSchema>>(
-        dist_schema->GetInputFieldSchema());
-  }
-
   const InputOutputDataType out_fmt = schema->OutputType();
 
   for (const auto& group : splits) {
-    auto projected = MakeProjectedObject_(parsed_shared, group, input_schema_ptr, out_fmt);
+    auto projected = MakeProjectedObject_(parsed_shared, group, dist_schema->InputSchemaPtr(), out_fmt);
 
     ByteBuffer encoded = schema->Serialize(*projected);
 

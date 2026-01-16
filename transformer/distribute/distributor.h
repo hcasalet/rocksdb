@@ -51,6 +51,11 @@ class DistributorSchemaDescriptor final : public SchemaDescriptor {
   const Codec& OutputCodec() const override { return codec_; }
 
   const std::vector<FieldSchema>& GetInputFieldSchema() const override {
+    static const std::vector<FieldSchema> kEmpty;
+    return input_schema_ ? *input_schema_ : kEmpty;
+  }
+
+  std::shared_ptr<const std::vector<FieldSchema>> InputSchemaPtr() const {
     return input_schema_;
   }
 
@@ -65,7 +70,7 @@ class DistributorSchemaDescriptor final : public SchemaDescriptor {
   void NormalizeAndValidate_();
 
   Codec codec_;
-  std::vector<FieldSchema> input_schema_;
+  std::shared_ptr<const std::vector<FieldSchema>> input_schema_;
   SplitByPosition splits_;
 };
 
@@ -73,9 +78,9 @@ class DistributorSchemaDescriptor final : public SchemaDescriptor {
 // - Parses input bytes once using schema->Parse (derived parser)
 // - For each split, wraps parsed object in ProjectedPayload and calls schema->Serialize
 //   (derived encoder) to produce one output per split.
-class DistributorTransformer final : public Transformer {
+class Distributor final : public Transformer {
  public:
-  std::string Name() const override { return "DistributorTransformer"; }
+  std::string Name() const override { return "Distributor"; }
 
   TransformerType Supports() const override { return TransformerType::DISTRIBUTOR; }
 

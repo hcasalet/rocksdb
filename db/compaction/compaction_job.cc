@@ -1983,7 +1983,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         return s;
       }
 
-      bool check_key_order;
+      bool check_key_order = false;
       const auto& tfs = cfd->ioptions()->transformers;
       if (!tfs.empty() && tfs[0]) {
         if (tfs[0]->Supports() == TransformerType::AUGMENTER && dest_cfd->GetName().find("secondary_index") != std::string::npos) {
