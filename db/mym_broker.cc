@@ -6,8 +6,6 @@
 #include "transformer/augment/augmenter.h"
 #include "transformer/identity/mynooper.h"
 #include "transformer/distribute/protobuf_distributor_schema.h"
-#include "transformer/convert/json2protobuf_schema.h"
-#include "transformer/convert/protobuf2flatbuffers_schema.h"
 
 namespace ROCKSDB_NAMESPACE {
 

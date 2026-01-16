@@ -15,7 +15,6 @@
 #include "transformer/convert/converter.h"
 #include "transformer/augment/augmenter.h"
 #include "transformer/identity/mynooper.h"
-#include "transformer/distribute/protobuf_distributor_schema.h"
 
 namespace ROCKSDB_NAMESPACE {
 

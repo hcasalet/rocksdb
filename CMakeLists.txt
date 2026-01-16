@@ -863,8 +863,6 @@ set(SOURCES
         trace_replay/trace_replay.cc
         transformer/distribute/distributor.cc
         transformer/convert/converter.cc
-        transformer/convert/json2protobuf_schema.cc
-        transformer/convert/protobuf2flatbuffers_schema.cc
         transformer/augment/augmenter.cc
         transformer/augment/protobuf_index_schema.cc
         transformer/augment/json_index_schema.cc

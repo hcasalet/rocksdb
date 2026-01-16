@@ -3,8 +3,6 @@
 #include "rocksdb/transformer.h"
 #include "row_generated.h"
 #include "data.pb.h"
-#include "json2protobuf_schema.h"
-#include "protobuf2flatbuffers_schema.h"
 
 namespace ROCKSDB_NAMESPACE {
 
