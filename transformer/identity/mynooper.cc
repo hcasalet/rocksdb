@@ -11,11 +11,13 @@ ByteBuffer MynooperSchema::Serialize(const ParsedObject& obj) const {
     return {};
 }
 
-void Mynooper::Transform(const std::vector<uint8_t>& input,
-                          std::vector<std::vector<uint8_t>>& outputs,
-                          const std::shared_ptr<SchemaDescriptor>& schema) const
+std::vector<ByteBuffer> Mynooper::Transform(
+      const ByteBuffer& input_bytes,
+      const std::shared_ptr<SchemaDescriptor>& schema) const
 {
-    outputs.push_back(input);
+    std::vector<ByteBuffer> outputs;
+    outputs.push_back(input_bytes);
+    return outputs;
 }
 
 }

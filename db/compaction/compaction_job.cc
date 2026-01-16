@@ -1072,6 +1072,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   uint64_t prev_cpu_micros = db_options_.clock->CPUMicros();
 
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
+  /*
   std::unique_ptr<ArrowCompactionBatcher> arrow_batcher;
   const auto& schema_descs = cfd->ioptions()->schemaDescriptors;
   if (!schema_descs.empty() && schema_descs[0]) {
@@ -1082,7 +1083,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       return;
     }
     arrow_batcher = std::move(*res);
-  }
+  }*/
 
   // Create compaction filter and fail the compaction if
   // IgnoreSnapshots() = false because it is not supported anymore
@@ -1337,36 +1338,15 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       RecordCompactionIOStats();
     }
 
-    // if we batch for transformations
-    //if (use_batched_transform && !c_iter->IsDeleteRangeSentinelKey()) {
-    //  auto st = batcher.Add(c_iter->key(), c_iter->value(), *schema_ptr);
-    //  if (!st.ok()) {
-    //    exec_status = Status::Corruption(st.ToString());
-    //    break;
-    //  }
-
-    //  if (batcher.ShouldFlush()) {
-        // Build Arrow batch for validation
-    //    std::shared_ptr<arrow::RecordBatch> batch;
-    //    auto a_st = batcher.Flush(&batch);
-
-    //    if (!a_st.ok()) {
-    //      exec_status = Status::Corruption(a_st.ToString());
-    //      break;
-    //    }
-    //  }
-   // } else {
-      // Add current compaction_iterator key to target compaction output, if the
-      // output file needs to be close or open, it will call the `open_file_func`
-      // and `close_file_func`.
-      // TODO: it would be better to have the compaction file open/close moved
-      // into `CompactionOutputs` which has the output file information.
-    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func, 
-                    arrow_batcher ? arrow_batcher.get() : nullptr);
+    // Add current compaction_iterator key to target compaction output, if the
+    // output file needs to be close or open, it will call the `open_file_func`
+    // and `close_file_func`.
+    // TODO: it would be better to have the compaction file open/close moved
+    // into `CompactionOutputs` which has the output file information.
+    exec_status = sub_compact->AddToOutput(*c_iter, open_file_func, close_file_func);
     if (!exec_status.ok()) {
       break;
     }
-    //}  
 
     TEST_SYNC_POINT_CALLBACK(
         "CompactionJob::Run():PausingManualCompaction:2",

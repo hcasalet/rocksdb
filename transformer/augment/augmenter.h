@@ -33,9 +33,9 @@ class Augmenter : public Transformer
 
     std::string Name() const override { return "Augmenter"; }
 
-    void Transform(const std::vector<uint8_t>& input,
-                   std::vector<std::vector<uint8_t>>& outputs,
-                   const std::shared_ptr<SchemaDescriptor>& data) const override;
+    virtual std::vector<ByteBuffer> Transform(
+      const ByteBuffer& input_bytes,
+      const std::shared_ptr<SchemaDescriptor>& schema) const override;
   
     TransformerType Supports() const override { return TransformerType::AUGMENTER; }
 };

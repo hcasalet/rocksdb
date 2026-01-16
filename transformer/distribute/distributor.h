@@ -18,9 +18,9 @@ class Distributor : public Transformer {
 
     std::string Name() const override { return "Distributor"; }
 
-    void Transform(const ByteBuffer& input,
-                   std::vector<ByteBuffer>& outputs,
-                   const std::shared_ptr<SchemaDescriptor>& schema) const override;
+    virtual std::vector<ByteBuffer> Transform(
+      const ByteBuffer& input_bytes,
+      const std::shared_ptr<SchemaDescriptor>& schema) const override;
     
     TransformerType Supports() const override { return TransformerType::DISTRIBUTOR; }
   private:

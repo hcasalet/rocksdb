@@ -1,15 +1,31 @@
 #pragma once
 
-#include "rocksdb/transformer.h"
+#include <cstddef>
+#include <cstdint>
+#include <vector>
 
-#include <google/protobuf/message.h>
+#include "rocksdb/rocksdb_namespace.h"
+#include "rocksdb/transformer.h"
+#include "../parser/column_bytes.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-class ProtobufEncoder final : public Encoder {
+// Encodes ColumnBytesRow as protobuf message:
+//   message BytesRow { repeated bytes col = 1; }
+//
+// No protobuf library dependency; emits raw protobuf wire bytes.
+class ProtobufBytesRowEncoder final : public Encoder {
  public:
-  InputOutputDataType OutputType() const override;
+  explicit ProtobufBytesRowEncoder(size_t num_cols) : num_cols_(num_cols) {}
+
+  InputOutputDataType OutputType() const override { return InputOutputDataType::PROTOBUF; }
+
   ByteBuffer Serialize(const ParsedObject& obj) const override;
+
+ private:
+  size_t num_cols_;
+
+  static void AppendVarint(ByteBuffer* out, uint64_t v);
 };
 
-}
+}  // namespace ROCKSDB_NAMESPACE

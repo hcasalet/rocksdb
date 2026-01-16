@@ -279,8 +279,7 @@ class CompactionOutputs {
   // close and open new compaction output with the functions provided.
   Status AddToOutput(const CompactionIterator& c_iter,
                      const CompactionFileOpenFunc& open_file_func,
-                     const CompactionFileCloseFunc& close_file_func,
-                     ArrowCompactionBatcher* arrow_batcher);
+                     const CompactionFileCloseFunc& close_file_func);
 
   // Factored out helper function to AddToOutput for batch mode
   Status EmitOne(size_t output_index,

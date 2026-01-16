@@ -1,37 +1,42 @@
 #include <cstdint>  // For int32_t
+#include <utility>
 
 #include <nlohmann/json.hpp>
 #include "converter.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-void Converter::Transform(const std::vector<uint8_t>& input,
-                          std::vector<std::vector<uint8_t>>& outputs,
-                          const std::shared_ptr<SchemaDescriptor>& schema) const
-{
-    if (!schema) {
-        throw std::invalid_argument("Schema cannot be null.");
-    }
+ConvertSchemaDescriptor::ConvertSchemaDescriptor(
+    Codec input_codec,
+    Codec output_codec,
+    std::vector<FieldSchema> input_schema,
+    std::vector<std::vector<FieldSchema>> output_schemas)
+    : input_codec_(std::move(input_codec)),
+      output_codec_(std::move(output_codec)),
+      input_schema_(std::move(input_schema)),
+      output_schemas_(std::move(output_schemas)) {}
 
-    // Case 1: JSON to Protobuf
-    if (auto json2pb = std::dynamic_pointer_cast<Json2ProtobufSchema>(schema)) {
-        auto parsed = json2pb->Parse(input);
-        if (!parsed) return;
-        ByteBuffer serialized = json2pb->Serialize(*parsed);
-        outputs.push_back(serialized);
-        return;
-    }
+std::vector<ByteBuffer> Converter::Transform(
+    const ByteBuffer& input_bytes,
+    const std::shared_ptr<SchemaDescriptor>& schema) const {
+  std::vector<ByteBuffer> outs;
+  if (!schema) return outs;
 
-    // Case 2: Protobuf to FlatBuffers
-    if (auto pb2fb = std::dynamic_pointer_cast<Protobuf2FlatbuffersSchema>(schema)) {
-        auto parsed = pb2fb->Parse(input);
-        if (!parsed) return;
-        ByteBuffer serialized = pb2fb->Serialize(*parsed);
-        outputs.push_back(serialized);
-        return;
-    }
+  // Validate + parse using schema input codec.
+  if (!schema->Validate(input_bytes)) return outs;
 
-    throw std::runtime_error("Unsupported schema type for Converter::Transform.");
+  std::unique_ptr<ParsedObject> parsed = schema->Parse(input_bytes);
+  if (!parsed) return outs;
+
+  // Encode using schema output codec.
+  ByteBuffer encoded = schema->Serialize(*parsed);
+
+  // NOTE: empty could mean “failure” or a valid empty encoding.
+  // For the POC, treat empty as failure.
+  if (encoded.empty()) return outs;
+
+  outs.emplace_back(std::move(encoded));
+  return outs;
 }
 
 }

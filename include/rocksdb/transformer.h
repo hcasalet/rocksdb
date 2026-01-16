@@ -209,9 +209,9 @@ class Transformer {
   virtual std::string Name() const = 0;
 
   // Transforms a single input record into one or more outputs.
-  virtual void Transform(const ByteBuffer& input,
-                         std::vector<ByteBuffer>& outputs,
-                         const std::shared_ptr<SchemaDescriptor>& schema) const = 0;
+  virtual std::vector<ByteBuffer> Transform(
+      const ByteBuffer& input_bytes,
+      const std::shared_ptr<SchemaDescriptor>& schema) const = 0;
   
   // Declares which transformation features this transformer supports
   virtual TransformerType Supports() const = 0;

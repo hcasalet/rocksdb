@@ -365,8 +365,7 @@ bool CompactionOutputs::ShouldStopBefore(const CompactionIterator& c_iter) {
 Status CompactionOutputs::AddToOutput(
     const CompactionIterator& c_iter,
     const CompactionFileOpenFunc& open_file_func,
-    const CompactionFileCloseFunc& close_file_func,
-    ArrowCompactionBatcher* arrow_batcher) {
+    const CompactionFileCloseFunc& close_file_func) {
   Status s;
   ColumnFamilyData* cfd = compaction_->column_family_data();
   const auto& opts = cfd->ioptions();
@@ -439,16 +438,6 @@ Status CompactionOutputs::AddToOutput(
       reinterpret_cast<const uint8_t*>(value.data()) + value.size()
     );
   } else {
-    //ArrowCompactionBatcher::BatcherOptions batch_opts;
-    //batch_opts.max_rows  = 4096;
-    //batch_opts.max_bytes = 16ULL << 20;
-    //ValueParser::FormatOptions fmt_opts;
-    //fmt_opts.forced_format = ValueParser::Format::kCsv;
-    //rocksdb::ArrowCompactionBatcher batcher(batch_opts, fmt_opts);
-
-    //auto schema_ptr = cfd->ioptions()->schemaDescriptors[0];
-
-
     std::vector<uint8_t> val_vec;
     
     if (to_underlying(transformer_type) == to_underlying(TransformerType::AUGMENTER)) {
@@ -475,17 +464,8 @@ Status CompactionOutputs::AddToOutput(
                      reinterpret_cast<const uint8_t*>(value.data() + value.size()));
     }
     
-    transformer->Transform(val_vec, output_values, schemaDescriptor);
+    output_values = transformer->Transform(val_vec, schemaDescriptor);
   }
-
-  //  if (use_batched_transform && exec_status.ok() && batcher.num_rows() > 0) {
-  //  std::shared_ptr<arrow::RecordBatch> batch;
-  //    auto a_st = batcher.Flush(&batch);
-  //    if (!a_st.ok()) {
-  //      exec_status = Status::Corruption(a_st.ToString());
-  //    }
-  //}
-
 
   for (size_t i = 0; i < output_values.size(); i++) {
     auto compacted_value = Slice(reinterpret_cast<const char*>(output_values[i].data()), output_values[i].size());
@@ -504,13 +484,6 @@ Status CompactionOutputs::AddToOutput(
       compacted_value = Slice();
     } else {
       ikey_ptr = &c_iter.ikey();
-    }
-
-    if (arrow_batcher) {
-      auto a_st = arrow_batcher->Add(key, compacted_value);
-      if (!a_st.ok()) {
-        s = Status::Corruption("Arrow batcher Add failed: " + a_st.ToString());
-      }
     }
     
     s = EmitOne(i, key, compacted_value, ikey_ptr);

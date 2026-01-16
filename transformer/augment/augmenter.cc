@@ -6,12 +6,13 @@
 
 namespace ROCKSDB_NAMESPACE {
 
-void Augmenter::Transform(const std::vector<uint8_t>& input,
-                          std::vector<std::vector<uint8_t>>& outputs,
-                          const std::shared_ptr<SchemaDescriptor>& schema) const {
+std::vector<ByteBuffer> Augmenter::Transform(
+      const ByteBuffer& input,
+      const std::shared_ptr<SchemaDescriptor>& schema) const {
     const uint8_t* p = input.data();
     const uint8_t* end = p + input.size();
     uint32_t vlen = 0;
+    std::vector<ByteBuffer> outputs;
 
     const char* after_len_c = rocksdb::GetVarint32Ptr(
         reinterpret_cast<const char*>(p),
@@ -92,8 +93,9 @@ void Augmenter::Transform(const std::vector<uint8_t>& input,
         }
     } else {
         throw std::runtime_error("Invalid SchemaDescriptor: Failed to cast to AugmenterSchema.");
-        return;
     }
+
+    return outputs;
 }
 
 }
