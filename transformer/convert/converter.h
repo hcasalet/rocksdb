@@ -17,7 +17,7 @@ namespace ROCKSDB_NAMESPACE {
       void Transform(const std::vector<uint8_t>& input,
                      std::vector<std::vector<uint8_t>>& outputs,
                      const std::shared_ptr<SchemaDescriptor>& data) const override;
-    
+
       TransformerType Supports() const override { return TransformerType::CONVERTER; }
     };
 }

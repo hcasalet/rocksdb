@@ -41,6 +41,7 @@ enum class InputOutputDataType {
   PARQUET          = 1 << 4,
   CSV              = 1 << 5,
   FIXEDBIN64       = 1 << 6,
+  COLUMNBYTES      = 1 << 7,
 };
 
 constexpr TransformerType operator|(TransformerType lhs, TransformerType rhs) {
@@ -136,6 +137,14 @@ class Encoder {
   }
 };
 
+struct Codec {
+  std::shared_ptr<Parser> parser;    // may be null
+  std::shared_ptr<Encoder> encoder;  // may be null
+
+  bool HasParser() const { return static_cast<bool>(parser); }
+  bool HasEncoder() const { return static_cast<bool>(encoder); }
+};
+
 // A schema descriptor defines how to interpret or transform input data.
 class SchemaDescriptor {
   public:
@@ -144,12 +153,39 @@ class SchemaDescriptor {
    virtual TransformerType SupportsTransformerType() const = 0;
 
    // Shows the data format before and after the transformation
-   virtual InputOutputDataType InputType() const {return InputOutputDataType::UNKNOWN; }
-   virtual InputOutputDataType OutputType() const {return InputOutputDataType::UNKNOWN; }
-   virtual bool Validate(const ByteBuffer& input_data) const {return true; } 
+   virtual InputOutputDataType InputType() const {
+    const auto& c = InputCodec();
+    return c.parser ? c.parser->InputType() : InputOutputDataType::UNKNOWN;
+   }
+   virtual InputOutputDataType OutputType() const {
+    const auto& c = OutputCodec();
+    return c.encoder ? c.encoder->OutputType() : InputOutputDataType::UNKNOWN;
+   }
+   virtual bool Validate(const ByteBuffer& input_data) const {
+    const auto& c = InputCodec();
+    return c.parser ? c.parser->Validate(input_data) : true;
+   } 
 
-   virtual std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const = 0;
-   virtual ByteBuffer Serialize(const ParsedObject& obj) const = 0;
+   virtual std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const {
+    const auto& c = InputCodec();
+    if (!c.parser) return nullptr;
+    if (!c.parser->Validate(data)) return nullptr;
+    return c.parser->Parse(data);
+   }
+   virtual ByteBuffer Serialize(const ParsedObject& obj) const {
+    const auto& c = OutputCodec();
+    if (!c.encoder) return {};
+    return c.encoder->Serialize(obj);
+   }
+
+   virtual const Codec& InputCodec() const {
+    static const Codec kEmpty;
+    return kEmpty;
+   }
+   virtual const Codec& OutputCodec() const {
+    static const Codec kEmpty;
+    return kEmpty;
+   }
 
    virtual const std::vector<FieldSchema>& GetInputFieldSchema() const {
     static const std::vector<FieldSchema> kEmpty;
