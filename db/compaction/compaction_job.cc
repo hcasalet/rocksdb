@@ -1526,8 +1526,9 @@ Status CompactionJob::FinishCompactionOutputFile(
     uint64_t output_number = meta->fd.GetNumber();
     assert(output_number != 0);
 
+    ColumnFamilyData* this_cfd = cfd;
     if (!cfd->ioptions()->transformers.empty()) {
-      cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i];
+      this_cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i];
     }
     
     std::string file_checksum = kUnknownFileChecksum;
@@ -1551,7 +1552,7 @@ Status CompactionJob::FinishCompactionOutputFile(
       if (outputs.HasRangeDel() && i == 0) {
         s = outputs.AddRangeDels(comp_start_user_key, comp_end_user_key,
                                  range_del_out_stats, bottommost_level_,
-                                 cfd->internal_comparator(), earliest_snapshot,
+                                 this_cfd->internal_comparator(), earliest_snapshot,
                                  next_table_min_key, full_history_ts_low_, i);
         RecordDroppedKeys(range_del_out_stats, &sub_compact->compaction_job_stats);
       }
@@ -1622,13 +1623,13 @@ Status CompactionJob::FinishCompactionOutputFile(
             db_options_.info_log,
             "[%s] [JOB %d] Unable to remove SST file for table #%" PRIu64
             " at bottom level%s",
-            cfd->GetName().c_str(), job_id_, output_number,
+            this_cfd->GetName().c_str(), job_id_, output_number,
             meta->marked_for_compaction ? " (need compaction)" : "");
       }
 
       // Also need to remove the file from outputs, or it will be added to the
       // VersionEdit.
-      outputs.RemoveLastOutput();
+      outputs.RemoveLastOutput(static_cast<int>(i));
       meta = nullptr;
     }
 
@@ -1638,7 +1639,7 @@ Status CompactionJob::FinishCompactionOutputFile(
       ROCKS_LOG_INFO(db_options_.info_log,
                      "[%s] [JOB %d] Generated table #%" PRIu64 ": %" PRIu64
                      " keys, %" PRIu64 " bytes%s, temperature: %s",
-                     cfd->GetName().c_str(), job_id_, output_number,
+                     this_cfd->GetName().c_str(), job_id_, output_number,
                      current_entries, meta->fd.file_size,
                      meta->marked_for_compaction ? " (need compaction)" : "",
                      temperature_to_string[meta->temperature].c_str());
@@ -1658,7 +1659,7 @@ Status CompactionJob::FinishCompactionOutputFile(
       }
     }
     EventHelpers::LogAndNotifyTableFileCreationFinished(
-        event_logger_, cfd->ioptions()->listeners, dbname_, cfd->GetName(), fname,
+        event_logger_, this_cfd->ioptions()->listeners, dbname_, this_cfd->GetName(), fname,
         job_id_, output_fd, oldest_blob_file_number, tp,
         TableFileCreationReason::kCompaction, status_for_listener, file_checksum,
         file_checksum_func_name);
@@ -1850,33 +1851,30 @@ void CompactionJob::RecordCompactionIOStats() {
 
 Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
                                                CompactionOutputs& outputs) {
-  ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
   assert(sub_compact != nullptr);
+
+  ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
+  
+  int output_size = static_cast<int>(outputs.GetOutputsSize());
+  const auto& dests = cfd->GetDestinationCfds();
+  if (!dests.empty()) {
+    if (dests.size() != static_cast<size_t>(output_size)) {
+      return Status::InvalidArgument("Destination CF count mismatch: dests=" +
+                                  std::to_string(dests.size()) + " outputs=" +
+                                  std::to_string(output_size));
+    }
+  }
+
   if (cfd->ioptions()->transformers.size() > 0) {
     if (cfd->GetName() == "default") {
-      return Status::OK();
-    }
-    switch (to_underlying(cfd->ioptions()->transformers[0]->Supports())) {
-      case to_underlying(TransformerType::DISTRIBUTOR):
-      case to_underlying(TransformerType::AUGMENTER):
-        if (outputs.GetOutputsSize() < cfd->GetDestinationCfdSize()) {
-          return Status::Aborted("Compaction at the beginning aborted");
-        }
-        break;
-      case to_underlying(TransformerType::CONVERTER):
-        break;
-      case to_underlying(TransformerType::MYNOOPER):
-        break;
-      default: {
-        break;
-      }
+      return Status::InvalidArgument("Transformers enabled for default CF unexpectedly");
     }
   }
   
-  int output_size = static_cast<int>(outputs.GetOutputsSize());
   Status s;
-
   for (int i = 0; i < output_size; i++) {
+    assert(dests.empty() || static_cast<size_t>(i) < dests.size());
+
     // no need to lock because VersionSet::next_file_number_ is atomic
     uint64_t file_number = versions_->NewFileNumber();
     std::string fname = GetTableFileName(file_number);

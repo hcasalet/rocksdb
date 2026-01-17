@@ -169,6 +169,13 @@ class CompactionOutputs {
     }
   }
 
+  // Remove the last output by position
+  void RemoveLastOutput(int position) {
+    assert(outputs_.size() > static_cast<size_t>(position));
+    assert(!outputs_[position].empty());
+    outputs_[position].pop_back();
+  }
+
   bool HasBuilder() const { 
     if (builders_.size() != outputs_.size()) {
       return false;
@@ -181,7 +188,11 @@ class CompactionOutputs {
     return true;
   }
 
-  FileMetaData* GetMetaData(int position) { return &current_output(position).meta; }
+  FileMetaData* GetMetaData(int position) { 
+    assert(outputs_.size() > static_cast<size_t>(position));
+    assert(!outputs_[position].empty());
+    return &outputs_[position].back().meta;
+  }
 
   bool HasOutput() const { return !outputs_.empty() && !outputs_[0].empty(); }
 
@@ -320,8 +331,8 @@ class CompactionOutputs {
   // run in parallel however it should be much rarer.
   // It's caller's responsibility to make sure it's not empty.
   Output& current_output(int pos) {
-    assert(outputs_.size() > size_t(pos));
-    //assert(!outputs_[pos].empty());
+    assert(outputs_.size() > static_cast<size_t>(pos));
+    assert(!outputs_[pos].empty());
     return outputs_[pos].back();
   }
 

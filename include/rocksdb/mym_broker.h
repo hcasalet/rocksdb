@@ -42,7 +42,7 @@ class ColFamMeta {
   protected:
     std::string cfName_;
     int logical_level_;
-    ColumnFamilyHandle* cf_handle_;
+    ColumnFamilyHandle* cf_handle_ = nullptr;
     std::set<int> colPositions_;
 
   public:
@@ -51,6 +51,7 @@ class ColFamMeta {
                std::set<int> col_positions) 
         : cfName_(cf_name), logical_level_(logical_level), 
           cf_handle_(cf_handle), colPositions_(std::move(col_positions)) {}
+    ~ColFamMeta() = default;
     int GetLogicalLevel() { return logical_level_; }
     std::set<int> GetColumns() { return colPositions_; }
 };
@@ -86,7 +87,14 @@ class MymBroker {
 
         int IndexRead(const std::string &key, const std::set<int>* positions, std::vector<std::string> &result);
 
-        ~MymBroker() {};
+        ~MymBroker() {
+            for (auto* h : owned_cf_handles_) {
+                delete h;
+            }
+            owned_cf_handles_.clear();
+            int_cf_meta_.clear();
+            delete db_;
+        };
 
         static inline std::string make_child_name(const std::string& parent, std::string_view suffix) {
             return parent + std::string(suffix);
@@ -97,6 +105,8 @@ class MymBroker {
         Options options_;
         ColFamMeta user_cf_meta_;
         std::unordered_map<int, std::unordered_map<std::string, ColFamMeta>> int_cf_meta_;
+        // to track ColumnFamilyHandles in order to delete
+        std::vector<rocksdb::ColumnFamilyHandle*> owned_cf_handles_;
         
         CFPlan buildPlan(const std::string& root_cf);
         std::vector<ColumnFamilyDescriptor> emitDescriptors(const CFPlan& plan);

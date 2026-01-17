@@ -383,53 +383,78 @@ void MymBroker::saveColFamHandlesByName(const CFPlan& plan,
                                         const std::vector<ColumnFamilyHandle*>& handles,
                                         const std::string& root_cf)
 {
+    assert(descs.size() == handles.size());
+
+    owned_cf_handles_.insert(owned_cf_handles_.end(), handles.begin(), handles.end());
+
     // Build name -> handle map from the parallel vectors (Open/Create guarantee order)
     std::unordered_map<std::string, ColumnFamilyHandle*> hmap;
     hmap.reserve(descs.size());
     for (size_t i = 0; i < descs.size(); ++i) {
-        hmap.emplace(descs[i].name, handles[i]);
+        auto res = hmap.emplace(descs[i].name, handles[i]);
+        if (!res.second) {
+            throw std::runtime_error("Duplicate CF name in descriptors: " + descs[i].name);
+        }
     }
+
+    // Root must exist
+    auto it_root = hmap.find(root_cf);
+    assert(it_root != hmap.end());
 
     // Build the “logical level 0” metadata for the user CF
     std::set<int> all_cols;
     for (int i = 0; i < options_.num_columns; ++i) all_cols.insert(i);
 
-    auto* root_handle = hmap.at(root_cf);
-    user_cf_meta_ = ColFamMeta(root_cf, /*level=*/0, root_handle, all_cols);
-    int_cf_meta_[0][root_cf] = user_cf_meta_;
+    ColumnFamilyHandle* root_handle = it_root->second;
 
-    // BFS over the plan by names (stable and independent of descriptor vector edits)
-    int srclevel = 0;
-    int destlevel = 1;
+    // Prefer constructing in-place in the map to avoid redundant copies
+    int_cf_meta_.clear();
+    int_cf_meta_[0].emplace(root_cf, ColFamMeta(root_cf, /*level=*/0, root_handle, all_cols));
+    user_cf_meta_ = int_cf_meta_[0].at(root_cf); // or remove user_cf_meta_ entirely
 
+    // BFS over the plan by name
     std::queue<std::string> q;
-    q.push(root_cf);
+    std::unordered_set<std::string> visited;
+    visited.reserve(plan.nodes.size());
 
+    q.push(root_cf);
+    visited.insert(root_cf);
+
+    int level = 0;
     while (!q.empty()) {
         size_t qs = q.size();
+        int next_level = level + 1;
+
         for (size_t i = 0; i < qs; ++i) {
-          auto src_name = q.front(); q.pop();
+          std::string src_name = q.front(); 
+          q.pop();
     
           const CFNode& src_node = plan.nodes.at(plan.name2idx.at(src_name));
-          const auto& src_cols   = int_cf_meta_[srclevel][src_name].GetColumns();
+          const auto& src_cols   = int_cf_meta_[level].at(src_name).GetColumns();
     
           const auto& children = src_node.children;
-          auto splitColGroups = splitColumns(src_cols, (int)children.size());
+          auto splitColGroups = splitColumns(src_cols, static_cast<int>(children.size()));
     
           for (size_t k = 0; k < children.size(); ++k) {
-            const auto& child_name = children[k];
-            auto* h = hmap.at(child_name);
+            const std::string& child_name = children[k];
+            auto it_h = hmap.find(child_name);
+            assert(it_h != hmap.end() && "Plan references CF name not in descs/handles");
+
+            // If child already exists, decide whether to skip or assert.
+            if (!visited.insert(child_name).second) {
+                continue; // already processed
+            }
     
-            int_cf_meta_[destlevel][child_name] =
-                ColFamMeta(child_name, destlevel, h, splitColGroups[k]);
+            int_cf_meta_[next_level].emplace(
+                child_name,
+                ColFamMeta(child_name, next_level, it_h->second, splitColGroups[k]));
     
             q.push(child_name);
           }
         }
-        ++srclevel;
-        ++destlevel;
+        
+        level = next_level;
     }
-
 }
 
 std::vector<std::set<int>> MymBroker::splitColumns(std::set<int> srccols, int splits) {
