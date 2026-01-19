@@ -850,6 +850,8 @@ set(SOURCES
         test_util/transaction_test_util.cc
         tools/block_cache_analyzer/block_cache_trace_analyzer.cc
         tools/dump/db_dump_tool.cc
+        tools/elt/rw_wal.cc
+        tools/elt/transformer.cc
         tools/io_tracer_parser_tool.cc
         tools/ldb_cmd.cc
         tools/ldb_tool.cc
@@ -1632,6 +1634,11 @@ if(WITH_TRACE_TOOLS)
   add_executable(trace_analyzer${ARTIFACT_SUFFIX}
     tools/trace_analyzer.cc)
   target_link_libraries(trace_analyzer${ARTIFACT_SUFFIX}
+    ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto_generated)
+
+  add_executable(elt_tester${ARTIFACT_SUFFIX}
+    tools/elt/rw_wal.cc)
+  target_link_libraries(elt_tester${ARTIFACT_SUFFIX}
     ${ROCKSDB_LIB} ${GFLAGS_LIB} ${FOLLY_LIBS} proto_generated)
 
 endif()
