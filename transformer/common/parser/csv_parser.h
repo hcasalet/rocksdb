@@ -2,24 +2,40 @@
 
 #include "rocksdb/transformer.h"
 
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
-namespace ROCKSDB_NAMESPACE {
-struct CsvRowPayload {
-  std::vector<std::string> fields;
-};
+namespace arrow {
+class StructScalar;
+}
 
-// Simple CSV parser: comma-separated, supports quoted fields ("...") and escaped quotes ("").
-// Does not do multiline fields.
+namespace ROCKSDB_NAMESPACE {
+
+struct CsvParserOptions {
+  char delimiter;
+  bool allow_quoted_fields;
+  // If true, empty field -> null scalar (instead of empty string / 0).
+  bool empty_is_null;
+};
 class CsvParser final : public Parser {
  public:
-  InputOutputDataType InputType() const override;
+  explicit CsvParser(std::vector<FieldSchema> input_schema = {},
+                     CsvParserOptions opts = {});
+
+  InputOutputDataType InputType() const override { return InputOutputDataType::CSV; }
+
   bool Validate(const ByteBuffer& input_data) const override;
-  std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
+
+  arrow::Result<ArrowRecord> ParseToArrow(const ByteBuffer& data) const override;
+
+  const std::vector<FieldSchema>& GetInputFieldSchema() const override { return input_schema_; }
 
  private:
-  static bool ParseLine(const char* s, size_t n, std::vector<std::string>* out_fields);
+  std::vector<FieldSchema> input_schema_;
+  CsvParserOptions opts_;
+
 };
 
 }

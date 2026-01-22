@@ -7,7 +7,6 @@
 
 #include "rocksdb/rocksdb_namespace.h"
 #include "rocksdb/transformer.h"
-#include "column_bytes.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -19,7 +18,7 @@ class JsonColsParser final : public Parser {
 
   bool Validate(const ByteBuffer& input_data) const override;
 
-  std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
+  arrow::Result<ArrowRecord> ParseToArrow(const ByteBuffer& data) const override;
 
   const std::vector<FieldSchema>& GetInputFieldSchema() const override { return input_schema_; }
 

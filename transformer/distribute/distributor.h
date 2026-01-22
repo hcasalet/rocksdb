@@ -5,97 +5,29 @@
 #include <utility>
 #include <vector>
 
+#include "rocksdb/slice.h"
 #include "rocksdb/transformer.h"
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
 
-// A format-agnostic "view" wrapper for Distributor.
-// Encoders can check for this payload and serialize only the selected columns
-// from the base parsed object.
-struct ProjectedPayload {
-  // Original fully-parsed object (whatever your derived parser produced).
-  std::shared_ptr<const ParsedObject> base;
+using SplitByPositions = std::vector<std::vector<int>>;
 
-  // Column positions to include in this projection.
-  // Convention: empty => "serialize all columns" (encoder may choose).
-  std::vector<int> columns;
-
-  // Optional: provide input schema so encoders can map positions to metadata.
-  // This is helpful if your base payload doesn't carry field metadata.
-  std::shared_ptr<const std::vector<FieldSchema>> input_schema;
-
-  ProjectedPayload(std::shared_ptr<const ParsedObject> b,
-                   std::vector<int> cols,
-                   std::shared_ptr<const std::vector<FieldSchema>> schema = nullptr)
-      : base(std::move(b)), columns(std::move(cols)), input_schema(std::move(schema)) {}
-};
-
-// DistributorSchemaDescriptor:
-// - Uses ONE Codec (parser + encoder) for both input and output.
-// - Stores split plan by column positions.
-class DistributorSchemaDescriptor final : public SchemaDescriptor {
- public:
-  using SplitByPosition = std::vector<std::vector<int>>;
-
-  DistributorSchemaDescriptor(Codec codec,
-                              std::vector<FieldSchema> input_schema = {},
-                              SplitByPosition splits = {});
-
-  TransformerType SupportsTransformerType() const override {
-    return TransformerType::DISTRIBUTOR;
-  }
-
-  // Single codec for both directions.
-  const Codec& InputCodec() const override { return codec_; }
-  const Codec& OutputCodec() const override { return codec_; }
-
-  const std::vector<FieldSchema>& GetInputFieldSchema() const override {
-    static const std::vector<FieldSchema> kEmpty;
-    return input_schema_ ? *input_schema_ : kEmpty;
-  }
-
-  std::shared_ptr<const std::vector<FieldSchema>> InputSchemaPtr() const {
-    return input_schema_;
-  }
-
-  int GetNumSplits() const override { return static_cast<int>(splits_.size()); }
-
-  // Reuse existing interface hook to expose split-by-position.
-  std::vector<std::vector<int>> GetPositionedIndexKeys() const override { return splits_; }
-
-  const SplitByPosition& GetSplits() const { return splits_; }
-
- private:
-  void NormalizeAndValidate_();
-
-  Codec codec_;
-  std::shared_ptr<const std::vector<FieldSchema>> input_schema_;
-  SplitByPosition splits_;
-};
-
-// DistributorTransformer:
-// - Parses input bytes once using schema->Parse (derived parser)
-// - For each split, wraps parsed object in ProjectedPayload and calls schema->Serialize
-//   (derived encoder) to produce one output per split.
+// Distributor does SPLIT transformation
 class Distributor final : public Transformer {
  public:
+  explicit Distributor(SplitByPositions pos) : splits_(std::move(pos)) {}
+
   std::string Name() const override { return "Distributor"; }
-
   TransformerType Supports() const override { return TransformerType::DISTRIBUTOR; }
+  int GetNumSplits() const { return splits_.size(); }
 
-  std::vector<ByteBuffer> Transform(
-      const ByteBuffer& input_bytes,
-      const std::shared_ptr<SchemaDescriptor>& schema) const override;
+  std::vector<ArrowRecord> Transform(
+      const Slice& key,
+      const ArrowRecord& input) const override;
 
  private:
-  static bool IsDistributorSchema_(const std::shared_ptr<SchemaDescriptor>& schema);
-
-  static std::unique_ptr<ParsedObject> MakeProjectedObject_(
-      std::shared_ptr<const ParsedObject> base,
-      const std::vector<int>& cols,
-      std::shared_ptr<const std::vector<FieldSchema>> input_schema,
-      InputOutputDataType out_fmt);
+  SplitByPositions splits_;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -5,7 +5,6 @@
 #include "transformer/convert/converter.h"
 #include "transformer/augment/augmenter.h"
 #include "transformer/identity/mynooper.h"
-#include "transformer/distribute/protobuf_distributor_schema.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -285,6 +284,7 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
     // BFS over layers of transformers; for each parent at layer i, create children for layer i+1
     for (size_t i = 0; i < options_.transformers.size(); ++i) {
         const auto* schema = options_.schemaDescriptors[i].get();
+        const auto* transformer = options_.transformers[i].get();
         const bool has_next = (i + 1 < options_.transformers.size());
 
         // Grab snapshot of nodes size at start of this layer
@@ -297,10 +297,11 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
            
             // 1) Depending on schema, add children and record them into parent's destination_column_families
             std::vector<std::string> child_names;
-            const auto tmask = static_cast<int>(schema->SupportsTransformerType());
+            const auto tmask = static_cast<int>(transformer->Supports());
             
             if (tmask & static_cast<int>(TransformerType::DISTRIBUTOR)) {
-                const int splits = schema->GetNumSplits();
+                auto* trptr = dynamic_cast<const Distributor*>(transformer); 
+                const int splits = trptr->GetNumSplits();
                 child_names.reserve(splits);
                 for (int k = 0; k < splits; ++k) {
                     child_names.emplace_back(plan.nodes[parent_idx].name + "_split_cf_" + std::to_string(k));
@@ -312,10 +313,8 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
             } else if (tmask & static_cast<int>(TransformerType::AUGMENTER)) {
                 child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_indexed_data_cf"));
                 // secondary index CFs (no further transformers)
-                size_t index_num = schema->GetIndexKeys().size();
-                if (index_num < 1) {
-                    index_num = schema->GetPositionedIndexKeys().size();
-                }
+                auto* trptr = dynamic_cast<const Augmenter*>(transformer);
+                size_t index_num = trptr->GetPositionedIndexKeys().size();
                 for (size_t k = 0; k < index_num; ++k) {
                     child_names.emplace_back(plan.nodes[parent_idx].name + "_secondary_index_cf" + std::to_string(k));
                 }

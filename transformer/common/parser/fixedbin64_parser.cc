@@ -31,21 +31,37 @@ bool FixedBin64Parser::Validate(const ByteBuffer& input_data) const {
   return input_data.size() == need;
 }
 
-std::unique_ptr<ParsedObject> FixedBin64Parser::Parse(const ByteBuffer& data) const {
-  if (!Validate(data)) return nullptr;
+arrow::Result<ArrowRecord> FixedBin64Parser::ParseToArrow(const ByteBuffer& data) const {
+  if (!Validate(data)) {
+    return arrow::Status::Invalid(
+        "FixedBin64Parser::ParseToArrow: invalid FIXEDBIN64 payload size; got=",
+        static_cast<int64_t>(data.size()),
+        " expected=",
+        static_cast<int64_t>(static_cast<size_t>(num_cols_) * 8));
+  }
 
-  auto row = std::make_unique<FixedBin64RowPayload>();
-  row->values.reserve(num_cols_);
+  // Build Arrow struct type: struct<col0: uint64, col1: uint64, ...>
+  std::vector<std::shared_ptr<arrow::Field>> fields;
+  fields.reserve(static_cast<size_t>(num_cols_));
+  for (int i = 0; i < num_cols_; ++i) {
+    fields.push_back(arrow::field(schema_[i].name, arrow::uint64(), /*nullable=*/false));
+  }
+  auto struct_type = arrow::struct_(std::move(fields));
+
+  // Build field scalars (one "row"): [UInt64Scalar(v0), UInt64Scalar(v1), ...]
+  arrow::ScalarVector values;
+  values.reserve(static_cast<size_t>(num_cols_));
 
   const std::uint8_t* p = data.data();
   for (int i = 0; i < num_cols_; ++i) {
-    row->values.push_back(ReadFixed64LE(p + (static_cast<size_t>(i) * 8)));
+    const std::uint64_t v = ReadFixed64LE(p + (static_cast<size_t>(i) * 8));
+    values.push_back(std::make_shared<arrow::UInt64Scalar>(v));
   }
 
-  auto out = std::make_unique<ParsedObject>();
-  out->payload = ParsedPayload::Make<FixedBin64RowPayload>(
-      InputOutputDataType::FIXEDBIN64, std::move(row));
-  return out;
+  // Construct StructScalar from values + struct type.
+  // Note: StructScalar's ctor takes (ScalarVector values, DataType type).
+  auto rec = std::make_shared<arrow::StructScalar>(std::move(values), std::move(struct_type));
+  return rec;
 }
 
 std::uint64_t FixedBin64Parser::ReadFixed64LE(const std::uint8_t* p) {

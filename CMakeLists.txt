@@ -866,8 +866,6 @@ set(SOURCES
         transformer/distribute/distributor.cc
         transformer/convert/converter.cc
         transformer/augment/augmenter.cc
-        transformer/augment/protobuf_index_schema.cc
-        transformer/augment/json_index_schema.cc
         transformer/common/parser/json_parser.cc
         transformer/common/parser/csv_parser.cc
         transformer/common/parser/fixedbin64_parser.cc
@@ -880,11 +878,6 @@ set(SOURCES
         transformer/common/encoder/protobuf_encoder.cc
         transformer/identity/mynooper.cc
         transformer/transformer_factory.cc
-        transformer/arrow_compaction_batcher.cc
-        transformer/distribute/protobuf_distributor_schema.cc
-        transformer/distribute/json_distributor_schema.cc
-        transformer/distribute/avro_distributor_schema.cc
-        transformer/distribute/csv_distributor_schema.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc

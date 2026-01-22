@@ -22,7 +22,7 @@ class FixedBin64Parser final : public Parser {
 
   InputOutputDataType InputType() const override;
   bool Validate(const ByteBuffer& input_data) const override;
-  std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const override;
+  arrow::Result<ArrowRecord> ParseToArrow(const ByteBuffer& data) const override;
 
   const std::vector<FieldSchema>& GetInputFieldSchema() const override;
 

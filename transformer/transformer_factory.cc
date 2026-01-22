@@ -6,13 +6,14 @@
 
 namespace ROCKSDB_NAMESPACE {
 std::shared_ptr<Transformer> CreateTransformer(const TransformerType transformer_type) {
+    std::vector<std::vector<int>> splits, indpos;
     switch (transformer_type) {
         case TransformerType::DISTRIBUTOR:
-            return std::make_shared<Distributor>();
+            return std::make_shared<Distributor>(splits);
         case TransformerType::CONVERTER:
             return std::make_shared<Converter>();
         case TransformerType::AUGMENTER:
-            return std::make_shared<Augmenter>();
+            return std::make_shared<Augmenter>(indpos);
         case TransformerType::MYNOOPER:
             return std::make_shared<Mynooper>();
         case TransformerType::NOTRANSFORMATION:

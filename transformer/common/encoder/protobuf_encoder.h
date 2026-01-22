@@ -6,7 +6,6 @@
 
 #include "rocksdb/rocksdb_namespace.h"
 #include "rocksdb/transformer.h"
-#include "../parser/column_bytes.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -20,7 +19,7 @@ class ProtobufBytesRowEncoder final : public Encoder {
 
   InputOutputDataType OutputType() const override { return InputOutputDataType::PROTOBUF; }
 
-  ByteBuffer Serialize(const ParsedObject& obj) const override;
+  ByteBuffer SerializeFromArrow(const ArrowRecord& rec) const override;
 
  private:
   size_t num_cols_;

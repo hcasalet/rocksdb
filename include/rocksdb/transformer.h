@@ -10,6 +10,31 @@
 #include <utility>
 
 #include "rocksdb/rocksdb_namespace.h"
+#include "rocksdb/slice.h"
+
+#ifdef LZ4
+  #pragma push_macro("LZ4")
+  #undef LZ4
+  #define ROCKSDB_RESTORE_LZ4_MACRO
+#endif
+
+#ifdef ZSTD
+  #pragma push_macro("ZSTD")
+  #undef ZSTD
+  #define ROCKSDB_RESTORE_ZSTD_MACRO
+#endif
+
+#include <arrow/api.h>
+
+#ifdef ROCKSDB_RESTORE_ZSTD_MACRO
+  #pragma pop_macro("ZSTD")
+  #undef ROCKSDB_RESTORE_ZSTD_MACRO
+#endif
+
+#ifdef ROCKSDB_RESTORE_LZ4_MACRO
+  #pragma pop_macro("LZ4")
+  #undef ROCKSDB_RESTORE_LZ4_MACRO
+#endif
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -66,39 +91,7 @@ struct FieldSchema {
   int field_number;
 };
 
-// Type-erased payload with a checked downcast.
-struct ParsedPayload {
-  InputOutputDataType format;     // e.g., JSON / PROTOBUF / FLATBUFFERS / ...
-  std::type_index     type{typeid(void)};
-  std::shared_ptr<void> ptr;
-
-  ParsedPayload() : format(InputOutputDataType::UNKNOWN) {}
-
-  template <class T>
-  static ParsedPayload Make(InputOutputDataType fmt, std::unique_ptr<T> p) {
-    ParsedPayload out;
-    out.format = fmt;
-    out.type   = std::type_index(typeid(T));
-    // Move unique_ptr<T> into shared_ptr<void> with correct deleter.
-    out.ptr = std::shared_ptr<T>(p.release());
-    return out;
-  }
-
-  template <class T>
-  T* As() const {
-    if (type != std::type_index(typeid(T))) {
-      return nullptr;
-    }
-    return static_cast<T*>(ptr.get());
-  }
-
-  explicit operator bool() const { return static_cast<bool>(ptr); }
-};
-
-struct ParsedObject {
-  virtual ~ParsedObject() = default;
-  ParsedPayload payload;
-};
+using ArrowRecord = std::shared_ptr<arrow::StructScalar>; 
 
 class Parser {
  public:
@@ -111,7 +104,7 @@ class Parser {
   virtual bool Validate(const ByteBuffer& input_data) const { return true; }
 
   // Parse bytes into an in-memory representation.
-  virtual std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const = 0;
+  virtual  arrow::Result<ArrowRecord> ParseToArrow(const ByteBuffer& data) const = 0;
 
   // Optional: expose schema of the parsed representation (if you have it).
   virtual const std::vector<FieldSchema>& GetInputFieldSchema() const {
@@ -128,7 +121,7 @@ class Encoder {
   virtual InputOutputDataType OutputType() const = 0;
 
   // Encode an in-memory representation into bytes.
-  virtual ByteBuffer Serialize(const ParsedObject& obj) const = 0;
+  virtual ByteBuffer SerializeFromArrow(const ArrowRecord& rec) const = 0;
 
   // Optional: describe outputs (useful for distributor/augmenter cases).
   virtual const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const {
@@ -148,57 +141,64 @@ struct Codec {
 // A schema descriptor defines how to interpret or transform input data.
 class SchemaDescriptor {
   public:
-   virtual ~SchemaDescriptor() = default;
+   ~SchemaDescriptor() = default;
 
-   virtual TransformerType SupportsTransformerType() const = 0;
+   SchemaDescriptor(Codec in, Codec out,
+                    std::vector<FieldSchema> input_schema,
+                    std::vector<std::vector<FieldSchema>> output_schemas
+                  ) : in_(std::move(in)), out_(std::move(out)), 
+                      input_schema_(std::move(input_schema)),
+                      output_schemas_(std::move(output_schemas)) {} 
 
    // Shows the data format before and after the transformation
-   virtual InputOutputDataType InputType() const {
+   InputOutputDataType InputType() const {
     const auto& c = InputCodec();
     return c.parser ? c.parser->InputType() : InputOutputDataType::UNKNOWN;
    }
-   virtual InputOutputDataType OutputType() const {
+   InputOutputDataType OutputType() const {
     const auto& c = OutputCodec();
     return c.encoder ? c.encoder->OutputType() : InputOutputDataType::UNKNOWN;
    }
-   virtual bool Validate(const ByteBuffer& input_data) const {
+   bool Validate(const ByteBuffer& input_data) const {
     const auto& c = InputCodec();
     return c.parser ? c.parser->Validate(input_data) : true;
    } 
 
-   virtual std::unique_ptr<ParsedObject> Parse(const ByteBuffer& data) const {
+   arrow::Result<ArrowRecord> ParseToArrow(const ByteBuffer& data) const {
     const auto& c = InputCodec();
-    if (!c.parser) return nullptr;
-    if (!c.parser->Validate(data)) return nullptr;
-    return c.parser->Parse(data);
+    if (!c.parser) return arrow::Status::Invalid("No parser configured");
+    if (!c.parser->Validate(data)) return arrow::Status::Invalid("Validation failed");
+    return c.parser->ParseToArrow(data);
    }
-   virtual ByteBuffer Serialize(const ParsedObject& obj) const {
+   arrow::Result<ByteBuffer> SerializeFromArrow(const ArrowRecord& rec) const {
     const auto& c = OutputCodec();
-    if (!c.encoder) return {};
-    return c.encoder->Serialize(obj);
+    if (!c.encoder) return arrow::Status::Invalid("No encoder configured");
+    return c.encoder->SerializeFromArrow(rec);
    }
 
-   virtual const Codec& InputCodec() const {
-    static const Codec kEmpty;
-    return kEmpty;
+   const Codec& InputCodec() const {
+    return in_;
    }
-   virtual const Codec& OutputCodec() const {
-    static const Codec kEmpty;
-    return kEmpty;
+   const Codec& OutputCodec() const {
+    return out_;
    }
 
-   virtual const std::vector<FieldSchema>& GetInputFieldSchema() const {
-    static const std::vector<FieldSchema> kEmpty;
-    return kEmpty;
+   const std::vector<FieldSchema>& GetInputFieldSchema() const {
+    return input_schema_;
    }
-   virtual const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const {
-    static const std::vector<std::vector<FieldSchema>> kEmpty;
-    return kEmpty;
+   const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const {
+    return output_schemas_;
    }
-   virtual int GetNumSplits() const {return 0;}
-   virtual std::vector<std::vector<std::string>> GetIndexKeys() const {return {}; }
-   virtual std::vector<std::vector<int>> GetPositionedIndexKeys() const {return {}; }
 
+  private:
+   Codec in_, out_;
+   std::vector<FieldSchema> input_schema_;
+   std::vector<std::vector<FieldSchema>> output_schemas_;
+};
+
+struct TransformContext {
+  int splits;
+  std::vector<std::vector<int>> index_positions;
 };
 
 class Transformer {
@@ -209,12 +209,16 @@ class Transformer {
   virtual std::string Name() const = 0;
 
   // Transforms a single input record into one or more outputs.
-  virtual std::vector<ByteBuffer> Transform(
-      const ByteBuffer& input_bytes,
-      const std::shared_ptr<SchemaDescriptor>& schema) const = 0;
+  virtual std::vector<ArrowRecord> Transform(
+      const Slice& key,
+      const ArrowRecord& input) const = 0;
   
   // Declares which transformation features this transformer supports
   virtual TransformerType Supports() const = 0;
+
+ private:
+  TransformerType ttype_;
+  TransformContext ctx_;
 };
 
 // Create a new Transformer that can be shared among multiple RocksDB instances

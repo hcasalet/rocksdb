@@ -1,6 +1,17 @@
 #include "json_parser.h"
 
 #include <cstring>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+// Arrow
+#include <arrow/api.h>
+#include <arrow/buffer.h>
+#include <arrow/result.h>
+#include <arrow/status.h>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -63,34 +74,50 @@ bool JsonColsParser::ExtractStringValueForKey(const char* json,
   return true;
 }
 
-std::unique_ptr<ParsedObject> JsonColsParser::Parse(const ByteBuffer& data) const {
+arrow::Result<ArrowRecord> JsonColsParser::ParseToArrow(const ByteBuffer& data) const {
+  if (!Validate(data)) {
+    return arrow::Status::Invalid("JsonColsParser::ParseToArrow: invalid JSON envelope");
+  }
+
   const char* s = reinterpret_cast<const char*>(data.data());
   const size_t n = data.size();
 
-  auto row = std::make_unique<ColumnBytesRow>();
-  row->cols.resize(num_cols_);
+  // Build struct type: struct<col0: binary, col1: binary, ...>
+  std::vector<std::shared_ptr<arrow::Field>> fields;
+  fields.reserve(num_cols_);
+  for (size_t i = 0; i < num_cols_; ++i) {
+    fields.push_back(arrow::field("col" + std::to_string(i), arrow::binary(),
+                                  /*nullable=*/false));
+  }
+  auto struct_type = arrow::struct_(std::move(fields));
+
+  arrow::ScalarVector values;
+  values.reserve(num_cols_);
 
   for (size_t i = 0; i < num_cols_; ++i) {
     const std::string key = "col" + std::to_string(i);
     const char* vb = nullptr;
     const char* ve = nullptr;
+
     if (!ExtractStringValueForKey(s, n, key, &vb, &ve)) {
-      return nullptr;
+      return arrow::Status::Invalid("JsonColsParser::ParseToArrow: missing key: ", key);
     }
+
     const size_t len = static_cast<size_t>(ve - vb);
     if (expected_value_len_ != 0 && len != expected_value_len_) {
-      return nullptr;
+      return arrow::Status::Invalid(
+          "JsonColsParser::ParseToArrow: value length mismatch for key: ", key,
+          " got=", static_cast<int64_t>(len),
+          " expected=", static_cast<int64_t>(expected_value_len_));
     }
-    // POC: If you want to require digits only, uncomment:
-    // for (const char* p = vb; p < ve; ++p) if (!IsDigit(*p)) return nullptr;
 
-    row->cols[i] = ByteBuffer(reinterpret_cast<const uint8_t*>(vb),
-                              reinterpret_cast<const uint8_t*>(ve));
+    // Copy bytes into an Arrow Buffer (BinaryScalar expects a Buffer).
+    ARROW_ASSIGN_OR_RAISE(auto buf, arrow::AllocateBuffer(static_cast<int64_t>(len)));
+    std::memcpy(buf->mutable_data(), vb, len);
+    values.push_back(std::make_shared<arrow::BinaryScalar>(std::move(buf)));
   }
 
-  auto out = std::make_unique<ParsedObject>();
-  out->payload = ParsedPayload::Make(InputOutputDataType::COLUMNBYTES, std::move(row));
-  return out;
+  return std::make_shared<arrow::StructScalar>(std::move(values), std::move(struct_type));
 }
 
-}
+}  // namespace ROCKSDB_NAMESPACE

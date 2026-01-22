@@ -428,67 +428,61 @@ Status CompactionOutputs::AddToOutput(
   const Slice& value = c_iter.value();
 
   // transform value
-  std::vector<std::vector<uint8_t>> output_values;
-  int output_cfds_size = static_cast<int>(c_iter.output_cfds().size());
-  
-  if (to_underlying(transformer_type) == to_underlying(TransformerType::NOTRANSFORMATION)) {
-    output_values.emplace_back(
-      reinterpret_cast<const uint8_t*>(value.data()),
-      reinterpret_cast<const uint8_t*>(value.data()) + value.size()
-    );
+  std::vector<ByteBuffer> output_values;
+
+  auto as_bytes = [&](const rocksdb::Slice& v) -> ByteBuffer {
+    const auto* p = reinterpret_cast<const uint8_t*>(v.data());
+    return ByteBuffer(p, p + v.size());
+  };
+
+  auto has_flag = [&](TransformerType f) {
+    return (to_underlying(transformer_type) & to_underlying(f)) != 0;
+  };
+
+  if (transformer_type == TransformerType::NOTRANSFORMATION) {
+    s = EmitOne(0, key, value, &c_iter.ikey());
   } else {
-    std::vector<uint8_t> val_vec;
-    
-    if (to_underlying(transformer_type) == to_underlying(TransformerType::AUGMENTER)) {
-      output_values.emplace_back(
-        reinterpret_cast<const uint8_t*>(value.data()),
-        reinterpret_cast<const uint8_t*>(value.data()) + value.size()
-      );
-
-      val_vec.reserve(value.size() + key.size() + 10);
-
-      std::string lenbuf;
-      rocksdb::PutVarint32(&lenbuf, static_cast<uint32_t>(value.size()));
-      val_vec.insert(val_vec.end(), lenbuf.begin(), lenbuf.end()); 
-      val_vec.insert(val_vec.end(),
-                     reinterpret_cast<const uint8_t*>(value.data()),
-                     reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-
-      val_vec.insert(val_vec.end(),
-                     reinterpret_cast<const uint8_t*>(key.data()),
-                     reinterpret_cast<const uint8_t*>(key.data() + key.size()));
+    auto ar_input_res = schemaDescriptor->ParseToArrow(as_bytes(value));
+    if (!ar_input_res.ok()) {
+      s = EmitOne(0, key, value, &c_iter.ikey());
     } else {
-      val_vec.insert(val_vec.end(),
-                     reinterpret_cast<const uint8_t*>(value.data()),
-                     reinterpret_cast<const uint8_t*>(value.data() + value.size()));
-    }
-    
-    output_values = transformer->Transform(val_vec, schemaDescriptor);
-  }
+      ArrowRecord ar_input = std::move(*ar_input_res);
+      auto ar_outputs = transformer->Transform(key, ar_input);
 
-  for (size_t i = 0; i < output_values.size(); i++) {
-    auto compacted_value = Slice(reinterpret_cast<const char*>(output_values[i].data()), output_values[i].size());
-    
-    ParsedInternalKey index_ikey;
-    const ParsedInternalKey* ikey_ptr = nullptr;
-
-    auto transtype = to_underlying(transformer_type);
-    if (transtype == to_underlying(TransformerType::AUGMENTER) && i > 0) {
-      if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
-        return Status::Corruption("Failed to parse internal key from compacted value");
+      if (has_flag(TransformerType::AUGMENTER)) {
+        output_values.emplace_back(
+            reinterpret_cast<const uint8_t*>(value.data()),
+            reinterpret_cast<const uint8_t*>(value.data()) + value.size());
       }
-      ikey_ptr = &index_ikey;
 
-      key = compacted_value;
-      compacted_value = Slice();
-    } else {
-      ikey_ptr = &c_iter.ikey();
-    }
+      for (const auto& ar_output : ar_outputs) {
+        auto tvalue_res = schemaDescriptor->SerializeFromArrow(ar_output);
+        if (!tvalue_res.ok()) return Status::Corruption(tvalue_res.status().ToString());
+        output_values.push_back(std::move(*tvalue_res));
+      }
+
+      for (size_t i = 0; i < output_values.size(); i++) {
+        const auto& output_value = output_values[i];
+        Slice compacted_value(reinterpret_cast<const char*>(output_value.data()), output_value.size());
+        const ParsedInternalKey* ikey_ptr = nullptr;
+
+        if (has_flag(TransformerType::AUGMENTER)) {
+          ParsedInternalKey index_ikey;
+          if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
+            s = Status::Corruption("Failed to parse internal key from compacted value");
+            continue;
+          }
+          ikey_ptr = &index_ikey;
+          key = compacted_value;
+          compacted_value = Slice();
+        } else {
+          ikey_ptr = &c_iter.ikey();
+        }
     
-    s = EmitOne(i, key, compacted_value, ikey_ptr);
-    if (!s.ok()) return s;
+        s = EmitOne(i, key, compacted_value, ikey_ptr);
+      }
+    }
   }
-
   return s;
 }
 
