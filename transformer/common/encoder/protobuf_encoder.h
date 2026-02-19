@@ -19,12 +19,11 @@ class ProtobufBytesRowEncoder final : public Encoder {
 
   InputOutputDataType OutputType() const override { return InputOutputDataType::PROTOBUF; }
 
-  ByteBuffer SerializeFromArrow(const ArrowRecord& rec) const override;
+  std::vector<ByteBuffer> SerializeFromArrow(const ArrowRecord& rec) const override;
 
  private:
   size_t num_cols_;
 
-  static void AppendVarint(ByteBuffer* out, uint64_t v);
 };
 
 }  // namespace ROCKSDB_NAMESPACE

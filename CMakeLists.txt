@@ -1141,6 +1141,8 @@ configure_file(util/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
 find_package(jsoncpp CONFIG REQUIRED)
 find_package(Arrow CONFIG REQUIRED)
 
+set(MYCELIUM_ARROW_LIBS Arrow::arrow)
+
 if (NOT TARGET Arrow::arrow)
   if (TARGET Arrow::arrow_shared)
     add_library(Arrow::arrow ALIAS Arrow::arrow_shared)

@@ -458,7 +458,8 @@ Status CompactionOutputs::AddToOutput(
       for (const auto& ar_output : ar_outputs) {
         auto tvalue_res = schemaDescriptor->SerializeFromArrow(ar_output);
         if (!tvalue_res.ok()) return Status::Corruption(tvalue_res.status().ToString());
-        output_values.push_back(std::move(*tvalue_res));
+        auto& tvalue = *tvalue_res;
+        output_values.insert(output_values.end(), std::make_move_iterator(tvalue.begin()), std::make_move_iterator(tvalue.end()));
       }
 
       for (size_t i = 0; i < output_values.size(); i++) {

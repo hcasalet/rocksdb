@@ -91,7 +91,7 @@ struct FieldSchema {
   int field_number;
 };
 
-using ArrowRecord = std::shared_ptr<arrow::StructScalar>; 
+using ArrowRecord = std::shared_ptr<arrow::RecordBatch>; 
 
 class Parser {
  public:
@@ -121,7 +121,7 @@ class Encoder {
   virtual InputOutputDataType OutputType() const = 0;
 
   // Encode an in-memory representation into bytes.
-  virtual ByteBuffer SerializeFromArrow(const ArrowRecord& rec) const = 0;
+  virtual std::vector<ByteBuffer> SerializeFromArrow(const ArrowRecord& rec) const = 0;
 
   // Optional: describe outputs (useful for distributor/augmenter cases).
   virtual const std::vector<std::vector<FieldSchema>>& GetOutputFieldSchemas() const {
@@ -170,7 +170,7 @@ class SchemaDescriptor {
     if (!c.parser->Validate(data)) return arrow::Status::Invalid("Validation failed");
     return c.parser->ParseToArrow(data);
    }
-   arrow::Result<ByteBuffer> SerializeFromArrow(const ArrowRecord& rec) const {
+   arrow::Result<std::vector<ByteBuffer>> SerializeFromArrow(const ArrowRecord& rec) const {
     const auto& c = OutputCodec();
     if (!c.encoder) return arrow::Status::Invalid("No encoder configured");
     return c.encoder->SerializeFromArrow(rec);

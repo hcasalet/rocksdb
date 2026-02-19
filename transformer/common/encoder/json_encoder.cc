@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include <arrow/io/memory.h>
 #include <arrow/scalar.h>
 #include <arrow/type.h>
 #include <arrow/util/checked_cast.h>
@@ -13,6 +14,7 @@
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
+#include <jsoncpp/json/json.h>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -21,118 +23,82 @@ InputOutputDataType JsonEncoder::OutputType() const {
 }
 
 namespace {
+static inline std::vector<ByteBuffer> SplitLinesToByteBuffers(const std::string& s) {
+  std::vector<ByteBuffer> lines;
+  size_t start = 0;
 
-template <typename WriterT>
-void WriteScalarAsJson(WriterT& w, const arrow::Scalar& s) {
-  if (!s.is_valid) {
-    w.Null();
-    return;
+  while (start < s.size()) {
+    size_t end = s.find('\n', start);
+    if (end == std::string::npos) end = s.size();
+
+    if (end > start) {
+      const uint8_t* p = reinterpret_cast<const uint8_t*>(s.data() + start);
+      lines.emplace_back(p, p + (end - start));  // copy bytes of the line
+    }
+
+    start = end + 1;
   }
 
-  switch (s.type->id()) {
-    case arrow::Type::BOOL:
-      w.Bool(arrow::internal::checked_cast<const arrow::BooleanScalar&>(s).value);
-      return;
-
-    case arrow::Type::INT8:
-      w.Int(arrow::internal::checked_cast<const arrow::Int8Scalar&>(s).value);
-      return;
-    case arrow::Type::INT16:
-      w.Int(arrow::internal::checked_cast<const arrow::Int16Scalar&>(s).value);
-      return;
-    case arrow::Type::INT32:
-      w.Int(arrow::internal::checked_cast<const arrow::Int32Scalar&>(s).value);
-      return;
-    case arrow::Type::INT64:
-      w.Int64(arrow::internal::checked_cast<const arrow::Int64Scalar&>(s).value);
-      return;
-
-    case arrow::Type::UINT8:
-      w.Uint(arrow::internal::checked_cast<const arrow::UInt8Scalar&>(s).value);
-      return;
-    case arrow::Type::UINT16:
-      w.Uint(arrow::internal::checked_cast<const arrow::UInt16Scalar&>(s).value);
-      return;
-    case arrow::Type::UINT32:
-      w.Uint(arrow::internal::checked_cast<const arrow::UInt32Scalar&>(s).value);
-      return;
-    case arrow::Type::UINT64:
-      w.Uint64(arrow::internal::checked_cast<const arrow::UInt64Scalar&>(s).value);
-      return;
-
-    case arrow::Type::FLOAT:
-      w.Double(static_cast<double>(arrow::internal::checked_cast<const arrow::FloatScalar&>(s).value));
-      return;
-    case arrow::Type::DOUBLE:
-      w.Double(arrow::internal::checked_cast<const arrow::DoubleScalar&>(s).value);
-      return;
-
-    case arrow::Type::STRING: {
-      const auto& ss = arrow::internal::checked_cast<const arrow::StringScalar&>(s);
-      const auto view = ss.value;  // string_view
-      w.String(reinterpret_cast<const char*>(view->data()), static_cast<rapidjson::SizeType>(view->size()));
-      return;
-    }
-    case arrow::Type::LARGE_STRING: {
-      const auto& ss = arrow::internal::checked_cast<const arrow::LargeStringScalar&>(s);
-      const auto view = ss.value;
-      w.String(reinterpret_cast<const char*>(view->data()), static_cast<rapidjson::SizeType>(view->size()));
-      return;
-    }
-
-    default: {
-      // Safe fallback: represent as JSON string.
-      const std::string repr = s.ToString();
-      w.String(repr.data(), static_cast<rapidjson::SizeType>(repr.size()));
-      return;
-    }
-  }
+  return lines;
 }
 
-}  // namespace
+static inline std::string BytesToString(const uint8_t* p, int64_t n) {
+  return std::string(reinterpret_cast<const char*>(p),
+                     reinterpret_cast<const char*>(p) + n);
+}
 
-ByteBuffer JsonEncoder::SerializeFromArrow(const ArrowRecord& rec) const {
-  // ArrowRecord is std::shared_ptr<arrow::StructScalar>
-  if (!rec) return {};
+}
 
-  const auto& dtype = rec->type;
-  if (!dtype || dtype->id() != arrow::Type::STRUCT) {
-    return {};
-  }
+std::vector<ByteBuffer> JsonEncoder::SerializeFromArrow(const ArrowRecord& rb) const {
+  if (!rb) return {};
+  if (!rb->schema()) return {};
 
-  const auto& st = arrow::internal::checked_cast<const arrow::StructType&>(*dtype);
-  const int32_t n = st.num_fields();
+  const int64_t rows = rb->num_rows();
+  const int cols = rb->num_columns();
 
-  rapidjson::StringBuffer sb;
-  rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+  std::vector<ByteBuffer> out;
+  out.reserve(static_cast<size_t>(rows));
 
-  writer.StartObject();
+  Json::StreamWriterBuilder wb;
+  wb["indentation"] = "";          // compact
+  wb["emitUTF8"] = true;
 
-  // If the whole struct is null, we still emit an empty object {} (policy).
-  // If you prefer "null" instead, replace this block accordingly.
-  if (rec->is_valid) {
-    for (int32_t i = 0; i < n; ++i) {
-      const auto& field = st.field(i);
+  for (int64_t r = 0; r < rows; ++r) {
+    Json::Value obj(Json::objectValue);
 
-      auto child_res = rec->field(i);  // arrow::Result<std::shared_ptr<arrow::Scalar>>
-      if (!child_res.ok()) {
-        return {};
+    for (int c = 0; c < cols; ++c) {
+      const std::string key = rb->schema()->field(c)->name();
+
+      const auto& arr = rb->column(c);
+      if (arr->IsNull(r)) {
+        continue;
       }
-      std::shared_ptr<arrow::Scalar> child = std::move(*child_res);
-      if (!field || !child) return {};
 
-      const std::string& name = field->name();
-      writer.Key(name.data(), static_cast<rapidjson::SizeType>(name.size()));
-      WriteScalarAsJson(writer, *child);
+      if (arr->type_id() == arrow::Type::BINARY) {
+        auto a = std::static_pointer_cast<arrow::BinaryArray>(arr);
+        int32_t n = 0;
+        const uint8_t* p = a->GetValue(static_cast<int64_t>(r), &n);
+        obj[key] = BytesToString(p, n);
+      } else { // LARGE_BINARY
+        auto a = std::static_pointer_cast<arrow::LargeBinaryArray>(arr);
+        int64_t n = 0;
+        const uint8_t* p = a->GetValue(static_cast<int64_t>(r), &n);
+        obj[key] = BytesToString(p, n);
+      }
     }
+
+    std::unique_ptr<Json::StreamWriter> w(wb.newStreamWriter());
+    std::ostringstream oss;
+    w->write(obj, &oss);
+    std::string s = oss.str();
+
+    ByteBuffer buf;
+    buf.resize(s.size());
+    std::memcpy(buf.data(), s.data(), s.size());
+    out.push_back(std::move(buf));
   }
 
-  writer.EndObject();
-
-  const char* s = sb.GetString();
-  const size_t len = sb.GetSize();
-  return ByteBuffer(reinterpret_cast<const std::uint8_t*>(s),
-                    reinterpret_cast<const std::uint8_t*>(s) + len);
+  return out; 
 }
 
 }  // namespace ROCKSDB_NAMESPACE

@@ -46,22 +46,25 @@ arrow::Result<ArrowRecord> FixedBin64Parser::ParseToArrow(const ByteBuffer& data
   for (int i = 0; i < num_cols_; ++i) {
     fields.push_back(arrow::field(schema_[i].name, arrow::uint64(), /*nullable=*/false));
   }
-  auto struct_type = arrow::struct_(std::move(fields));
+  auto schema = arrow::schema(std::move(fields));
 
-  // Build field scalars (one "row"): [UInt64Scalar(v0), UInt64Scalar(v1), ...]
-  arrow::ScalarVector values;
-  values.reserve(static_cast<size_t>(num_cols_));
+  // Build field vectors (one "row"): [UInt64Scalar(v0), UInt64Scalar(v1), ...]
+  std::vector<std::shared_ptr<arrow::Array>> columns;
+  columns.reserve(static_cast<size_t>(num_cols_));
 
   const std::uint8_t* p = data.data();
   for (int i = 0; i < num_cols_; ++i) {
     const std::uint64_t v = ReadFixed64LE(p + (static_cast<size_t>(i) * 8));
-    values.push_back(std::make_shared<arrow::UInt64Scalar>(v));
+
+    arrow::UInt64Builder b;
+    ARROW_RETURN_NOT_OK(b.Append(v));
+
+    std::shared_ptr<arrow::Array> arr;
+    ARROW_RETURN_NOT_OK(b.Finish(&arr));
+    columns.push_back(std::move(arr));
   }
 
-  // Construct StructScalar from values + struct type.
-  // Note: StructScalar's ctor takes (ScalarVector values, DataType type).
-  auto rec = std::make_shared<arrow::StructScalar>(std::move(values), std::move(struct_type));
-  return rec;
+  return arrow::RecordBatch::Make(std::move(schema), /*num_rows=*/1, std::move(columns));
 }
 
 std::uint64_t FixedBin64Parser::ReadFixed64LE(const std::uint8_t* p) {

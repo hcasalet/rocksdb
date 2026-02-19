@@ -95,45 +95,42 @@ void CsvEncoder::AppendField(std::string* out, const std::string& f) {
   out->push_back('"');
 }
 
-ByteBuffer CsvEncoder::SerializeFromArrow(const ArrowRecord& rec) const {
-  // ArrowRecord is std::shared_ptr<arrow::StructScalar>
-  if (!rec) return {};
+std::vector<ByteBuffer> CsvEncoder::SerializeFromArrow(const ArrowRecord& rec) const {
+  std::vector<ByteBuffer> out;
 
-  const auto& dtype = rec->type;
-  if (!dtype || dtype->id() != arrow::Type::STRUCT) {
-    return {};
-  }
+  if (!rec) return out;
+  if (rec->num_rows() <= 0) return out;
+  if (rec->num_columns() <= 0) return out;
 
-  const auto& st = arrow::internal::checked_cast<const arrow::StructType&>(*dtype);
-  const int32_t n = st.num_fields();
+  out.reserve(static_cast<size_t>(rec->num_rows()));
 
-  std::string line;
-  // Rough reserve: assume ~8 chars per field plus commas/newline (tune if you want)
-  line.reserve(static_cast<size_t>(n) * 10 + 1);
+  for (int64_t i = 0; i < rec->num_rows(); ++i) {
+    std::string line;
+    line.reserve(static_cast<size_t>(rec->num_columns()) * 10 + 1);
 
-  // If the entire struct is null, policy: emit empty fields for the right arity.
-  // This preserves the CSV column count.
-  for (int32_t i = 0; i < n; ++i) {
-    if (i) line.push_back(',');
+    for (int c = 0; c < rec->num_columns(); ++c) {
+      if (c) line.push_back(',');
 
-    std::string field_str;
-    if (rec->is_valid) {
-      auto maybe_child = rec->field(i);
-      if (!maybe_child.ok()) {
-        return {}; 
+      const auto& arr = rec->column(c);
+      if (!arr || arr->IsNull(i)) {
+        continue;
       }
-      std::shared_ptr<arrow::Scalar> child = *maybe_child;
-      if (!child) return {};
-      field_str = ScalarToStringForCsv(*child);
-    } else {
-      field_str = "";
+
+      auto maybe_scalar = arr->GetScalar(i);
+      if (!maybe_scalar.ok() || !*maybe_scalar) {
+        continue;
+      }
+      const arrow::Scalar& s = **maybe_scalar;
+
+      std::string field_str = ScalarToStringForCsv(s);
+      AppendField(&line, field_str);
     }
 
-    AppendField(&line, field_str);
+    line.push_back('\n');
+    out.push_back(ByteBuffer(line.begin(), line.end()));
   }
 
-  line.push_back('\n');
-  return ByteBuffer(line.begin(), line.end());
+  return out;
 }
 
 }

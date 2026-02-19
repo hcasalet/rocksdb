@@ -74,37 +74,39 @@ void FixedBin64Encoder::AppendFixed64LE(ByteBuffer* out, std::uint64_t v) {
   out->push_back(static_cast<std::uint8_t>((v >> 56) & 0xFF));
 }
 
-ByteBuffer FixedBin64Encoder::SerializeFromArrow(const ArrowRecord& rec) const {
-  // ArrowRecord is std::shared_ptr<arrow::StructScalar>
-  if (!rec) return {};
+std::vector<ByteBuffer> FixedBin64Encoder::SerializeFromArrow(const ArrowRecord& rec) const {
+  std::vector<ByteBuffer> out;
 
-  // If the whole struct scalar is null, we cannot serialize deterministically.
-  // Policy: fail-fast.
-  if (!rec->is_valid) return {};
+  if (!rec) return out;
+  if (rec->num_rows() <= 0) return out;
+  if (rec->num_columns() <= 0) return out;
 
-  const auto& dtype = rec->type;
-  if (!dtype || dtype->id() != arrow::Type::STRUCT) return {};
+  out.reserve(static_cast<size_t>(rec->num_rows()));
 
-  const auto& st = arrow::internal::checked_cast<const arrow::StructType&>(*dtype);
-  const int32_t n = st.num_fields();
+  for (int64_t i = 0; i < rec->num_rows(); ++i) {
+    ByteBuffer values;
+    values.reserve(static_cast<size_t>(rec->num_columns()) * 8);
 
-  ByteBuffer out;
-  out.reserve(static_cast<size_t>(n) * 8);
+    for (int c = 0; c < rec->num_columns(); ++c) {
+      const auto& arr = rec->column(c);
+      if (!arr || arr->IsNull(i)) {
+        continue;
+      }
 
-  for (int32_t i = 0; i < n; ++i) {
-    auto maybe_child = rec->field(static_cast<int>(i));
-    if (!maybe_child.ok()) {
-      return {};  // or throw/log depending on your policy
+      auto maybe_scalar = arr->GetScalar(i);
+      if (!maybe_scalar.ok() || !*maybe_scalar) {
+        continue;
+      }
+      const arrow::Scalar& s = **maybe_scalar;
+
+      std::uint64_t v = 0;
+      if (!ScalarToU64(s, &v)) {
+        continue;
+      }
+      AppendFixed64LE(&values, v);
     }
-    std::shared_ptr<arrow::Scalar> child = *maybe_child;
-    if (!child) return {};
 
-    std::uint64_t v = 0;
-    if (!ScalarToU64(*child, &v)) {
-      // Non-integer field, null field, or negative signed integer => reject.
-      return {};
-    }
-    AppendFixed64LE(&out, v);
+    out.push_back(values);
   }
 
   return out;

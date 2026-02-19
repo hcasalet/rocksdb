@@ -41,18 +41,19 @@ std::vector<ArrowRecord> Distributor::Transform(const Slice& /*key*/,
     return outputs;
   }
 
-  const std::shared_ptr<arrow::DataType>& dtype = input->type;
-  if (!dtype || dtype->id() != arrow::Type::STRUCT) {
-    // Not a struct => cannot split into sub-structs.
+  const auto& schema = input->schema();
+  if (!schema) {
     return {};
   }
 
-  const auto& struct_type = arrow::internal::checked_cast<const arrow::StructType&>(*dtype);
-  const int32_t num_fields = struct_type.num_fields();
+  const int32_t num_cols = input->num_columns();
+  const int64_t num_rows = input->num_rows();
 
-  // For each requested split group, build a new StructType + StructScalar.
+
+
+  // For each requested split group, build a new Schema + RecordBatch.
   for (const auto& cols : splits_) {
-    if (!ValidateSplitGroup(cols, num_fields)) {
+    if (!ValidateSplitGroup(cols, num_cols)) {
       // With this API (no Status return), fail-fast with empty result.
       return {};
     }
@@ -60,39 +61,33 @@ std::vector<ArrowRecord> Distributor::Transform(const Slice& /*key*/,
     std::vector<std::shared_ptr<arrow::Field>> out_fields;
     out_fields.reserve(cols.size());
 
-    std::vector<std::shared_ptr<arrow::Scalar>> out_scalars;
-    out_scalars.reserve(cols.size());
+    std::vector<std::shared_ptr<arrow::Array>> out_arrays;
+    out_arrays.reserve(cols.size());
 
     for (int idx : cols) {
-      const std::shared_ptr<arrow::Field>& f = struct_type.field(idx);
+      // Schema/field for this column.
+      const std::shared_ptr<arrow::Field>& f = schema->field(idx);
+      if (!f) {
+        return {};
+      }
       out_fields.emplace_back(f);
 
-      if (input->is_valid) {
-        // StructScalar::field(i) returns the i-th child scalar.
-        auto s_res = input->field(idx);  
-        if (!s_res.ok()) {
-          return {};
-        }
-        std::shared_ptr<arrow::Scalar> s = std::move(*s_res);
-        out_scalars.emplace_back(std::move(s));
-      } else {
-        // Input is null; emit a null scalar of the correct field type.
-        auto maybe_null = arrow::MakeNullScalar(f->type());
-        if (!maybe_null) {
-          return {};
-        }
-        out_scalars.emplace_back(std::move(maybe_null));
+      // Column data for this column.
+      std::shared_ptr<arrow::Array> arr = input->column(idx);
+      if (!arr) {
+        return {};
       }
+
+      if (arr->length() != num_rows) {
+        return {};
+      }
+      out_arrays.emplace_back(std::move(arr));
     }
 
-    auto out_type = arrow::struct_(std::move(out_fields));
-
-    // Construct the output struct scalar.
-    // This constructor exists in Arrow C++: StructScalar(vector<Scalar>, DataType).
-    outputs.emplace_back(
-        std::make_shared<arrow::StructScalar>(std::move(out_scalars), out_type));
+    auto out_schema = arrow::schema(std::move(out_fields));
+    outputs.emplace_back(arrow::RecordBatch::Make(out_schema, num_rows, std::move(out_arrays)));
   }
-
+  
   return outputs;
 }
 

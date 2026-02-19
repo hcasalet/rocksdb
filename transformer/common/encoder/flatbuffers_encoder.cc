@@ -11,80 +11,102 @@
 #include <arrow/result.h>
 #include <arrow/status.h>
 
+#include <flatbuffers/flatbuffers.h> 
+
 namespace ROCKSDB_NAMESPACE {
 
 InputOutputDataType FlatbuffersEncoder::OutputType() const {
   return InputOutputDataType::FLATBUFFERS;
 }
 
-namespace {
+std::vector<ByteBuffer> FlatbuffersEncoder::SerializeFromArrow(const ArrowRecord& rec) const {
+  std::vector<ByteBuffer> out;
 
-int FindFieldIndexByName(const arrow::StructType& st, const std::string& name) {
-  for (int i = 0; i < st.num_fields(); ++i) {
-    if (st.field(i)->name() == name) return i;
+  if (!rec) return out;
+  if (rec->num_rows() <= 0) return out;
+  if (rec->num_columns() <= 0) return out;
+
+  out.reserve(static_cast<size_t>(rec->num_rows()));
+
+  for (int64_t i = 0; i < rec->num_rows(); ++i) {
+    flatbuffers::FlatBufferBuilder fbb;
+    std::vector<flatbuffers::Offset<flat::Column>> values;
+    values.reserve(static_cast<size_t>(rec->num_columns()));
+
+    for (int c = 0; c < rec->num_columns(); ++c) {
+      const auto& arr = rec->column(c);
+      if (!arr || arr->IsNull(i)) {
+        continue;
+      }
+
+      auto maybe_scalar = arr->GetScalar(i);
+      if (!maybe_scalar.ok() || !*maybe_scalar) {
+        continue;
+      }
+      const arrow::Scalar& s = **maybe_scalar;
+
+      switch (arr->type_id()) {
+        case arrow::Type::STRING: {
+          const auto& ss = arrow::internal::checked_cast<const arrow::StringScalar&>(s);
+          const std::string& str = ss.value->ToString();
+          auto bytes_off = fbb.CreateVector(
+                              reinterpret_cast<const uint8_t*>(str.data()),
+                              static_cast<flatbuffers::uoffset_t>(str.size()));
+          values.push_back(flat::CreateColumn(fbb, bytes_off));
+          break;
+        }
+        case arrow::Type::LARGE_STRING: {
+          const auto& ss = arrow::internal::checked_cast<const arrow::LargeStringScalar&>(s);
+          const std::string& str = ss.value->ToString();
+          auto bytes_off = fbb.CreateVector(
+                              reinterpret_cast<const uint8_t*>(str.data()),
+                              static_cast<flatbuffers::uoffset_t>(str.size()));
+          values.push_back(flat::CreateColumn(fbb, bytes_off));
+          break;
+        }
+        case arrow::Type::INT32: {
+          const auto& is = arrow::internal::checked_cast<const arrow::Int32Scalar&>(s);
+          const int32_t v = is.value;
+          std::array<uint8_t, 4> buf{
+              static_cast<uint8_t>( static_cast<uint32_t>(v)        & 0xFF),
+              static_cast<uint8_t>((static_cast<uint32_t>(v) >>  8) & 0xFF),
+              static_cast<uint8_t>((static_cast<uint32_t>(v) >> 16) & 0xFF),
+              static_cast<uint8_t>((static_cast<uint32_t>(v) >> 24) & 0xFF),
+          };
+          auto bytes_off = fbb.CreateVector(buf.data(),
+                                   static_cast<flatbuffers::uoffset_t>(buf.size()));
+          values.push_back(flat::CreateColumn(fbb, bytes_off));
+          break;
+        }
+        case arrow::Type::DOUBLE: {
+          const auto& ds = arrow::internal::checked_cast<const arrow::DoubleScalar&>(s);
+          const double v = ds.value;
+          std::array<uint8_t, 8> buf;
+          std::memcpy(buf.data(), &v, 8);
+          auto bytes_off = fbb.CreateVector(buf.data(),
+                                   static_cast<flatbuffers::uoffset_t>(buf.size()));
+          values.push_back(flat::CreateColumn(fbb, bytes_off));
+          break;
+        }
+        default: {
+          const std::string str = s.ToString();
+          auto bytes_off = fbb.CreateVector(
+                              reinterpret_cast<const uint8_t*>(str.data()),
+                              static_cast<flatbuffers::uoffset_t>(str.size()));
+          values.push_back(flat::CreateColumn(fbb, bytes_off));
+          break;
+        }
+      }
+    }
+
+    auto vals_vec = fbb.CreateVector(values);
+    auto row = flat::CreateRow(fbb, vals_vec);
+    fbb.Finish(row);
+
+    out.emplace_back(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
   }
-  return -1;
-}
 
-arrow::Result<rocksdb::ByteBuffer> BytesFromScalar(const arrow::Scalar& s) {
-  if (!s.is_valid) return arrow::Status::Invalid("FlatbuffersRowEncoder: invalid input record");
-
-  switch (s.type->id()) {
-    case arrow::Type::BINARY: {
-      const auto& b = arrow::internal::checked_cast<const arrow::BinaryScalar&>(s);
-      const auto view = b.value;  // arrow::util::string_view
-      if (!view) return rocksdb::ByteBuffer{}; 
-      return ByteBuffer(view->data(), view->data() + view->size());
-    }
-    case arrow::Type::LARGE_BINARY: {
-      const auto& b = arrow::internal::checked_cast<const arrow::LargeBinaryScalar&>(s);
-      const auto view = b.value;
-      if (!view) return rocksdb::ByteBuffer{}; 
-      return ByteBuffer(view->data(), view->data() + view->size());
-    }
-    case arrow::Type::STRING: {
-      const auto& str = arrow::internal::checked_cast<const arrow::StringScalar&>(s);
-      const auto view = str.value;
-      if (!view) return rocksdb::ByteBuffer{}; 
-      return ByteBuffer(view->data(), view->data() + view->size());
-    }
-    case arrow::Type::LARGE_STRING: {
-      const auto& str = arrow::internal::checked_cast<const arrow::LargeStringScalar&>(s);
-      const auto view = str.value;
-      if (!view) return rocksdb::ByteBuffer{}; 
-      return ByteBuffer(view->data(), view->data() + view->size());
-    }
-    default:
-      return arrow::Status::Invalid("FlatbuffersRowEncoder: invalid scalar type");
-    }
-  }
-
-}  // namespace
-
-ByteBuffer FlatbuffersEncoder::SerializeFromArrow(const ArrowRecord& rec) const {
-  // ArrowRecord is std::shared_ptr<arrow::StructScalar>
-  if (!rec) return {};
-  if (!rec->is_valid) return {};
-
-  const auto& dtype = rec->type;
-  if (!dtype || dtype->id() != arrow::Type::STRUCT) return {};
-
-  const auto& st = arrow::internal::checked_cast<const arrow::StructType&>(*dtype);
-  if (st.num_fields() <= 0) return {};
-
-  // Prefer a field literally named "bytes" if it exists; otherwise use field 0.
-  int idx = FindFieldIndexByName(st, "bytes");
-  if (idx < 0) idx = 0;
-
-  auto maybe_child = rec->field(static_cast<int>(idx));
-  if (!maybe_child.ok()) {
-    return {};  // or throw/log depending on your policy
-  }
-  std::shared_ptr<arrow::Scalar> child = *maybe_child;
-  if (!child) return {};
-
-  auto r = BytesFromScalar(*child);
-  return std::move(*r);
+  return out;
 }
 
 }  // namespace ROCKSDB_NAMESPACE

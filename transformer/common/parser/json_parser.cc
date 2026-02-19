@@ -82,17 +82,17 @@ arrow::Result<ArrowRecord> JsonColsParser::ParseToArrow(const ByteBuffer& data) 
   const char* s = reinterpret_cast<const char*>(data.data());
   const size_t n = data.size();
 
-  // Build struct type: struct<col0: binary, col1: binary, ...>
+  // Build schema: struct<col0: binary, col1: binary, ...>
   std::vector<std::shared_ptr<arrow::Field>> fields;
   fields.reserve(num_cols_);
   for (size_t i = 0; i < num_cols_; ++i) {
     fields.push_back(arrow::field("col" + std::to_string(i), arrow::binary(),
                                   /*nullable=*/false));
   }
-  auto struct_type = arrow::struct_(std::move(fields));
+  auto schema = arrow::schema(std::move(fields));
 
-  arrow::ScalarVector values;
-  values.reserve(num_cols_);
+  std::vector<std::shared_ptr<arrow::Array>> columns;
+  columns.reserve(num_cols_);
 
   for (size_t i = 0; i < num_cols_; ++i) {
     const std::string key = "col" + std::to_string(i);
@@ -112,12 +112,16 @@ arrow::Result<ArrowRecord> JsonColsParser::ParseToArrow(const ByteBuffer& data) 
     }
 
     // Copy bytes into an Arrow Buffer (BinaryScalar expects a Buffer).
-    ARROW_ASSIGN_OR_RAISE(auto buf, arrow::AllocateBuffer(static_cast<int64_t>(len)));
-    std::memcpy(buf->mutable_data(), vb, len);
-    values.push_back(std::make_shared<arrow::BinaryScalar>(std::move(buf)));
+    arrow::BinaryBuilder builder;
+    ARROW_RETURN_NOT_OK(builder.Reserve(1));
+    // If your JSON value is raw bytes in a string (no escaping), this is fine.
+    ARROW_RETURN_NOT_OK(builder.Append(reinterpret_cast<const uint8_t*>(vb), len));
+
+    ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Array> arr, builder.Finish());
+    columns.push_back(std::move(arr));
   }
 
-  return std::make_shared<arrow::StructScalar>(std::move(values), std::move(struct_type));
+  return arrow::RecordBatch::Make(std::move(schema), /*num_rows=*/1, std::move(columns));
 }
 
 }  // namespace ROCKSDB_NAMESPACE

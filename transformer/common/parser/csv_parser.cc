@@ -289,19 +289,21 @@ arrow::Result<ArrowRecord> CsvParser::ParseToArrow(const ByteBuffer& data) const
   std::vector<std::shared_ptr<arrow::Field>> arrow_fields;
   arrow_fields.reserve(schema.size());
 
-  std::vector<std::shared_ptr<arrow::Scalar>> scalars;
-  scalars.reserve(schema.size());
+  std::vector<std::shared_ptr<arrow::Array>> columns;
+  columns.reserve(schema.size());
 
   for (size_t i = 0; i < schema.size(); ++i) {
     auto dt = FieldTypeFromString(schema[i].type);
     arrow_fields.push_back(arrow::field(schema[i].name, dt));
 
     ARROW_ASSIGN_OR_RAISE(auto sc, ParseScalar(fields[i], dt, opts_.empty_is_null));
-    scalars.push_back(std::move(sc));
+
+    ARROW_ASSIGN_OR_RAISE(auto arr, arrow::MakeArrayFromScalar(*sc, /*length=*/1));
+    columns.push_back(std::move(arr));
   }
 
-  auto struct_type = arrow::struct_(arrow_fields);
-  return std::make_shared<arrow::StructScalar>(std::move(scalars), std::move(struct_type));
+  auto rb_schema = std::make_shared<arrow::Schema>(std::move(arrow_fields));
+  return arrow::RecordBatch::Make(std::move(rb_schema), /*num_rows=*/1, std::move(columns));
 }
 
 }  // namespace ROCKSDB_NAMESPACE
