@@ -325,6 +325,9 @@ DEFINE_bool(use_uint64_comparator, false, "use Uint64 user comparator");
 
 DEFINE_int64(batch_size, 1, "Batch size");
 
+DEFINE_bool(doing_pre_insert_transformation, false,
+            "Doing data transformation to val before insert.");
+
 static bool ValidateKeySize(const char* /*flagname*/, int32_t /*value*/) {
   return true;
 }
@@ -5273,6 +5276,11 @@ class Benchmark {
           }
         } else if (FLAGS_num_column_families <= 1) {
           batch.Put(key, val);
+        } else if (FLAGS_doing_pre_insert_transformation) {
+          auto vals = split_value_by_delimiter_into_groups(val, FLAGS_num_column_families, '|');
+          for (size_t i=0; i < vals.size(); i++) {
+            batch.Put(db_with_cfh->GetCfh(static_cast<int>(i)), key, vals[i]);
+          }
         } else {
           // We use same rand_num as seed for key and column family so that we
           // can deterministically find the cfh corresponding to a particular
@@ -6770,6 +6778,41 @@ class Benchmark {
     } else {
       BGWriter(thread, kMerge);
     }
+  }
+
+  std::vector<std::string> split_value_by_delimiter_into_groups(
+    Slice val, int splits, char delimiter = '|') {
+    std::vector<std::string> outputs;
+
+    if (splits <= 0) {
+      return outputs;
+    }
+
+    outputs.resize(static_cast<size_t>(splits));
+
+    const char* data = val.data();
+    size_t field_start = 0;
+    int field_idx = 0;
+
+    for (size_t i = 0; i <= val.size(); ++i) {
+      bool at_end = (i == val.size());
+      bool at_delim = (!at_end && data[i] == delimiter);
+
+      if (at_end || at_delim) {
+        int target = field_idx % splits;
+
+        if (!outputs[target].empty()) {
+          outputs[target].push_back(delimiter);
+        }
+
+        outputs[target].append(data + field_start, i - field_start);
+
+        field_start = i + 1;
+        ++field_idx;
+      }
+    }
+
+    return outputs;
   }
 
   void DoDelete(ThreadState* thread, bool seq) {
