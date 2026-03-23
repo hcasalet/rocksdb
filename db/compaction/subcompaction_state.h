@@ -224,6 +224,23 @@ class SubcompactionState {
                           const CompactionFileOpenFunc& open_file_func,
                           const CompactionFileCloseFunc& close_file_func);
 
+  // ── Admission control forwarding ──────────────────────────────────────
+  // Propagate scheduler/estimator/file-number to both output groups so that
+  // AddToOutput() on either group can apply the admission-control logic.
+  void SetScheduler(TransformScheduler* sched) {
+    compaction_outputs_.SetScheduler(sched);
+    penultimate_level_outputs_.SetScheduler(sched);
+  }
+  void SetEstimator(CompactionSlackEstimator* estimator) {
+    compaction_outputs_.SetEstimator(estimator);
+    penultimate_level_outputs_.SetEstimator(estimator);
+  }
+  void SetCurrentInputFileNumber(uint64_t fn) {
+    compaction_outputs_.SetCurrentInputFileNumber(fn);
+    penultimate_level_outputs_.SetCurrentInputFileNumber(fn);
+  }
+  // ─────────────────────────────────────────────────────────────────────
+
   // Close all compaction output files, both output_to_penultimate_level outputs
   // and normal outputs.
   Status CloseCompactionFiles(const Status& curr_status,

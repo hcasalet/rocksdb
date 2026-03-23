@@ -28,6 +28,8 @@
 #include <cstdint>
 #include <ctime>
 
+#include "rocksdb/rocksdb_namespace.h"
+
 namespace ROCKSDB_NAMESPACE {
 
 // ---------------------------------------------------------------------------
@@ -39,7 +41,7 @@ class CpuTimer {
  public:
   // @param accumulator  Pointer to a nanosecond counter.  Elapsed time is
   //                     added atomically on destruction.
-  explicit CpuTimer(int64_t* accumulator);
+  explicit CpuTimer(uint64_t* accumulator);
   ~CpuTimer();
 
   // Non-copyable, non-movable.
@@ -47,7 +49,7 @@ class CpuTimer {
   CpuTimer& operator=(const CpuTimer&) = delete;
 
  private:
-  int64_t* accumulator_;
+  uint64_t* accumulator_;
   struct timespec start_;
 };
 

@@ -678,8 +678,10 @@ set(SOURCES
         db/compaction/compaction_service_job.cc
         db/compaction/compaction_state.cc
         db/compaction/compaction_outputs.cc
+        db/compaction/compaction_slack_estimator.cc
         db/compaction/sst_partitioner.cc
         db/compaction/subcompaction_state.cc
+        db/compaction/transform_scheduler.cc
         db/convenience.cc
         db/db_filesnapshot.cc
         db/db_impl/compacted_db_impl.cc

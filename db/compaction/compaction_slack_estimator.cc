@@ -28,7 +28,7 @@ static int64_t ThreadCpuNs() {
 // CpuTimer
 // ---------------------------------------------------------------------------
 
-CpuTimer::CpuTimer(int64_t* accumulator) : accumulator_(accumulator) {
+CpuTimer::CpuTimer(uint64_t* accumulator) : accumulator_(accumulator) {
   assert(accumulator_ != nullptr);
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_);
 }
@@ -43,7 +43,7 @@ CpuTimer::~CpuTimer() {
   if (elapsed > 0) {
     // Simple non-atomic add: CpuTimer is used only within a single compaction
     // thread (one CompactionSlackEstimator per job), so no data race occurs.
-    *accumulator_ += elapsed;
+    *accumulator_ += static_cast<uint64_t>(elapsed);
   }
 }
 
