@@ -1661,3 +1661,18 @@ option(WITH_BENCHMARK "build benchmark tests" OFF)
 if(WITH_BENCHMARK)
   add_subdirectory(${PROJECT_SOURCE_DIR}/microbench/)
 endif()
+
+# ── libmycelium: portable transformation core (Phase P0 scaffold) ─────────────
+# libmycelium lives alongside (not inside) the RocksDB tree.  During P0 it is
+# header-only; in P2+ it will become a compiled STATIC library once source
+# files migrate out of the RocksDB tree.
+#
+# Pass -DMYCELIUM_WITH_PROTOBUF=ON / -DMYCELIUM_WITH_FLATBUFFERS=ON to enable
+# the optional serialisation back-ends inside libmycelium.
+option(WITH_LIBMYCELIUM "Build the portable libmycelium alongside RocksDB" ON)
+if(WITH_LIBMYCELIUM)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libmycelium
+                   ${CMAKE_CURRENT_BINARY_DIR}/libmycelium)
+  # Let the RocksDB adapter headers see mycelium/ include path.
+  target_link_libraries(rocksdb PRIVATE mycelium::mycelium)
+endif()
