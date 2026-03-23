@@ -14,7 +14,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 std::vector<ArrowRecord> Augmenter::Transform(
-    const Slice& key,
+    std::string_view key,
     const ArrowRecord& input) const {
   std::vector<ArrowRecord> outputs;
 
@@ -27,8 +27,8 @@ std::vector<ArrowRecord> Augmenter::Transform(
   constexpr std::string_view key_field_separator = "%%";
   constexpr std::string_view original_key_separator = "$$$KEY$$$";
 
-  // Copy primary key bytes once.
-  const std::string_view pk_sv(key.data(), key.size());
+  // key is already string_view — use directly.
+  const std::string_view pk_sv = key;
 
   auto out_schema = arrow::schema({
       arrow::field("index_no", arrow::int32(),  /*nullable=*/false),

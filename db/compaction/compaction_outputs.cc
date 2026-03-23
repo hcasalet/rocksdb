@@ -455,10 +455,11 @@ Status CompactionOutputs::AddToOutput(
         auto decision = scheduler_->Decide(transformer_type, sst_file_number);
         if (decision == TransformScheduler::Decision::kApply) {
           uint64_t transform_cpu_ns = 0;
-          decltype(transformer->Transform(key, ar_input)) ar_outputs;
+          // key is rocksdb::Slice; convert to string_view at the adapter boundary.
+          decltype(transformer->Transform(key.ToStringView(), ar_input)) ar_outputs;
           {
             CpuTimer timer(&transform_cpu_ns);
-            ar_outputs = transformer->Transform(key, ar_input);
+            ar_outputs = transformer->Transform(key.ToStringView(), ar_input);
           }
           scheduler_->OnApplied(transform_cpu_ns);
 
@@ -505,7 +506,7 @@ Status CompactionOutputs::AddToOutput(
         }
       } else {
         // No scheduler attached — original Mycelium path.
-        auto ar_outputs = transformer->Transform(key, ar_input);
+        auto ar_outputs = transformer->Transform(key.ToStringView(), ar_input);
 
         if (has_flag(TransformerType::AUGMENTER)) {
           output_values.emplace_back(

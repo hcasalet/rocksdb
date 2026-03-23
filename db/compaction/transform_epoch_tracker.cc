@@ -105,7 +105,9 @@ static void PutFixed32LE(std::string* dst, uint32_t v) {
   dst->append(buf, 4);
 }
 
-static bool GetFixed16LE(Slice* input, uint16_t* v) {
+// Cursor helpers now take std::string_view* instead of rocksdb::Slice*.
+// string_view::remove_prefix() has identical semantics to Slice::remove_prefix().
+static bool GetFixed16LE(std::string_view* input, uint16_t* v) {
   if (input->size() < 2) return false;
   const auto* d = reinterpret_cast<const uint8_t*>(input->data());
   *v = static_cast<uint16_t>(d[0]) | (static_cast<uint16_t>(d[1]) << 8);
@@ -113,7 +115,7 @@ static bool GetFixed16LE(Slice* input, uint16_t* v) {
   return true;
 }
 
-static bool GetFixed32LE(Slice* input, uint32_t* v) {
+static bool GetFixed32LE(std::string_view* input, uint32_t* v) {
   if (input->size() < 4) return false;
   const auto* d = reinterpret_cast<const uint8_t*>(input->data());
   *v = 0;
@@ -133,21 +135,24 @@ void TransformEpochTracker::EncodeTo(std::string* out) const {
   }
 }
 
-Status TransformEpochTracker::DecodeFrom(Slice input) {
+mycelium::Status TransformEpochTracker::DecodeFrom(std::string_view input) {
   states_.clear();
 
   uint32_t num_records = 0;
   if (!GetFixed32LE(&input, &num_records)) {
-    return Status::Corruption("TransformEpochTracker: truncated record count");
+    return mycelium::Status::Corruption(
+        "TransformEpochTracker: truncated record count");
   }
 
   for (uint32_t i = 0; i < num_records; i++) {
     uint16_t name_len = 0;
     if (!GetFixed16LE(&input, &name_len)) {
-      return Status::Corruption("TransformEpochTracker: truncated name length");
+      return mycelium::Status::Corruption(
+          "TransformEpochTracker: truncated name length");
     }
     if (input.size() < name_len + 1u) {
-      return Status::Corruption("TransformEpochTracker: truncated name/state");
+      return mycelium::Status::Corruption(
+          "TransformEpochTracker: truncated name/state");
     }
     std::string name(input.data(), name_len);
     input.remove_prefix(name_len);
@@ -158,11 +163,12 @@ Status TransformEpochTracker::DecodeFrom(Slice input) {
     if (state_byte != static_cast<uint8_t>(TransformState::APPLIED) &&
         state_byte != static_cast<uint8_t>(TransformState::DEFERRED) &&
         state_byte != static_cast<uint8_t>(TransformState::UNKNOWN)) {
-      return Status::Corruption("TransformEpochTracker: unknown state byte");
+      return mycelium::Status::Corruption(
+          "TransformEpochTracker: unknown state byte");
     }
     states_[name] = static_cast<TransformState>(state_byte);
   }
-  return Status::OK();
+  return mycelium::Status::OK();
 }
 
 }  // namespace ROCKSDB_NAMESPACE

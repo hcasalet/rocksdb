@@ -34,8 +34,10 @@
 #include <unordered_map>
 #include <vector>
 
-#include "rocksdb/slice.h"
-#include "rocksdb/status.h"
+#include <string_view>
+
+// mycelium::Status replaces rocksdb::Status — no RocksDB header needed here.
+#include "mycelium/status.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -99,7 +101,7 @@ class TransformEpochTracker {
 
   // Decodes state from the byte span starting at `input.data()`.
   // Returns an error if the encoding is malformed.
-  Status DecodeFrom(Slice input);
+  mycelium::Status DecodeFrom(std::string_view input);
 
  private:
   // cf_name → state

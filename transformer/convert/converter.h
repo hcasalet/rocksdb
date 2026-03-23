@@ -12,7 +12,7 @@ class Converter final : public Transformer {
   TransformerType Supports() const override { return TransformerType::CONVERTER; }
 
   std::vector<ArrowRecord> Transform(
-    const Slice& key,
+    std::string_view key,
     const ArrowRecord& input) const override;
 };
 

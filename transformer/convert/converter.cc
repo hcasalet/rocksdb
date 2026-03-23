@@ -6,7 +6,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 std::vector<ArrowRecord> Converter::Transform(
-    const Slice& key,
+    std::string_view key,
     const ArrowRecord& input) const {
   (void)key;
   return {input};

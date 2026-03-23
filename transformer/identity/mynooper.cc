@@ -4,7 +4,7 @@
 namespace ROCKSDB_NAMESPACE {
 
 std::vector<ArrowRecord> Mynooper::Transform(
-      const Slice& key,
+      std::string_view key,
       const ArrowRecord& input) const
 {
     (void)key;

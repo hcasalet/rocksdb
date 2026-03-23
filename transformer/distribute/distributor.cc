@@ -31,7 +31,7 @@ bool ValidateSplitGroup(const std::vector<int>& cols, int32_t num_fields) {
 
 }  // namespace
 
-std::vector<ArrowRecord> Distributor::Transform(const Slice& /*key*/,
+std::vector<ArrowRecord> Distributor::Transform(std::string_view /*key*/,
                                                const ArrowRecord& input) const {
   std::vector<ArrowRecord> outputs;
   outputs.reserve(splits_.size());

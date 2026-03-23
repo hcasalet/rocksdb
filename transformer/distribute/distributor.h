@@ -5,7 +5,6 @@
 #include <utility>
 #include <vector>
 
-#include "rocksdb/slice.h"
 #include "rocksdb/transformer.h"
 #include "rocksdb/rocksdb_namespace.h"
 
@@ -23,7 +22,7 @@ class Distributor final : public Transformer {
   int GetNumSplits() const { return splits_.size(); }
 
   std::vector<ArrowRecord> Transform(
-      const Slice& key,
+      std::string_view key,
       const ArrowRecord& input) const override;
 
  private:

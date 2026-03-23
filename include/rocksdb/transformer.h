@@ -9,8 +9,12 @@
 #include <typeinfo>
 #include <utility>
 
+#include <string_view>
+
 #include "rocksdb/rocksdb_namespace.h"
-#include "rocksdb/slice.h"
+// rocksdb/slice.h intentionally NOT included here (P1: Slice removed from
+// portable core).  The RocksDB adapter boundary uses Slice::ToStringView()
+// before calling Transform().
 
 #ifdef LZ4
   #pragma push_macro("LZ4")
@@ -209,8 +213,10 @@ class Transformer {
   virtual std::string Name() const = 0;
 
   // Transforms a single input record into one or more outputs.
+  // key is passed as string_view so the portable core has no Slice dependency.
+  // At the RocksDB adapter boundary, convert with: slice.ToStringView()
   virtual std::vector<ArrowRecord> Transform(
-      const Slice& key,
+      std::string_view key,
       const ArrowRecord& input) const = 0;
   
   // Declares which transformation features this transformer supports

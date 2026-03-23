@@ -13,7 +13,7 @@ public:
     std::string Name() const override { return "Mycelium-NoOp"; }
 
     std::vector<ArrowRecord> Transform(
-      const Slice& key,
+      std::string_view key,
       const ArrowRecord& input) const override;
     
     TransformerType Supports() const override { return TransformerType::MYNOOPER; }
