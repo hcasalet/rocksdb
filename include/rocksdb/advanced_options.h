@@ -15,6 +15,7 @@
 #include "rocksdb/memtablerep.h"
 #include "rocksdb/universal_compaction.h"
 #include "rocksdb/transformer.h"
+#include "rocksdb/admission_policy.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -566,6 +567,12 @@ struct AdvancedColumnFamilyOptions {
 
   // Allows data format transformation while doing compaction
   bool transform_while_compacting = false;
+
+  // Admission control policy for work-hiding transforms.
+  // Controls whether transforms are applied during a given compaction based on
+  // the current CPU budget.  nullptr means AlwaysAdmitPolicy (original behaviour).
+  // See include/rocksdb/admission_policy.h for available implementations.
+  std::shared_ptr<AdmissionPolicy> admission_policy = nullptr;
 
   // Number of columns for this database
   int num_columns = 1;

@@ -35,8 +35,11 @@
 #include "options/cf_options.h"
 #include "options/db_options.h"
 #include "port/port.h"
+#include "rocksdb/admission_policy.h"
 #include "rocksdb/arrow_compaction_batcher.h"
 #include "rocksdb/compaction_filter.h"
+#include "db/compaction/compaction_slack_estimator.h"
+#include "db/compaction/transform_scheduler.h"
 #include "rocksdb/compaction_job_stats.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -289,6 +292,13 @@ class CompactionJob {
   void EnsureInputOnlyOnLevel0(ColumnFamilyData* cfd);
 
   uint32_t job_id_;
+
+  // ── Admission control ──────────────────────────────────────────────────
+  // One estimator + scheduler per CompactionJob (shared across subcompactions).
+  CompactionSlackEstimator                slack_estimator_;
+  std::unique_ptr<AdmissionPolicy>        default_admission_policy_;  // owns fallback
+  std::unique_ptr<TransformScheduler>     transform_scheduler_;
+  // ─────────────────────────────────────────────────────────────────────
 
   // DBImpl state
   const std::string& dbname_;

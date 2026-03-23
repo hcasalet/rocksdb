@@ -76,6 +76,10 @@ struct ImmutableCFOptions {
   std::vector<std::shared_ptr<SchemaDescriptor>> schemaDescriptors;
   std::vector<std::string> destination_column_families;
 
+  // Admission control policy for work-hiding transforms.
+  // nullptr → AlwaysAdmitPolicy (original Mycelium behaviour).
+  std::shared_ptr<AdmissionPolicy> admission_policy;
+
   bool optimize_filters_for_hits;
 
   bool force_consistency_checks;

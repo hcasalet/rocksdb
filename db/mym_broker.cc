@@ -245,11 +245,31 @@ int MymBroker::Insert(const std::string &key, std::string &values)
 
 int MymBroker::Delete(const std::string &key)
 {
+    // Delete from the base CF first.
     Status s = db_->Delete(WriteOptions(), user_cf_meta_.cf_handle_, key);
-    if (s.ok()) {
-        return 0;
+    if (!s.ok()) {
+        return 1;
     }
-    return 1;
+
+    // Propagate tombstone to every derived CF so the grove stays consistent.
+    // int_cf_meta_: level → (cf_name → ColFamMeta)
+    for (auto& [level, name_to_meta] : int_cf_meta_) {
+        // Skip level 0 — that is the base CF itself (already deleted above).
+        if (level == 0) continue;
+        for (auto& [cf_name, cf_meta] : name_to_meta) {
+            Status ds = db_->Delete(WriteOptions(), cf_meta.cf_handle_, key);
+            if (!ds.ok()) {
+                // Log and continue: partial propagation is preferable to
+                // leaving the base deletion un-reflected in derived trees.
+                // Full consistency can be restored via catch-up compaction.
+                fprintf(stderr,
+                        "[MymBroker] Delete: failed to delete key from "
+                        "derived CF '%s': %s\n",
+                        cf_name.c_str(), ds.ToString().c_str());
+            }
+        }
+    }
+    return 0;
 }
 
 CFPlan MymBroker::buildPlan(const std::string& root_cf)

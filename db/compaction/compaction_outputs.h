@@ -17,6 +17,8 @@
 #include "db/output_validator.h"
 #include "rocksdb/arrow_compaction_batcher.h"
 #include "rocksdb/transformer.h"
+#include "db/compaction/compaction_slack_estimator.h"
+#include "db/compaction/transform_scheduler.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -227,6 +229,17 @@ class CompactionOutputs {
     return range_del_agg_ && !range_del_agg_->IsEmpty();
   }
 
+  // ── Admission control ──────────────────────────────────────────────────
+  // Called once per CompactionJob before any KV pairs are processed.
+  // Borrowed pointers; both must outlive this CompactionOutputs object.
+  void SetScheduler(TransformScheduler* sched)          { scheduler_ = sched; }
+  void SetEstimator(CompactionSlackEstimator* estimator) { estimator_ = estimator; }
+
+  // Called by CompactionJob at the start of each input SST file so that
+  // AddToOutput() can forward the file number to the scheduler.
+  void SetCurrentInputFileNumber(uint64_t fn) { current_input_file_number_ = fn; }
+  // ─────────────────────────────────────────────────────────────────────
+
  private:
   friend class SubcompactionState;
 
@@ -418,6 +431,16 @@ class CompactionOutputs {
   // range tombstone added to output file within each subcompaction is in
   // increasing key range.
   std::vector<size_t> level_ptrs_;
+
+  // ── Admission control members ─────────────────────────────────────────
+  // Both are nullptr until Set*() is called by CompactionJob.
+  TransformScheduler*       scheduler_  = nullptr;
+  CompactionSlackEstimator* estimator_  = nullptr;
+
+  // File number of the SST currently being processed.  Updated by
+  // SetCurrentInputFileNumber() before each file's KV pairs are processed.
+  uint64_t current_input_file_number_ = 0;
+  // ─────────────────────────────────────────────────────────────────────
 };
 
 // helper struct to concatenate the last level and penultimate level outputs

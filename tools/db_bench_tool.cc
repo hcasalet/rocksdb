@@ -1982,6 +1982,11 @@ struct DBWithColumnFamilies {
                rand_offset];
   }
 
+  ColumnFamilyHandle* GetCfhByIndex(size_t idx) {
+    assert(idx < cfh.size());
+    return cfh[idx];
+  }
+
   // stage: assume CF from 0 to stage * num_hot has be created. Need to create
   //        stage * num_hot + 1 to stage * (num_hot + 1).
   void CreateNewCf(ColumnFamilyOptions options, int64_t stage) {
@@ -5279,7 +5284,7 @@ class Benchmark {
         } else if (FLAGS_doing_pre_insert_transformation) {
           auto vals = split_value_by_delimiter_into_groups(val, FLAGS_num_column_families, '|');
           for (size_t i=0; i < vals.size(); i++) {
-            batch.Put(db_with_cfh->GetCfh(static_cast<int>(i)), key, vals[i]);
+            batch.Put(db_with_cfh->GetCfhByIndex(static_cast<int>(i)), key, vals[i]);
           }
         } else {
           // We use same rand_num as seed for key and column family so that we

@@ -447,40 +447,99 @@ Status CompactionOutputs::AddToOutput(
       s = EmitOne(0, key, value, &c_iter.ikey());
     } else {
       ArrowRecord ar_input = std::move(*ar_input_res);
-      auto ar_outputs = transformer->Transform(key, ar_input);
 
-      if (has_flag(TransformerType::AUGMENTER)) {
-        output_values.emplace_back(
-            reinterpret_cast<const uint8_t*>(value.data()),
-            reinterpret_cast<const uint8_t*>(value.data()) + value.size());
-      }
+      // Use current_input_file_number_ set by CompactionJob before each file.
+      const uint64_t sst_file_number = current_input_file_number_;
 
-      for (const auto& ar_output : ar_outputs) {
-        auto tvalue_res = schemaDescriptor->SerializeFromArrow(ar_output);
-        if (!tvalue_res.ok()) return Status::Corruption(tvalue_res.status().ToString());
-        auto& tvalue = *tvalue_res;
-        output_values.insert(output_values.end(), std::make_move_iterator(tvalue.begin()), std::make_move_iterator(tvalue.end()));
-      }
+      if (scheduler_ != nullptr) {
+        auto decision = scheduler_->Decide(transformer_type, sst_file_number);
+        if (decision == TransformScheduler::Decision::kApply) {
+          uint64_t transform_cpu_ns = 0;
+          decltype(transformer->Transform(key, ar_input)) ar_outputs;
+          {
+            CpuTimer timer(&transform_cpu_ns);
+            ar_outputs = transformer->Transform(key, ar_input);
+          }
+          scheduler_->OnApplied(transform_cpu_ns);
 
-      for (size_t i = 0; i < output_values.size(); i++) {
-        const auto& output_value = output_values[i];
-        Slice compacted_value(reinterpret_cast<const char*>(output_value.data()), output_value.size());
-        const ParsedInternalKey* ikey_ptr = nullptr;
+          if (has_flag(TransformerType::AUGMENTER)) {
+            output_values.emplace_back(
+                reinterpret_cast<const uint8_t*>(value.data()),
+                reinterpret_cast<const uint8_t*>(value.data()) + value.size());
+          }
+
+          for (const auto& ar_output : ar_outputs) {
+            auto tvalue_res = schemaDescriptor->SerializeFromArrow(ar_output);
+            if (!tvalue_res.ok()) return Status::Corruption(tvalue_res.status().ToString());
+            auto& tvalue = *tvalue_res;
+            output_values.insert(output_values.end(), std::make_move_iterator(tvalue.begin()), std::make_move_iterator(tvalue.end()));
+          }
+
+          for (size_t i = 0; i < output_values.size(); i++) {
+            const auto& output_value = output_values[i];
+            Slice compacted_value(reinterpret_cast<const char*>(output_value.data()), output_value.size());
+            const ParsedInternalKey* ikey_ptr = nullptr;
+
+            if (has_flag(TransformerType::AUGMENTER)) {
+              ParsedInternalKey index_ikey;
+              if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
+                s = Status::Corruption("Failed to parse internal key from compacted value");
+                continue;
+              }
+              ikey_ptr = &index_ikey;
+              key = compacted_value;
+              compacted_value = Slice();
+            } else {
+              ikey_ptr = &c_iter.ikey();
+            }
+
+            s = EmitOne(i, key, compacted_value, ikey_ptr);
+          }
+        } else if (decision == TransformScheduler::Decision::kDefer) {
+          // Transform deferred: write passthrough and record for catch-up.
+          scheduler_->OnDeferred(sst_file_number);
+          s = EmitOne(0, key, value, &c_iter.ikey());
+        } else {
+          // kSkip: NOTRANSFORMATION, plain passthrough.
+          s = EmitOne(0, key, value, &c_iter.ikey());
+        }
+      } else {
+        // No scheduler attached — original Mycelium path.
+        auto ar_outputs = transformer->Transform(key, ar_input);
 
         if (has_flag(TransformerType::AUGMENTER)) {
-          ParsedInternalKey index_ikey;
-          if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
-            s = Status::Corruption("Failed to parse internal key from compacted value");
-            continue;
-          }
-          ikey_ptr = &index_ikey;
-          key = compacted_value;
-          compacted_value = Slice();
-        } else {
-          ikey_ptr = &c_iter.ikey();
+          output_values.emplace_back(
+              reinterpret_cast<const uint8_t*>(value.data()),
+              reinterpret_cast<const uint8_t*>(value.data()) + value.size());
         }
-    
-        s = EmitOne(i, key, compacted_value, ikey_ptr);
+
+        for (const auto& ar_output : ar_outputs) {
+          auto tvalue_res = schemaDescriptor->SerializeFromArrow(ar_output);
+          if (!tvalue_res.ok()) return Status::Corruption(tvalue_res.status().ToString());
+          auto& tvalue = *tvalue_res;
+          output_values.insert(output_values.end(), std::make_move_iterator(tvalue.begin()), std::make_move_iterator(tvalue.end()));
+        }
+
+        for (size_t i = 0; i < output_values.size(); i++) {
+          const auto& output_value = output_values[i];
+          Slice compacted_value(reinterpret_cast<const char*>(output_value.data()), output_value.size());
+          const ParsedInternalKey* ikey_ptr = nullptr;
+
+          if (has_flag(TransformerType::AUGMENTER)) {
+            ParsedInternalKey index_ikey;
+            if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
+              s = Status::Corruption("Failed to parse internal key from compacted value");
+              continue;
+            }
+            ikey_ptr = &index_ikey;
+            key = compacted_value;
+            compacted_value = Slice();
+          } else {
+            ikey_ptr = &c_iter.ikey();
+          }
+
+          s = EmitOne(i, key, compacted_value, ikey_ptr);
+        }
       }
     }
   }

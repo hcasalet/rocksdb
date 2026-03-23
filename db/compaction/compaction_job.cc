@@ -637,6 +637,24 @@ Status CompactionJob::Run() {
   log_buffer_->FlushBufferToLog();
   LogCompaction();
 
+  // ── Admission control setup ────────────────────────────────────────────
+  slack_estimator_.StartCompaction();
+  {
+    ColumnFamilyData* cfd =
+        compact_->sub_compact_states[0].compaction->column_family_data();
+    const AdmissionPolicy* policy = nullptr;
+    if (cfd->ioptions()->admission_policy != nullptr) {
+      policy = cfd->ioptions()->admission_policy.get();
+    } else {
+      default_admission_policy_ = std::make_unique<AlwaysAdmitPolicy>();
+      policy = default_admission_policy_.get();
+    }
+    transform_scheduler_ = std::make_unique<TransformScheduler>(
+        policy, &slack_estimator_,
+        compact_->sub_compact_states[0].compaction->output_level());
+  }
+  // ─────────────────────────────────────────────────────────────────────
+
   const size_t num_threads = compact_->sub_compact_states.size();
   assert(num_threads > 0);
   const uint64_t start_micros = db_options_.clock->NowMicros();
@@ -1320,6 +1338,32 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
             sub_compact->end.has_value() ? &end_user_key : nullptr);
       };
 
+  // ── Admission control: wire scheduler into this subcompaction's outputs ──
+  if (transform_scheduler_ != nullptr) {
+    sub_compact->SetScheduler(transform_scheduler_.get());
+    sub_compact->SetEstimator(&slack_estimator_);
+
+    // CompactionIterator merges all input files; it does not expose the current
+    // input file number per KV pair.  We therefore make one admission decision
+    // for the entire subcompaction based on the first input file's metadata.
+    // TODO: For finer granularity, add CompactionIterator::CurrentFileNumber()
+    //       and call BeginFile/OnFileDone around each file transition.
+    const Compaction* c = sub_compact->compaction;
+    const std::vector<std::string>& dest_cfs =
+        cfd->ioptions()->destination_column_families;
+    uint64_t first_file_num  = 0;
+    uint64_t first_file_size = 0;
+    if (c->num_input_levels() > 0 && c->inputs(0) != nullptr &&
+        !c->inputs(0)->empty()) {
+      const FileMetaData* f = (*c->inputs(0))[0];
+      first_file_num  = f->fd.GetNumber();
+      first_file_size = f->fd.GetFileSize();
+    }
+    transform_scheduler_->BeginFile(first_file_num, dest_cfs, first_file_size);
+    sub_compact->SetCurrentInputFileNumber(first_file_num);
+  }
+  // ─────────────────────────────────────────────────────────────────────
+
   TEST_SYNC_POINT_CALLBACK(
       "CompactionJob::ProcessKeyValueCompaction()::Processing",
       reinterpret_cast<void*>(
@@ -1356,6 +1400,12 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
     if (c_iter->status().IsManualCompactionPaused()) {
       break;
     }
+  }
+  slack_estimator_.RecordBase(0, 0);  // no-op; total time captured by StartCompaction()
+
+  // Close out the per-subcompaction file tracking.
+  if (transform_scheduler_ != nullptr) {
+    transform_scheduler_->OnFileDone();
   }
 
   sub_compact->compaction_job_stats.num_blobs_read =
@@ -1823,6 +1873,28 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
                                   mutable_cf_options, read_options, edit,
                                   db_mutex_, db_directory_);
   }
+
+  // ── Deferred catch-up scheduling ─────────────────────────────────────
+  // If any input files had their transforms deferred due to CPU budget, schedule
+  // a catch-up compaction on each affected destination CF so the derived trees
+  // eventually converge with the base tree.
+  if (log_and_apply_status.ok() && transform_scheduler_ != nullptr) {
+    auto deferred = transform_scheduler_->DeferredCFs();
+    if (!deferred.empty()) {
+      ROCKS_LOG_INFO(db_options_.info_log,
+                     "[%s] [JOB %d] Mycelium: %zu CF(s) deferred by admission "
+                     "control; catch-up compaction recommended.",
+                     compaction->column_family_data()->GetName().c_str(),
+                     job_id_, deferred.size());
+      // TODO: obtain the deferred ColumnFamilyData* from versions_ and call
+      //   db_->SchedulePendingCompaction(deferred_cfd);
+      // This requires access to a DBImpl pointer which CompactionJob does not
+      // currently hold.  Wire it in via a callback or add a db_impl_ member.
+      (void)deferred;
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────
+
   return log_and_apply_status;
 }
 
