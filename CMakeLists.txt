@@ -1159,6 +1159,33 @@ if (NOT TARGET Arrow::arrow)
   endif()
 endif()
 
+# ── P2: remove sources now compiled in libmycelium ───────────────────────────
+# When WITH_LIBMYCELIUM is ON the portable core is compiled once inside
+# libmycelium.  Remove the corresponding .cc files from the RocksDB SOURCES
+# list to prevent duplicate-symbol linker errors.
+option(WITH_LIBMYCELIUM_SOURCES "Remove libmycelium sources from RocksDB build" ON)
+if(WITH_LIBMYCELIUM_SOURCES)
+  list(REMOVE_ITEM SOURCES
+    db/compaction/compaction_slack_estimator.cc
+    db/compaction/transform_scheduler.cc
+    transformer/distribute/distributor.cc
+    transformer/convert/converter.cc
+    transformer/augment/augmenter.cc
+    transformer/common/parser/json_parser.cc
+    transformer/common/parser/csv_parser.cc
+    transformer/common/parser/fixedbin64_parser.cc
+    transformer/common/parser/flatbuffers_parser.cc
+    transformer/common/parser/protobuf_parser.cc
+    transformer/common/encoder/csv_encoder.cc
+    transformer/common/encoder/fixedbin64_encoder.cc
+    transformer/common/encoder/flatbuffers_encoder.cc
+    transformer/common/encoder/json_encoder.cc
+    transformer/common/encoder/protobuf_encoder.cc
+    transformer/identity/mynooper.cc
+    transformer/transformer_factory.cc
+  )
+endif()
+
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
 target_include_directories(
   ${ROCKSDB_STATIC_LIB} PUBLIC ${PROTO_GEN_DIR} ${FLATBUFFERS_GEN_DIR})
@@ -1662,10 +1689,10 @@ if(WITH_BENCHMARK)
   add_subdirectory(${PROJECT_SOURCE_DIR}/microbench/)
 endif()
 
-# ── libmycelium: portable transformation core (Phase P0 scaffold) ─────────────
-# libmycelium lives alongside (not inside) the RocksDB tree.  During P0 it is
-# header-only; in P2+ it will become a compiled STATIC library once source
-# files migrate out of the RocksDB tree.
+# ── libmycelium: portable transformation core (Phase P2 — compiled STATIC lib) ──
+# libmycelium lives alongside (not inside) the RocksDB tree.  In P2+ it is a
+# compiled STATIC library; the RocksDB adapter links against it and exposes the
+# mycelium types via thin shim headers in include/rocksdb/ and db/compaction/.
 #
 # Pass -DMYCELIUM_WITH_PROTOBUF=ON / -DMYCELIUM_WITH_FLATBUFFERS=ON to enable
 # the optional serialisation back-ends inside libmycelium.
@@ -1673,6 +1700,12 @@ option(WITH_LIBMYCELIUM "Build the portable libmycelium alongside RocksDB" ON)
 if(WITH_LIBMYCELIUM)
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libmycelium
                    ${CMAKE_CURRENT_BINARY_DIR}/libmycelium)
-  # Let the RocksDB adapter headers see mycelium/ include path.
+  # Link the compiled library privately — consumers don't need to link
+  # libmycelium themselves.  Expose the include path PUBLIC so that
+  # translation units that include rocksdb public headers (e.g.
+  # advanced_options.h → rocksdb/transformer.h shim → mycelium/transformer.h)
+  # can find the mycelium/ headers at compile time.
   target_link_libraries(rocksdb PRIVATE mycelium::mycelium)
+  target_include_directories(rocksdb PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../libmycelium/include>)
 endif()
