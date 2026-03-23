@@ -1,22 +1,11 @@
 #pragma once
-
-#include <memory>
-#include "rocksdb/transformer.h"
+// Shim header — P2 portability refactor.
+// The implementation now lives in libmycelium (namespace mycelium).
+// This header forwards the types into ROCKSDB_NAMESPACE so that existing
+// RocksDB-tree code continues to compile unchanged.
+#include "rocksdb/rocksdb_namespace.h"
+#include "mycelium/mynooper.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-class Mynooper : public Transformer {
-public:
-    Mynooper() {};
-    ~Mynooper() {};
-
-    std::string Name() const override { return "Mycelium-NoOp"; }
-
-    std::vector<ArrowRecord> Transform(
-      std::string_view key,
-      const ArrowRecord& input) const override;
-    
-    TransformerType Supports() const override { return TransformerType::MYNOOPER; }
-};
-
-} // namespace ROCKSDB_NAMESPACE
+using mycelium::Mynooper;
+}  // namespace ROCKSDB_NAMESPACE

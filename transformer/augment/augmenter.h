@@ -1,29 +1,11 @@
-#include <memory>
-#include <mutex>
-#include <functional>
-#include "rocksdb/transformer.h"
-#include "data.pb.h"
+#pragma once
+// Shim header — P2 portability refactor.
+// The implementation now lives in libmycelium (namespace mycelium).
+// This header forwards the types into ROCKSDB_NAMESPACE so that existing
+// RocksDB-tree code continues to compile unchanged.
+#include "rocksdb/rocksdb_namespace.h"
+#include "mycelium/augmenter.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-class Augmenter : public Transformer
-{
-  public:
-    Augmenter(std::vector<std::vector<int>> ipositions) 
-        : index_positions_(ipositions) {};
-    ~Augmenter() {};
-
-    std::string Name() const override { return "Augmenter"; }
-
-    std::vector<ArrowRecord> Transform(
-      std::string_view key,
-      const ArrowRecord& input) const override;
-  
-    TransformerType Supports() const override { return TransformerType::AUGMENTER; }
-
-    const std::vector<std::vector<int>> GetPositionedIndexKeys() const { return index_positions_; }
-  private:
-    std::vector<std::vector<int>> index_positions_;
-};
-
-}
+using mycelium::Augmenter;
+}  // namespace ROCKSDB_NAMESPACE

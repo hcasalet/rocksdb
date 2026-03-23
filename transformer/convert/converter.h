@@ -1,19 +1,11 @@
-#include <memory>
-#include "flatbuffers/flatbuffers.h"
-#include "rocksdb/transformer.h"
-#include "row_generated.h"
-#include "data.pb.h"
+#pragma once
+// Shim header — P2 portability refactor.
+// The implementation now lives in libmycelium (namespace mycelium).
+// This header forwards the types into ROCKSDB_NAMESPACE so that existing
+// RocksDB-tree code continues to compile unchanged.
+#include "rocksdb/rocksdb_namespace.h"
+#include "mycelium/converter.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-class Converter final : public Transformer {
- public:
-  std::string Name() const override { return "convert_transformer"; }
-  TransformerType Supports() const override { return TransformerType::CONVERTER; }
-
-  std::vector<ArrowRecord> Transform(
-    std::string_view key,
-    const ArrowRecord& input) const override;
-};
-
-}
+using mycelium::Converter;
+}  // namespace ROCKSDB_NAMESPACE

@@ -1,32 +1,12 @@
 #pragma once
-
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-
-#include "rocksdb/transformer.h"
+// Shim header — P2 portability refactor.
+// The implementation now lives in libmycelium (namespace mycelium).
+// This header forwards the types into ROCKSDB_NAMESPACE so that existing
+// RocksDB-tree code (e.g. mym_broker.cc) continues to compile unchanged.
 #include "rocksdb/rocksdb_namespace.h"
+#include "mycelium/distributor.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-using SplitByPositions = std::vector<std::vector<int>>;
-
-// Distributor does SPLIT transformation
-class Distributor final : public Transformer {
- public:
-  explicit Distributor(SplitByPositions pos) : splits_(std::move(pos)) {}
-
-  std::string Name() const override { return "Distributor"; }
-  TransformerType Supports() const override { return TransformerType::DISTRIBUTOR; }
-  int GetNumSplits() const { return splits_.size(); }
-
-  std::vector<ArrowRecord> Transform(
-      std::string_view key,
-      const ArrowRecord& input) const override;
-
- private:
-  SplitByPositions splits_;
-};
-
+using mycelium::SplitByPositions;
+using mycelium::Distributor;
 }  // namespace ROCKSDB_NAMESPACE
