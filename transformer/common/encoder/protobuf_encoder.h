@@ -1,29 +1,7 @@
 #pragma once
-
-#include <cstddef>
-#include <cstdint>
-#include <vector>
-
+// Shim — P2 portability refactor.  Implementation is in libmycelium (namespace mycelium).
 #include "rocksdb/rocksdb_namespace.h"
-#include "rocksdb/transformer.h"
-
+#include "mycelium/protobuf_encoder.h"
 namespace ROCKSDB_NAMESPACE {
-
-// Encodes ColumnBytesRow as protobuf message:
-//   message BytesRow { repeated bytes col = 1; }
-//
-// No protobuf library dependency; emits raw protobuf wire bytes.
-class ProtobufBytesRowEncoder final : public Encoder {
- public:
-  explicit ProtobufBytesRowEncoder(size_t num_cols) : num_cols_(num_cols) {}
-
-  InputOutputDataType OutputType() const override { return InputOutputDataType::PROTOBUF; }
-
-  std::vector<ByteBuffer> SerializeFromArrow(const ArrowRecord& rec) const override;
-
- private:
-  size_t num_cols_;
-
-};
-
+using mycelium::ProtobufBytesRowEncoder;
 }  // namespace ROCKSDB_NAMESPACE

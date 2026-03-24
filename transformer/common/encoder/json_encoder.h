@@ -1,13 +1,7 @@
 #pragma once
-
-#include "rocksdb/transformer.h"
-
+// Shim — P2 portability refactor.  Implementation is in libmycelium (namespace mycelium).
+#include "rocksdb/rocksdb_namespace.h"
+#include "mycelium/json_encoder.h"
 namespace ROCKSDB_NAMESPACE {
-
-class JsonEncoder final : public Encoder {
- public:
-  InputOutputDataType OutputType() const override;
-  std::vector<ByteBuffer> SerializeFromArrow(const ArrowRecord& rec) const override;
-};
-
-}
+using mycelium::JsonEncoder;
+}  // namespace ROCKSDB_NAMESPACE

@@ -1,18 +1,7 @@
 #pragma once
-
-#include "rocksdb/transformer.h"
-#include "../parser/csv_parser.h"  // CsvRowPayload
-
+// Shim — P2 portability refactor.  Implementation is in libmycelium (namespace mycelium).
+#include "rocksdb/rocksdb_namespace.h"
+#include "mycelium/csv_encoder.h"
 namespace ROCKSDB_NAMESPACE {
-
-class CsvEncoder final : public Encoder {
- public:
-  InputOutputDataType OutputType() const override;
-  std::vector<ByteBuffer> SerializeFromArrow(const ArrowRecord& rec) const override;
-
- private:
-  static void AppendField(std::string* out, const std::string& f);
-  std::string ScalarToStringForCsv(const arrow::Scalar& s) const;
-};
-
-}
+using mycelium::CsvEncoder;
+}  // namespace ROCKSDB_NAMESPACE

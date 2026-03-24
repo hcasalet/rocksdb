@@ -1,15 +1,7 @@
 #pragma once
-
-#include "rocksdb/transformer.h"
-#include "../parser/flatbuffers_parser.h"  // for FlatbufPayload
-#include "row_generated.h"
-
+// Shim — P2 portability refactor.  Implementation is in libmycelium (namespace mycelium).
+#include "rocksdb/rocksdb_namespace.h"
+#include "mycelium/flatbuffers_encoder.h"
 namespace ROCKSDB_NAMESPACE {
-
-class FlatbuffersEncoder final : public Encoder {
- public:
-  InputOutputDataType OutputType() const override;
-  std::vector<ByteBuffer> SerializeFromArrow(const ArrowRecord& rec) const override;
-};
-
-}
+using mycelium::FlatbuffersEncoder;
+}  // namespace ROCKSDB_NAMESPACE
