@@ -1140,18 +1140,6 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
   uint64_t prev_cpu_micros = db_options_.clock->CPUMicros();
 
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
-  /*
-  std::unique_ptr<ArrowCompactionBatcher> arrow_batcher;
-  const auto& schema_descs = cfd->ioptions()->schemaDescriptors;
-  if (!schema_descs.empty() && schema_descs[0]) {
-    auto res = ArrowCompactionBatcher::Create(*schema_descs[0]);
-    if (!res.ok()) {
-      sub_compact->status = Status::InvalidArgument(
-                  "ArrowCompactionBatcher init failed: " + res.status().ToString());
-      return;
-    }
-    arrow_batcher = std::move(*res);
-  }*/
 
   // Create compaction filter and fail the compaction if
   // IgnoreSnapshots() = false because it is not supported anymore

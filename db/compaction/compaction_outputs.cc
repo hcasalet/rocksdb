@@ -372,35 +372,27 @@ Status CompactionOutputs::AddToOutput(
   assert(opts->transformers.size() == opts->schemaDescriptors.size());
 
   mycelium::TransformerType transformer_type = mycelium::TransformerType::NOTRANSFORMATION;
-  std::shared_ptr<mycelium::Transformer> transformer = nullptr;
-  std::shared_ptr<mycelium::SchemaDescriptor> schemaDescriptor = nullptr;
+  std::shared_ptr<mycelium::Transformer>        transformer      = nullptr;
+  std::shared_ptr<mycelium::SchemaDescriptor>   schemaDescriptor = nullptr;
 
   if (!opts->transformers.empty() && !opts->schemaDescriptors.empty()) {
     transformer_type = opts->transformers[0]->Supports();
-    transformer = opts->transformers[0];
+    transformer      = opts->transformers[0];
     schemaDescriptor = opts->schemaDescriptors[0];
   }
 
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {
-    // We don't consider range tombstone for bottommost level since:
-    // 1. there is no grandparent and hence no overlap to consider
-    // 2. range tombstone may be dropped at bottommost level.
+    // Range tombstones at bottommost level are dropped — no overlap to consider.
     return s;
   }
   Slice key = c_iter.key();
   if (ShouldStopBefore(c_iter) && HasBuilder()) {
     s = close_file_func(*this, c_iter.InputStatus(), key);
-    if (!s.ok()) {
-      return s;
-    }
-    // reset grandparent information
+    if (!s.ok()) return s;
     grandparent_boundary_switched_num_ = 0;
-    grandparent_overlapped_bytes_ =
-        GetCurrentKeyGrandparentOverlappedBytes(key);
+    grandparent_overlapped_bytes_ = GetCurrentKeyGrandparentOverlappedBytes(key);
     if (UNLIKELY(is_range_del)) {
-      // lower bound for this new output file, this is needed as the lower bound
-      // does not come from the smallest point key in this case.
       range_tombstone_lower_bound_.DecodeFrom(key);
     } else {
       range_tombstone_lower_bound_.Clear();
@@ -410,156 +402,127 @@ Status CompactionOutputs::AddToOutput(
   // Open output file if necessary
   if (!HasBuilder()) {
     s = open_file_func(*this);
-    if (!s.ok()) {
-      return s;
-    }
+    if (!s.ok()) return s;
   }
 
-  // c_iter may emit range deletion keys, so update `last_key_for_partitioner_`
-  // here before returning below when `is_range_del` is true
   if (partitioner_) {
     last_key_for_partitioner_.assign(c_iter.user_key().data_,
                                      c_iter.user_key().size_);
   }
 
-  if (UNLIKELY(is_range_del)) {
-    return s;
-  }
+  if (UNLIKELY(is_range_del)) return s;
 
   // P4: Propagate point-delete tombstones to all derived CFs in the grove.
-  // This mirrors MymBroker::Delete() but fires during compaction so that
-  // derived CFs stay consistent even when the base CF is compacted without
-  // a concurrent write path.
   if (grove_manager_ != nullptr &&
       (c_iter.ikey().type == kTypeDeletion ||
        c_iter.ikey().type == kTypeSingleDeletion)) {
     auto ms = grove_manager_->PropagateDelete(c_iter.user_key().ToStringView());
-    if (!ms.ok()) {
-      // Non-fatal: log and continue; the base CF tombstone is still written.
-      // A future catch-up compaction will re-attempt propagation.
-      (void)ms;  // TODO: surface via ROCKS_LOG_WARN once we have a logger here
-    }
+    (void)ms;  // Non-fatal; TODO: surface via ROCKS_LOG_WARN
   }
 
   const Slice& value = c_iter.value();
 
-  // transform value
-  std::vector<mycelium::ByteBuffer> output_values;
+  // ── Fast path: no transformer configured ─────────────────────────────────
+  if (transformer_type == mycelium::TransformerType::NOTRANSFORMATION) {
+    return EmitOne(0, key, value, &c_iter.ikey());
+  }
 
-  auto as_bytes = [&](const rocksdb::Slice& v) -> mycelium::ByteBuffer {
+  // ── Helper lambdas ────────────────────────────────────────────────────────
+  auto as_bytes = [](const rocksdb::Slice& v) -> mycelium::ByteBuffer {
     const auto* p = reinterpret_cast<const uint8_t*>(v.data());
     return mycelium::ByteBuffer(p, p + v.size());
   };
 
   auto has_flag = [&](mycelium::TransformerType f) {
-    return (mycelium::to_underlying(transformer_type) & mycelium::to_underlying(f)) != 0;
+    return (mycelium::to_underlying(transformer_type) &
+            mycelium::to_underlying(f)) != 0;
   };
 
-  if (transformer_type == mycelium::TransformerType::NOTRANSFORMATION) {
-    s = EmitOne(0, key, value, &c_iter.ikey());
-  } else {
-    auto ar_input_res = schemaDescriptor->ParseToArrow(as_bytes(value));
-    if (!ar_input_res.ok()) {
-      s = EmitOne(0, key, value, &c_iter.ikey());
-    } else {
-      mycelium::ArrowRecord ar_input = std::move(*ar_input_res);
+  // Emit all serialised output_values, handling AUGMENTER's internal-key path.
+  auto emit_outputs = [&](const std::vector<mycelium::ByteBuffer>& output_values) -> Status {
+    Status es;
+    for (size_t i = 0; i < output_values.size(); ++i) {
+      const auto& ov = output_values[i];
+      Slice compacted_value(reinterpret_cast<const char*>(ov.data()), ov.size());
+      const ParsedInternalKey* ikey_ptr = nullptr;
 
-      // Use current_input_file_number_ set by CompactionJob before each file.
-      const uint64_t sst_file_number = current_input_file_number_;
-
-      if (scheduler_ != nullptr) {
-        auto decision = scheduler_->Decide(transformer_type, sst_file_number);
-        if (decision == mycelium::TransformScheduler::Decision::kApply) {
-          uint64_t transform_cpu_ns = 0;
-          // key is rocksdb::Slice; convert to string_view at the adapter boundary.
-          decltype(transformer->Transform(key.ToStringView(), ar_input)) ar_outputs;
-          {
-            mycelium::CpuTimer timer(&transform_cpu_ns);
-            ar_outputs = transformer->Transform(key.ToStringView(), ar_input);
-          }
-          scheduler_->OnApplied(transform_cpu_ns);
-
-          if (has_flag(mycelium::TransformerType::AUGMENTER)) {
-            output_values.emplace_back(
-                reinterpret_cast<const uint8_t*>(value.data()),
-                reinterpret_cast<const uint8_t*>(value.data()) + value.size());
-          }
-
-          for (const auto& ar_output : ar_outputs) {
-            auto tvalue_res = schemaDescriptor->SerializeFromArrow(ar_output);
-            if (!tvalue_res.ok()) return Status::Corruption(tvalue_res.status().ToString());
-            auto& tvalue = *tvalue_res;
-            output_values.insert(output_values.end(), std::make_move_iterator(tvalue.begin()), std::make_move_iterator(tvalue.end()));
-          }
-
-          for (size_t i = 0; i < output_values.size(); i++) {
-            const auto& output_value = output_values[i];
-            Slice compacted_value(reinterpret_cast<const char*>(output_value.data()), output_value.size());
-            const ParsedInternalKey* ikey_ptr = nullptr;
-
-            if (has_flag(mycelium::TransformerType::AUGMENTER)) {
-              ParsedInternalKey index_ikey;
-              if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
-                s = Status::Corruption("Failed to parse internal key from compacted value");
-                continue;
-              }
-              ikey_ptr = &index_ikey;
-              key = compacted_value;
-              compacted_value = Slice();
-            } else {
-              ikey_ptr = &c_iter.ikey();
-            }
-
-            s = EmitOne(i, key, compacted_value, ikey_ptr);
-          }
-        } else if (decision == mycelium::TransformScheduler::Decision::kDefer) {
-          // Transform deferred: write passthrough and record for catch-up.
-          scheduler_->OnDeferred(sst_file_number);
-          s = EmitOne(0, key, value, &c_iter.ikey());
-        } else {
-          // kSkip: NOTRANSFORMATION, plain passthrough.
-          s = EmitOne(0, key, value, &c_iter.ikey());
+      if (has_flag(mycelium::TransformerType::AUGMENTER)) {
+        // For AUGMENTER the serialised output is a packed internal key;
+        // parse it to recover the key type/sequence number, then emit with
+        // an empty value (the key itself carries the index entry).
+        ParsedInternalKey index_ikey;
+        if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
+          es = Status::Corruption("AddToOutput: failed to parse augmenter internal key");
+          continue;
         }
+        ikey_ptr = &index_ikey;
+        key      = compacted_value;
+        compacted_value = Slice();
       } else {
-        // No scheduler attached — original Mycelium path.
-        auto ar_outputs = transformer->Transform(key.ToStringView(), ar_input);
-
-        if (has_flag(mycelium::TransformerType::AUGMENTER)) {
-          output_values.emplace_back(
-              reinterpret_cast<const uint8_t*>(value.data()),
-              reinterpret_cast<const uint8_t*>(value.data()) + value.size());
-        }
-
-        for (const auto& ar_output : ar_outputs) {
-          auto tvalue_res = schemaDescriptor->SerializeFromArrow(ar_output);
-          if (!tvalue_res.ok()) return Status::Corruption(tvalue_res.status().ToString());
-          auto& tvalue = *tvalue_res;
-          output_values.insert(output_values.end(), std::make_move_iterator(tvalue.begin()), std::make_move_iterator(tvalue.end()));
-        }
-
-        for (size_t i = 0; i < output_values.size(); i++) {
-          const auto& output_value = output_values[i];
-          Slice compacted_value(reinterpret_cast<const char*>(output_value.data()), output_value.size());
-          const ParsedInternalKey* ikey_ptr = nullptr;
-
-          if (has_flag(mycelium::TransformerType::AUGMENTER)) {
-            ParsedInternalKey index_ikey;
-            if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
-              s = Status::Corruption("Failed to parse internal key from compacted value");
-              continue;
-            }
-            ikey_ptr = &index_ikey;
-            key = compacted_value;
-            compacted_value = Slice();
-          } else {
-            ikey_ptr = &c_iter.ikey();
-          }
-
-          s = EmitOne(i, key, compacted_value, ikey_ptr);
-        }
+        ikey_ptr = &c_iter.ikey();
       }
+
+      es = EmitOne(i, key, compacted_value, ikey_ptr);
+      if (!es.ok()) return es;
     }
+    return es;
+  };
+
+  // ── Scheduler path ────────────────────────────────────────────────────────
+  // BUG FIX: check the scheduler decision BEFORE parsing the record.
+  // Previously ParseToArrow() was called unconditionally, wasting allocator
+  // work on every kDefer / kSkip record.
+  if (scheduler_ != nullptr) {
+    const uint64_t sst_file_number = current_input_file_number_;
+    const auto decision = scheduler_->Decide(transformer_type, sst_file_number);
+
+    if (decision == mycelium::TransformScheduler::Decision::kDefer) {
+      scheduler_->OnDeferred(sst_file_number);
+      return EmitOne(0, key, value, &c_iter.ikey());   // passthrough, no parse
+    }
+    if (decision == mycelium::TransformScheduler::Decision::kSkip) {
+      return EmitOne(0, key, value, &c_iter.ikey());   // passthrough, no parse
+    }
+    // decision == kApply: fall through to parse + transform below.
   }
+
+  // ── Parse → Transform → Serialize ────────────────────────────────────────
+  auto parse_res = schemaDescriptor->Parse(as_bytes(value));
+  if (!parse_res.ok()) {
+    // Unparseable record: pass through unchanged.
+    return EmitOne(0, key, value, &c_iter.ikey());
+  }
+  mycelium::ParsedRow& parsed = *parse_res;
+
+  uint64_t transform_cpu_ns = 0;
+  std::vector<mycelium::ParsedRow> row_outputs;
+  {
+    mycelium::CpuTimer timer(&transform_cpu_ns);
+    row_outputs = transformer->Transform(key.ToStringView(), parsed);
+  }
+  if (scheduler_ != nullptr) scheduler_->OnApplied(transform_cpu_ns);
+
+  // Build output_values from serialised row outputs.
+  std::vector<mycelium::ByteBuffer> output_values;
+
+  if (has_flag(mycelium::TransformerType::AUGMENTER)) {
+    // For AUGMENTER prepend the original value so index 0 = base record.
+    output_values.emplace_back(
+        reinterpret_cast<const uint8_t*>(value.data()),
+        reinterpret_cast<const uint8_t*>(value.data()) + value.size());
+  }
+
+  for (const auto& row_out : row_outputs) {
+    auto ser_res = schemaDescriptor->Serialize(row_out);
+    if (!ser_res.ok())
+      return Status::Corruption(ser_res.status.message());
+    auto& buffers = *ser_res;
+    output_values.insert(output_values.end(),
+                         std::make_move_iterator(buffers.begin()),
+                         std::make_move_iterator(buffers.end()));
+  }
+
+  s = emit_outputs(output_values);
   return s;
 }
 
