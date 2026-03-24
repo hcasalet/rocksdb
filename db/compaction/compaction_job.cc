@@ -64,6 +64,7 @@
 #include "transformer/convert/converter.h"
 #include "transformer/distribute/distributor.h"
 #include "transformer/identity/mynooper.h"
+#include "db/mycelium_adapter/epoch_table_properties_collector.h"
 #include "db/mycelium_adapter/rocksdb_defer_callback.h"
 #include "db/mycelium_adapter/rocksdb_epoch_store.h"
 #include "util/stop_watch.h"
@@ -658,10 +659,31 @@ Status CompactionJob::Run() {
   // ─────────────────────────────────────────────────────────────────────
 
   // ── Mycelium adapter layer ─────────────────────────────────────────────
-  // EpochStore: allocate a per-job store (P3 in-memory).
-  // In a future DB-lifetime store, pass a DB-owned pointer here instead.
+  // EpochStore: allocate a per-job store.
   owned_epoch_store_ = std::make_unique<RocksDBEpochStore>();
   epoch_store_ = owned_epoch_store_.get();
+
+  // P4: Pre-populate the epoch store from each input SST's table properties.
+  // This lets the scheduler see which transforms were already applied or
+  // deferred in prior compactions, preventing double-application of
+  // non-reentrant transforms.  We piggyback on the same GetTableProperties()
+  // path used by seqno_time_mapping_ above — the TableCache makes it free.
+  if (transform_scheduler_ != nullptr) {
+    const ReadOptions ro_epoch(Env::IOActivity::kCompaction);
+    const Compaction* c_pre = compact_->sub_compact_states[0].compaction;
+    for (const auto& each_level : *c_pre->inputs()) {
+      for (const auto& fmd : each_level.files) {
+        std::shared_ptr<const TableProperties> tp;
+        Status stp = cfd->current()->GetTableProperties(ro_epoch, &tp, fmd,
+                                                        nullptr);
+        if (!stp.ok() || !tp) continue;
+        auto it = tp->user_collected_properties.find(kEpochPropertyKey);
+        if (it == tp->user_collected_properties.end()) continue;
+        epoch_store_->PreLoad(fmd->fd.GetNumber(),
+                              std::string_view(it->second));
+      }
+    }
+  }
 
   // DeferCallback: built lazily in Install() once the caller (DBImpl) has
   // supplied the schedule function via SetDeferScheduleFn().  See that method.
@@ -862,6 +884,10 @@ Status CompactionJob::Run() {
 
 void CompactionJob::SetDeferScheduleFn(DeferScheduleFn fn) {
   defer_schedule_fn_ = std::move(fn);
+}
+
+void CompactionJob::SetGroveManager(std::unique_ptr<RocksDBGroveManager> gm) {
+  grove_manager_ = std::move(gm);
 }
 
 Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
@@ -1361,7 +1387,10 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
             sub_compact->end.has_value() ? &end_user_key : nullptr);
       };
 
-  // ── Admission control: wire scheduler into this subcompaction's outputs ──
+  // ── Admission control: wire scheduler and grove manager into outputs ──
+  if (grove_manager_ != nullptr) {
+    sub_compact->SetGroveManager(grove_manager_.get());
+  }
   if (transform_scheduler_ != nullptr) {
     sub_compact->SetScheduler(transform_scheduler_.get());
     sub_compact->SetEstimator(&slack_estimator_);
@@ -1910,8 +1939,8 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
                      "control; scheduling catch-up compaction.",
                      compaction->column_family_data()->GetName().c_str(),
                      job_id_, deferred.size());
-      // file_numbers hint: not tracked at this granularity yet; pass empty.
-      auto mst = defer_callback_->ScheduleDeferred(deferred, {});
+      auto deferred_files = transform_scheduler_->DeferredFileNumbers();
+      auto mst = defer_callback_->ScheduleDeferred(deferred, deferred_files);
       if (!mst.ok()) {
         ROCKS_LOG_WARN(db_options_.info_log,
                        "[%s] [JOB %d] Mycelium: DeferCallback::ScheduleDeferred "
@@ -2107,21 +2136,44 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
         db_options_.stats, listeners, db_options_.file_checksum_gen_factory.get(),
         tmp_set.Contains(FileType::kTableFile), false), i);
 
+    // Helper: build a factory list that merges the CF's existing collectors
+    // with a per-file EpochIntTblPropCollectorFactory.  The augmented list
+    // only needs to outlive the NewBuilder() call (factories are consumed
+    // immediately by the TableBuilder constructor).
+    auto make_epoch_factories =
+        [&](const IntTblPropCollectorFactories* base_factories)
+        -> IntTblPropCollectorFactories {
+      IntTblPropCollectorFactories aug;
+      aug.reserve(base_factories->size() + 1);
+      for (const auto& f : *base_factories)
+        aug.emplace_back(
+            std::make_unique<DelegatingIntTblPropCollectorFactory>(f.get()));
+      if (epoch_store_ != nullptr)
+        aug.emplace_back(
+            std::make_unique<EpochIntTblPropCollectorFactory>(epoch_store_,
+                                                               file_number));
+      return aug;
+    };
+
     if (cfd->ioptions()->transformers.size() == 0) {
+      auto aug_factories =
+          make_epoch_factories(cfd->int_tbl_prop_collector_factories());
       TableBuilderOptions tboptions(
         *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
-        cfd->internal_comparator(), cfd->int_tbl_prop_collector_factories(),
+        cfd->internal_comparator(), &aug_factories,
         sub_compact->compaction->output_compression(),
         sub_compact->compaction->output_compression_opts(), cfd->GetID(),
         cfd->GetName(), sub_compact->compaction->output_level(),
         bottommost_level_, TableFileCreationReason::kCompaction,
         0 /* oldest_key_time */, current_time, db_id_, db_session_id_,
         sub_compact->compaction->max_output_file_size(), file_number);
-      outputs.NewBuilder(tboptions, i);   
+      outputs.NewBuilder(tboptions, i);
     } else {
+      auto aug_factories =
+          make_epoch_factories(dest_cfd->int_tbl_prop_collector_factories());
       TableBuilderOptions tboptions(
         *dest_cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
-        dest_cfd->internal_comparator(), dest_cfd->int_tbl_prop_collector_factories(),
+        dest_cfd->internal_comparator(), &aug_factories,
         sub_compact->compaction->output_compression(),
         sub_compact->compaction->output_compression_opts(), dest_cfd->GetID(),
         dest_cfd->GetName(), 0,

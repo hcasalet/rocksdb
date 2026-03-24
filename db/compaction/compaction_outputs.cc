@@ -15,6 +15,7 @@
 #include "transformer/convert/converter.h"
 #include "transformer/augment/augmenter.h"
 #include "transformer/identity/mynooper.h"
+#include "mycelium/compaction_hook.h"   // full definition of mycelium::GroveManager
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -423,6 +424,21 @@ Status CompactionOutputs::AddToOutput(
 
   if (UNLIKELY(is_range_del)) {
     return s;
+  }
+
+  // P4: Propagate point-delete tombstones to all derived CFs in the grove.
+  // This mirrors MymBroker::Delete() but fires during compaction so that
+  // derived CFs stay consistent even when the base CF is compacted without
+  // a concurrent write path.
+  if (grove_manager_ != nullptr &&
+      (c_iter.ikey().type == kTypeDeletion ||
+       c_iter.ikey().type == kTypeSingleDeletion)) {
+    auto ms = grove_manager_->PropagateDelete(c_iter.user_key().ToStringView());
+    if (!ms.ok()) {
+      // Non-fatal: log and continue; the base CF tombstone is still written.
+      // A future catch-up compaction will re-attempt propagation.
+      (void)ms;  // TODO: surface via ROCKS_LOG_WARN once we have a logger here
+    }
   }
 
   const Slice& value = c_iter.value();

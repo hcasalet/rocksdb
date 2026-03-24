@@ -682,6 +682,7 @@ set(SOURCES
         db/compaction/sst_partitioner.cc
         db/compaction/subcompaction_state.cc
         db/compaction/transform_scheduler.cc
+        db/mycelium_adapter/epoch_table_properties_collector.cc
         db/mycelium_adapter/rocksdb_compaction_writer.cc
         db/mycelium_adapter/rocksdb_defer_callback.cc
         db/mycelium_adapter/rocksdb_epoch_store.cc

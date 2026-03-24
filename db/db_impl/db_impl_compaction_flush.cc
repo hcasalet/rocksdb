@@ -10,8 +10,10 @@
 #include <deque>
 
 #include "db/builder.h"
+#include "db/column_family.h"
 #include "db/db_impl/db_impl.h"
 #include "db/error_handler.h"
+#include "db/mycelium_adapter/rocksdb_grove_manager.h"
 #include "db/event_helpers.h"
 #include "file/sst_file_manager_impl.h"
 #include "logging/logging.h"
@@ -1479,13 +1481,44 @@ Status DBImpl::CompactFilesImpl(
 
   compaction_job.Prepare();
 
-  mutex_.Unlock();
-  TEST_SYNC_POINT("CompactFilesImpl:0");
-  TEST_SYNC_POINT("CompactFilesImpl:1");
-  // Ignore the status here, as it will be checked in the Install down below...
-  compaction_job.Run().PermitUncheckedError();
-  TEST_SYNC_POINT("CompactFilesImpl:2");
-  TEST_SYNC_POINT("CompactFilesImpl:3");
+  // Wire the grove manager for compaction-time tombstone propagation.
+  // Done while holding db_mutex_ so CF handles are stable.
+  {
+    const auto& dest_cfds = cfd->GetDestinationCfds();
+    if (!dest_cfds.empty()) {
+      // Build temporary ColumnFamilyHandle wrappers (they Ref/Unref the CFDs).
+      // They outlive the compaction_job since they are destroyed after Run().
+      std::vector<std::unique_ptr<ColumnFamilyHandleImpl>> dest_handle_owners;
+      std::vector<ColumnFamilyHandle*> dest_raw;
+      dest_handle_owners.reserve(dest_cfds.size());
+      dest_raw.reserve(dest_cfds.size());
+      for (ColumnFamilyData* dest_cfd : dest_cfds) {
+        dest_handle_owners.emplace_back(
+            std::make_unique<ColumnFamilyHandleImpl>(dest_cfd, this, &mutex_));
+        dest_raw.push_back(dest_handle_owners.back().get());
+      }
+      compaction_job.SetGroveManager(
+          std::make_unique<RocksDBGroveManager>(this, dest_raw));
+      // The grove manager borrows dest_raw (raw ptrs).  dest_handle_owners
+      // holds the unique_ptrs and keeps the CFD refs alive.  It is destroyed
+      // at the end of this scope (after Run()), which calls cfd->Unref()
+      // without the mutex — that is safe per RocksDB convention.
+      mutex_.Unlock();
+      TEST_SYNC_POINT("CompactFilesImpl:0");
+      TEST_SYNC_POINT("CompactFilesImpl:1");
+      compaction_job.Run().PermitUncheckedError();
+      TEST_SYNC_POINT("CompactFilesImpl:2");
+      TEST_SYNC_POINT("CompactFilesImpl:3");
+      // dest_handle_owners destroyed here (after Run), releasing CFD refs.
+    } else {
+      mutex_.Unlock();
+      TEST_SYNC_POINT("CompactFilesImpl:0");
+      TEST_SYNC_POINT("CompactFilesImpl:1");
+      compaction_job.Run().PermitUncheckedError();
+      TEST_SYNC_POINT("CompactFilesImpl:2");
+      TEST_SYNC_POINT("CompactFilesImpl:3");
+    }
+  }
   mutex_.Lock();
 
   // Supply the deferred-compaction schedule function before Install() so that
@@ -3629,6 +3662,24 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         &bg_bottom_compaction_scheduled_);
     compaction_job.Prepare();
 
+    // Wire grove manager for tombstone propagation (while holding db_mutex_).
+    std::vector<std::unique_ptr<ColumnFamilyHandleImpl>> bg_dest_handle_owners;
+    {
+      const auto& dest_cfds = c->column_family_data()->GetDestinationCfds();
+      if (!dest_cfds.empty()) {
+        std::vector<ColumnFamilyHandle*> dest_raw;
+        bg_dest_handle_owners.reserve(dest_cfds.size());
+        dest_raw.reserve(dest_cfds.size());
+        for (ColumnFamilyData* dest_cfd : dest_cfds) {
+          bg_dest_handle_owners.emplace_back(
+              std::make_unique<ColumnFamilyHandleImpl>(dest_cfd, this, &mutex_));
+          dest_raw.push_back(bg_dest_handle_owners.back().get());
+        }
+        compaction_job.SetGroveManager(
+            std::make_unique<RocksDBGroveManager>(this, dest_raw));
+      }
+    }
+
     NotifyOnCompactionBegin(c->column_family_data(), c.get(), status,
                             compaction_job_stats, job_context->job_id);
     mutex_.Unlock();
@@ -3636,6 +3687,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         "DBImpl::BackgroundCompaction:NonTrivial:BeforeRun", nullptr);
     // Should handle error?
     compaction_job.Run().PermitUncheckedError();
+    // bg_dest_handle_owners destroyed here (after Run), Unref-ing the CFDs.
+    bg_dest_handle_owners.clear();
     TEST_SYNC_POINT("DBImpl::BackgroundCompaction:NonTrivial:AfterRun");
     mutex_.Lock();
 

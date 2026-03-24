@@ -225,8 +225,8 @@ class SubcompactionState {
                           const CompactionFileCloseFunc& close_file_func);
 
   // ── Admission control forwarding ──────────────────────────────────────
-  // Propagate scheduler/estimator/file-number to both output groups so that
-  // AddToOutput() on either group can apply the admission-control logic.
+  // Propagate scheduler/estimator/grove-manager/file-number to both output
+  // groups so that AddToOutput() on either group applies all hooks.
   void SetScheduler(TransformScheduler* sched) {
     compaction_outputs_.SetScheduler(sched);
     penultimate_level_outputs_.SetScheduler(sched);
@@ -234,6 +234,10 @@ class SubcompactionState {
   void SetEstimator(CompactionSlackEstimator* estimator) {
     compaction_outputs_.SetEstimator(estimator);
     penultimate_level_outputs_.SetEstimator(estimator);
+  }
+  void SetGroveManager(mycelium::GroveManager* gm) {
+    compaction_outputs_.SetGroveManager(gm);
+    penultimate_level_outputs_.SetGroveManager(gm);
   }
   void SetCurrentInputFileNumber(uint64_t fn) {
     compaction_outputs_.SetCurrentInputFileNumber(fn);

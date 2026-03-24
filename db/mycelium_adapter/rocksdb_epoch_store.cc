@@ -30,4 +30,14 @@ mycelium::Status RocksDBEpochStore::Evict(uint64_t file_id) {
   return mycelium::Status::OK();
 }
 
+void RocksDBEpochStore::PreLoad(uint64_t file_id, std::string_view encoded) {
+  if (encoded.empty()) return;
+  mycelium::TransformEpochTracker tracker;
+  auto s = tracker.DecodeFrom(encoded);
+  if (!s.ok()) return;          // malformed blob — treat as first-time compaction
+  std::lock_guard<std::mutex> lk(mu_);
+  // Only seed if not already present (a later Save() from the running job wins).
+  epochs_.emplace(file_id, std::move(tracker));
+}
+
 }  // namespace ROCKSDB_NAMESPACE

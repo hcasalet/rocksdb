@@ -3,18 +3,17 @@
 //
 // RocksDB concrete implementation of mycelium::EpochStore.
 //
-// P3 implementation: in-memory map guarded by a std::mutex.  This is
-// sufficient for the admission-control use-case (the epoch state guides
-// deferral decisions but is not crash-critical).
+// P3 implementation: in-memory map guarded by a std::mutex.
 //
-// P4 upgrade path: replace the in-memory map with a TablePropertiesCollector
-// that serialises TransformEpochTracker into SST user properties under the
-// key "mycelium.epoch".  Load() would then read via
-// DB::GetPropertiesOfAllTables() or the TableProperties embedded in the
-// SST metadata.  The public interface (Load/Save/Evict) stays identical.
+// P4: PreLoad() seeds the map from the encoded bytes stored in an SST's
+// user-collected table properties ("mycelium.epoch").  The write-back
+// side uses EpochIntTblPropCollector (see epoch_table_properties_collector.h),
+// which is injected per-output-file in CompactionJob::OpenCompactionOutputFile
+// and calls Load() → EncodeTo() → Finish() when the SST is closed.
 
 #include <cstdint>
 #include <mutex>
+#include <string_view>
 #include <unordered_map>
 
 #include "db/compaction/transform_epoch_tracker.h"
@@ -36,6 +35,12 @@ class RocksDBEpochStore final : public mycelium::EpochStore {
 
   // Remove the epoch record when the SST is deleted / compacted away.
   mycelium::Status Evict(uint64_t file_id) override;
+
+  // Seed the map from the encoded bytes stored in the SST's
+  // "mycelium.epoch" user-collected property.  Called once per input
+  // file at the start of CompactionJob::Run().  A malformed or empty
+  // blob is silently ignored (first-time compaction for this SST).
+  void PreLoad(uint64_t file_id, std::string_view encoded);
 
  private:
   mutable std::mutex mu_;

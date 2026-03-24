@@ -42,6 +42,7 @@
 #include "db/compaction/transform_scheduler.h"
 #include "db/mycelium_adapter/rocksdb_defer_callback.h"
 #include "db/mycelium_adapter/rocksdb_epoch_store.h"
+#include "db/mycelium_adapter/rocksdb_grove_manager.h"
 #include "rocksdb/compaction_job_stats.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -204,6 +205,14 @@ class CompactionJob {
   // SchedulePendingCompaction(cfd) so CompactionJob never needs a raw DBImpl*.
   using DeferScheduleFn = std::function<void(ColumnFamilyData*)>;
   void SetDeferScheduleFn(DeferScheduleFn fn);
+
+  // ── Mycelium grove-manager hook ────────────────────────────────────────
+  // Optional: inject a GroveManager before Run() so that compaction-time
+  // tombstones are propagated to all derived CFs.  The manager is forwarded
+  // to CompactionOutputs::SetGroveManager() inside ProcessKeyValueCompaction.
+  // DBImpl constructs a RocksDBGroveManager (it owns the DB* and CF handles)
+  // and passes ownership here.  If not set, propagation is skipped.
+  void SetGroveManager(std::unique_ptr<RocksDBGroveManager> gm);
   // ─────────────────────────────────────────────────────────────────────
 
  protected:
@@ -315,11 +324,14 @@ class CompactionJob {
   //   CompactFilesImpl) before Install() is called.  Wraps the call to
   //   DBImpl::SchedulePendingCompaction so CompactionJob needs no raw DBImpl*.
   // defer_callback_:    built from defer_schedule_fn_ inside Install().
-  // epoch_store_:       in-memory per-SST epoch state (P3: job-scoped).
+  // epoch_store_:       in-memory per-SST epoch state (job-scoped; P4 adds SST
+  //                     property persistence via EpochIntTblPropCollector).
+  // grove_manager_:     propagates deletes to derived CFs during compaction.
   DeferScheduleFn                         defer_schedule_fn_;
   std::unique_ptr<RocksDBDeferCallback>   defer_callback_;
   std::unique_ptr<RocksDBEpochStore>      owned_epoch_store_;
   RocksDBEpochStore*                      epoch_store_ = nullptr;
+  std::unique_ptr<RocksDBGroveManager>    grove_manager_;
   // ─────────────────────────────────────────────────────────────────────
 
   // DBImpl state
