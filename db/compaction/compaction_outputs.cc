@@ -575,6 +575,17 @@ Status CompactionOutputs::EmitOne(
   return Status::OK();
 }
 
+Status CompactionOutputs::AddKV(size_t dest_index,
+                                std::string_view key_sv,
+                                std::string_view value_sv) {
+  Slice key(key_sv.data(), key_sv.size());
+  Slice value(value_sv.data(), value_sv.size());
+  ParsedInternalKey ikey;
+  Status s = ParseInternalKey(key, &ikey, /*log_err_key=*/false);
+  if (!s.ok()) return s;
+  return EmitOne(dest_index, key, value, &ikey);
+}
+
 Status CompactionOutputs::AddDerivedOutput(
     std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,
     const CompactionFileOpenFunc& open_file_func,

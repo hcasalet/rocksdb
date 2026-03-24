@@ -64,6 +64,8 @@
 #include "transformer/convert/converter.h"
 #include "transformer/distribute/distributor.h"
 #include "transformer/identity/mynooper.h"
+#include "db/mycelium_adapter/rocksdb_defer_callback.h"
+#include "db/mycelium_adapter/rocksdb_epoch_store.h"
 #include "util/stop_watch.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -655,6 +657,16 @@ Status CompactionJob::Run() {
   }
   // ─────────────────────────────────────────────────────────────────────
 
+  // ── Mycelium adapter layer ─────────────────────────────────────────────
+  // EpochStore: allocate a per-job store (P3 in-memory).
+  // In a future DB-lifetime store, pass a DB-owned pointer here instead.
+  owned_epoch_store_ = std::make_unique<RocksDBEpochStore>();
+  epoch_store_ = owned_epoch_store_.get();
+
+  // DeferCallback: built lazily in Install() once the caller (DBImpl) has
+  // supplied the schedule function via SetDeferScheduleFn().  See that method.
+  // ─────────────────────────────────────────────────────────────────────
+
   const size_t num_threads = compact_->sub_compact_states.size();
   assert(num_threads > 0);
   const uint64_t start_micros = db_options_.clock->NowMicros();
@@ -848,8 +860,19 @@ Status CompactionJob::Run() {
   return status;
 }
 
+void CompactionJob::SetDeferScheduleFn(DeferScheduleFn fn) {
+  defer_schedule_fn_ = std::move(fn);
+}
+
 Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   assert(compact_);
+
+  // Build the deferred-compaction callback now that we hold db_mutex_ and the
+  // caller has (optionally) supplied a schedule function.
+  if (defer_schedule_fn_) {
+    defer_callback_ = std::make_unique<RocksDBDeferCallback>(
+        versions_, defer_schedule_fn_);
+  }
 
   AutoThreadOperationStageUpdater stage_updater(
       ThreadStatus::STAGE_COMPACTION_INSTALL);
@@ -1875,22 +1898,27 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
   }
 
   // ── Deferred catch-up scheduling ─────────────────────────────────────
-  // If any input files had their transforms deferred due to CPU budget, schedule
-  // a catch-up compaction on each affected destination CF so the derived trees
-  // eventually converge with the base tree.
-  if (log_and_apply_status.ok() && transform_scheduler_ != nullptr) {
+  // If any input files had their transforms deferred due to CPU budget, use
+  // the defer_callback_ adapter to mark each affected destination CF for
+  // compaction so the derived trees eventually converge with the base tree.
+  if (log_and_apply_status.ok() && transform_scheduler_ != nullptr &&
+      defer_callback_ != nullptr) {
     auto deferred = transform_scheduler_->DeferredCFs();
     if (!deferred.empty()) {
       ROCKS_LOG_INFO(db_options_.info_log,
                      "[%s] [JOB %d] Mycelium: %zu CF(s) deferred by admission "
-                     "control; catch-up compaction recommended.",
+                     "control; scheduling catch-up compaction.",
                      compaction->column_family_data()->GetName().c_str(),
                      job_id_, deferred.size());
-      // TODO: obtain the deferred ColumnFamilyData* from versions_ and call
-      //   db_->SchedulePendingCompaction(deferred_cfd);
-      // This requires access to a DBImpl pointer which CompactionJob does not
-      // currently hold.  Wire it in via a callback or add a db_impl_ member.
-      (void)deferred;
+      // file_numbers hint: not tracked at this granularity yet; pass empty.
+      auto mst = defer_callback_->ScheduleDeferred(deferred, {});
+      if (!mst.ok()) {
+        ROCKS_LOG_WARN(db_options_.info_log,
+                       "[%s] [JOB %d] Mycelium: DeferCallback::ScheduleDeferred "
+                       "returned error: %s",
+                       compaction->column_family_data()->GetName().c_str(),
+                       job_id_, mst.message().c_str());
+      }
     }
   }
   // ─────────────────────────────────────────────────────────────────────

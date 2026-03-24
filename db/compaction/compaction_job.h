@@ -40,6 +40,8 @@
 #include "rocksdb/compaction_filter.h"
 #include "db/compaction/compaction_slack_estimator.h"
 #include "db/compaction/transform_scheduler.h"
+#include "db/mycelium_adapter/rocksdb_defer_callback.h"
+#include "db/mycelium_adapter/rocksdb_epoch_store.h"
 #include "rocksdb/compaction_job_stats.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
@@ -196,6 +198,14 @@ class CompactionJob {
   // Return the IO status
   IOStatus io_status() const { return io_status_; }
 
+  // ── Mycelium deferred-compaction hook ─────────────────────────────────
+  // Must be called (with db_mutex_ held) before Install() when the job may
+  // have deferred transforms.  DBImpl passes a lambda that calls its own
+  // SchedulePendingCompaction(cfd) so CompactionJob never needs a raw DBImpl*.
+  using DeferScheduleFn = std::function<void(ColumnFamilyData*)>;
+  void SetDeferScheduleFn(DeferScheduleFn fn);
+  // ─────────────────────────────────────────────────────────────────────
+
  protected:
   void UpdateCompactionStats();
   void LogCompaction();
@@ -298,6 +308,18 @@ class CompactionJob {
   CompactionSlackEstimator                slack_estimator_;
   std::unique_ptr<AdmissionPolicy>        default_admission_policy_;  // owns fallback
   std::unique_ptr<TransformScheduler>     transform_scheduler_;
+  // ─────────────────────────────────────────────────────────────────────
+
+  // ── Mycelium adapter layer ─────────────────────────────────────────────
+  // defer_schedule_fn_: injected by DBImpl::BackgroundCompaction (or
+  //   CompactFilesImpl) before Install() is called.  Wraps the call to
+  //   DBImpl::SchedulePendingCompaction so CompactionJob needs no raw DBImpl*.
+  // defer_callback_:    built from defer_schedule_fn_ inside Install().
+  // epoch_store_:       in-memory per-SST epoch state (P3: job-scoped).
+  DeferScheduleFn                         defer_schedule_fn_;
+  std::unique_ptr<RocksDBDeferCallback>   defer_callback_;
+  std::unique_ptr<RocksDBEpochStore>      owned_epoch_store_;
+  RocksDBEpochStore*                      epoch_store_ = nullptr;
   // ─────────────────────────────────────────────────────────────────────
 
   // DBImpl state

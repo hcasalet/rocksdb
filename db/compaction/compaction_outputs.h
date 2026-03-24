@@ -240,6 +240,13 @@ class CompactionOutputs {
   void SetCurrentInputFileNumber(uint64_t fn) { current_input_file_number_ = fn; }
   // ─────────────────────────────────────────────────────────────────────
 
+  // Public bridge for the RocksDB adapter layer (RocksDBCompactionWriter).
+  // Parses the encoded internal key from [key_sv], then delegates to EmitOne.
+  // Called by the adapter when libmycelium's CompactionWriter::EmitKV fires.
+  Status AddKV(size_t dest_index,
+               std::string_view key_sv,
+               std::string_view value_sv);
+
  private:
   friend class SubcompactionState;
 
@@ -310,7 +317,7 @@ class CompactionOutputs {
                  const Slice& key,
                  const Slice& value,
                  const ParsedInternalKey* ikey_ptr);
-  
+
   // Add derived data to the output file
   Status AddDerivedOutput(std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,
                          const CompactionFileOpenFunc& open_file_func,

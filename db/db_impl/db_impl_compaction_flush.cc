@@ -1488,6 +1488,11 @@ Status DBImpl::CompactFilesImpl(
   TEST_SYNC_POINT("CompactFilesImpl:3");
   mutex_.Lock();
 
+  // Supply the deferred-compaction schedule function before Install() so that
+  // RocksDBDeferCallback can call SchedulePendingCompaction under the mutex.
+  compaction_job.SetDeferScheduleFn(
+      [this](ColumnFamilyData* cfd_to_schedule) { SchedulePendingCompaction(cfd_to_schedule); });
+
   Status status = compaction_job.Install(*c->mutable_cf_options());
   if (status.ok()) {
     assert(compaction_job.io_status().ok());
@@ -3633,6 +3638,11 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     compaction_job.Run().PermitUncheckedError();
     TEST_SYNC_POINT("DBImpl::BackgroundCompaction:NonTrivial:AfterRun");
     mutex_.Lock();
+
+    // Supply the deferred-compaction schedule function before Install() so that
+    // RocksDBDeferCallback can call SchedulePendingCompaction under the mutex.
+    compaction_job.SetDeferScheduleFn(
+        [this](ColumnFamilyData* cfd) { SchedulePendingCompaction(cfd); });
 
     status = compaction_job.Install(*c->mutable_cf_options());
     io_s = compaction_job.io_status();
