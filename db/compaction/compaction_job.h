@@ -38,8 +38,8 @@
 #include "rocksdb/admission_policy.h"
 #include "rocksdb/arrow_compaction_batcher.h"
 #include "rocksdb/compaction_filter.h"
-#include "db/compaction/compaction_slack_estimator.h"
-#include "db/compaction/transform_scheduler.h"
+#include "mycelium/compaction_slack_estimator.h"
+#include "mycelium/transform_scheduler.h"
 #include "db/mycelium_adapter/rocksdb_defer_callback.h"
 #include "db/mycelium_adapter/rocksdb_epoch_store.h"
 #include "db/mycelium_adapter/rocksdb_grove_manager.h"
@@ -48,7 +48,6 @@
 #include "rocksdb/env.h"
 #include "rocksdb/memtablerep.h"
 #include "rocksdb/transaction_log.h"
-#include "rocksdb/transformer.h"
 #include "table/scoped_arena_iterator.h"
 #include "util/autovector.h"
 #include "util/stop_watch.h"
@@ -314,9 +313,9 @@ class CompactionJob {
 
   // ── Admission control ──────────────────────────────────────────────────
   // One estimator + scheduler per CompactionJob (shared across subcompactions).
-  CompactionSlackEstimator                slack_estimator_;
+  mycelium::CompactionSlackEstimator      slack_estimator_;
   std::unique_ptr<AdmissionPolicy>        default_admission_policy_;  // owns fallback
-  std::unique_ptr<TransformScheduler>     transform_scheduler_;
+  std::unique_ptr<mycelium::TransformScheduler> transform_scheduler_;
   // ─────────────────────────────────────────────────────────────────────
 
   // ── Mycelium adapter layer ─────────────────────────────────────────────

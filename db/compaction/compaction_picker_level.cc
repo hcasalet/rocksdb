@@ -10,6 +10,7 @@
 #include "db/compaction/compaction_picker_level.h"
 
 #include <string>
+#include "mycelium/transformer.h"
 #include <utility>
 #include <vector>
 
@@ -774,7 +775,7 @@ bool LevelCompactionBuilder::PickFileToCompact() {
   assert(start_level_ >= 0);
 
   if ((ioptions_.transformers.size() == 0 || 
-          ioptions_.transformers[0]->Supports() == TransformerType::NOTRANSFORMATION) && 
+          ioptions_.transformers[0]->Supports() == mycelium::TransformerType::NOTRANSFORMATION) &&
        TryPickL0TrivialMove()) {
     return true;
   }

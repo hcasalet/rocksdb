@@ -16,9 +16,8 @@
 #include "db/internal_stats.h"
 #include "db/output_validator.h"
 #include "rocksdb/arrow_compaction_batcher.h"
-#include "rocksdb/transformer.h"
-#include "db/compaction/compaction_slack_estimator.h"
-#include "db/compaction/transform_scheduler.h"
+#include "mycelium/compaction_slack_estimator.h"
+#include "mycelium/transform_scheduler.h"
 
 // Forward-declare so we can hold a pointer without pulling in
 // mycelium/compaction_hook.h (and transitively Arrow / protobuf) from every
@@ -237,8 +236,8 @@ class CompactionOutputs {
   // ── Admission control ──────────────────────────────────────────────────
   // Called once per CompactionJob before any KV pairs are processed.
   // Borrowed pointers; all must outlive this CompactionOutputs object.
-  void SetScheduler(TransformScheduler* sched)          { scheduler_ = sched; }
-  void SetEstimator(CompactionSlackEstimator* estimator) { estimator_ = estimator; }
+  void SetScheduler(mycelium::TransformScheduler* sched)          { scheduler_ = sched; }
+  void SetEstimator(mycelium::CompactionSlackEstimator* estimator) { estimator_ = estimator; }
 
   // P4: Inject the grove manager so that AddToOutput() can propagate deletes
   // to all derived column families when a tombstone KV is encountered.
@@ -450,8 +449,8 @@ class CompactionOutputs {
 
   // ── Admission control members ─────────────────────────────────────────
   // All are nullptr until Set*() is called by CompactionJob.
-  TransformScheduler*       scheduler_     = nullptr;
-  CompactionSlackEstimator* estimator_     = nullptr;
+  mycelium::TransformScheduler*       scheduler_     = nullptr;
+  mycelium::CompactionSlackEstimator* estimator_     = nullptr;
   mycelium::GroveManager*   grove_manager_ = nullptr;
 
   // File number of the SST currently being processed.  Updated by

@@ -227,11 +227,11 @@ class SubcompactionState {
   // ── Admission control forwarding ──────────────────────────────────────
   // Propagate scheduler/estimator/grove-manager/file-number to both output
   // groups so that AddToOutput() on either group applies all hooks.
-  void SetScheduler(TransformScheduler* sched) {
+  void SetScheduler(mycelium::TransformScheduler* sched) {
     compaction_outputs_.SetScheduler(sched);
     penultimate_level_outputs_.SetScheduler(sched);
   }
-  void SetEstimator(CompactionSlackEstimator* estimator) {
+  void SetEstimator(mycelium::CompactionSlackEstimator* estimator) {
     compaction_outputs_.SetEstimator(estimator);
     penultimate_level_outputs_.SetEstimator(estimator);
   }

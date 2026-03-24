@@ -11,10 +11,10 @@
 #include "db/compaction/compaction_outputs.h"
 
 #include "db/builder.h"
-#include "transformer/distribute/distributor.h"
-#include "transformer/convert/converter.h"
-#include "transformer/augment/augmenter.h"
-#include "transformer/identity/mynooper.h"
+#include "mycelium/distributor.h"
+#include "mycelium/converter.h"
+#include "mycelium/augmenter.h"
+#include "mycelium/mynooper.h"
 #include "mycelium/compaction_hook.h"   // full definition of mycelium::GroveManager
 
 namespace ROCKSDB_NAMESPACE {
@@ -371,9 +371,9 @@ Status CompactionOutputs::AddToOutput(
   const auto& opts = cfd->ioptions();
   assert(opts->transformers.size() == opts->schemaDescriptors.size());
 
-  TransformerType transformer_type = TransformerType::NOTRANSFORMATION;
+  mycelium::TransformerType transformer_type = mycelium::TransformerType::NOTRANSFORMATION;
   std::shared_ptr<Transformer> transformer = nullptr;
-  std::shared_ptr<SchemaDescriptor> schemaDescriptor = nullptr;
+  std::shared_ptr<mycelium::SchemaDescriptor> schemaDescriptor = nullptr;
 
   if (!opts->transformers.empty() && !opts->schemaDescriptors.empty()) {
     transformer_type = opts->transformers[0]->Supports();
@@ -451,11 +451,11 @@ Status CompactionOutputs::AddToOutput(
     return ByteBuffer(p, p + v.size());
   };
 
-  auto has_flag = [&](TransformerType f) {
+  auto has_flag = [&](mycelium::TransformerType f) {
     return (to_underlying(transformer_type) & to_underlying(f)) != 0;
   };
 
-  if (transformer_type == TransformerType::NOTRANSFORMATION) {
+  if (transformer_type == mycelium::TransformerType::NOTRANSFORMATION) {
     s = EmitOne(0, key, value, &c_iter.ikey());
   } else {
     auto ar_input_res = schemaDescriptor->ParseToArrow(as_bytes(value));
@@ -469,7 +469,7 @@ Status CompactionOutputs::AddToOutput(
 
       if (scheduler_ != nullptr) {
         auto decision = scheduler_->Decide(transformer_type, sst_file_number);
-        if (decision == TransformScheduler::Decision::kApply) {
+        if (decision == mycelium::TransformScheduler::Decision::kApply) {
           uint64_t transform_cpu_ns = 0;
           // key is rocksdb::Slice; convert to string_view at the adapter boundary.
           decltype(transformer->Transform(key.ToStringView(), ar_input)) ar_outputs;
@@ -479,7 +479,7 @@ Status CompactionOutputs::AddToOutput(
           }
           scheduler_->OnApplied(transform_cpu_ns);
 
-          if (has_flag(TransformerType::AUGMENTER)) {
+          if (has_flag(mycelium::TransformerType::AUGMENTER)) {
             output_values.emplace_back(
                 reinterpret_cast<const uint8_t*>(value.data()),
                 reinterpret_cast<const uint8_t*>(value.data()) + value.size());
@@ -497,7 +497,7 @@ Status CompactionOutputs::AddToOutput(
             Slice compacted_value(reinterpret_cast<const char*>(output_value.data()), output_value.size());
             const ParsedInternalKey* ikey_ptr = nullptr;
 
-            if (has_flag(TransformerType::AUGMENTER)) {
+            if (has_flag(mycelium::TransformerType::AUGMENTER)) {
               ParsedInternalKey index_ikey;
               if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
                 s = Status::Corruption("Failed to parse internal key from compacted value");
@@ -512,7 +512,7 @@ Status CompactionOutputs::AddToOutput(
 
             s = EmitOne(i, key, compacted_value, ikey_ptr);
           }
-        } else if (decision == TransformScheduler::Decision::kDefer) {
+        } else if (decision == mycelium::TransformScheduler::Decision::kDefer) {
           // Transform deferred: write passthrough and record for catch-up.
           scheduler_->OnDeferred(sst_file_number);
           s = EmitOne(0, key, value, &c_iter.ikey());
@@ -524,7 +524,7 @@ Status CompactionOutputs::AddToOutput(
         // No scheduler attached — original Mycelium path.
         auto ar_outputs = transformer->Transform(key.ToStringView(), ar_input);
 
-        if (has_flag(TransformerType::AUGMENTER)) {
+        if (has_flag(mycelium::TransformerType::AUGMENTER)) {
           output_values.emplace_back(
               reinterpret_cast<const uint8_t*>(value.data()),
               reinterpret_cast<const uint8_t*>(value.data()) + value.size());
@@ -542,7 +542,7 @@ Status CompactionOutputs::AddToOutput(
           Slice compacted_value(reinterpret_cast<const char*>(output_value.data()), output_value.size());
           const ParsedInternalKey* ikey_ptr = nullptr;
 
-          if (has_flag(TransformerType::AUGMENTER)) {
+          if (has_flag(mycelium::TransformerType::AUGMENTER)) {
             ParsedInternalKey index_ikey;
             if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
               s = Status::Corruption("Failed to parse internal key from compacted value");

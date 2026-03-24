@@ -14,7 +14,7 @@
 #include "rocksdb/compression_type.h"
 #include "rocksdb/memtablerep.h"
 #include "rocksdb/universal_compaction.h"
-#include "rocksdb/transformer.h"
+#include "mycelium/transformer.h"
 #include "rocksdb/admission_policy.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -584,7 +584,7 @@ struct AdvancedColumnFamilyOptions {
   std::string column_data_type = "mixed";
 
   // Transformer type
-  TransformerType transformer_type = TransformerType::NOTRANSFORMATION;
+  mycelium::TransformerType transformer_type = mycelium::TransformerType::NOTRANSFORMATION;
 
   // InputOutputData types
   InputOutputDataType input_data_type = InputOutputDataType::UNKNOWN;

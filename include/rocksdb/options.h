@@ -26,7 +26,7 @@
 #include "rocksdb/file_checksum.h"
 #include "rocksdb/listener.h"
 #include "rocksdb/sst_partitioner.h"
-#include "rocksdb/transformer.h"
+#include "mycelium/transformer.h"
 #include "rocksdb/types.h"
 #include "rocksdb/universal_compaction.h"
 #include "rocksdb/version.h"
@@ -57,7 +57,7 @@ class Statistics;
 class InternalKeyComparator;
 class WalFilter;
 class FileSystem;
-class Transformer;
+// mycelium::Transformer is fully declared via mycelium/transformer.h above.
 
 struct Options;
 struct DbPath;
@@ -167,11 +167,11 @@ struct ColumnFamilyOptions : public AdvancedColumnFamilyOptions {
 
   // Transformers contains the transformers that transform compaction outputs 
   // into the desired format
-  std::vector<std::shared_ptr<Transformer>> transformers;
+  std::vector<std::shared_ptr<mycelium::Transformer>> transformers;
 
-  // SchemaDescriptors for Transformer. Each one of them in the collection is 
+  // SchemaDescriptors for Transformer. Each one of them in the collection is
   // corresponding to the above transformers
-  std::vector<std::shared_ptr<SchemaDescriptor>> schemaDescriptors;
+  std::vector<std::shared_ptr<mycelium::SchemaDescriptor>> schemaDescriptors;
 
   // Destination column families that are there to hold the transformed data
   std::vector<std::string> destination_column_families;

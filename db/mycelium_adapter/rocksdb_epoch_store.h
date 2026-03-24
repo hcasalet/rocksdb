@@ -16,7 +16,7 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "db/compaction/transform_epoch_tracker.h"
+#include "mycelium/transform_epoch_tracker.h"
 #include "mycelium/compaction_hook.h"
 
 namespace ROCKSDB_NAMESPACE {

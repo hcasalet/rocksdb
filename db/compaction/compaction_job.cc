@@ -60,10 +60,10 @@
 #include "table/table_builder.h"
 #include "table/unique_id_impl.h"
 #include "test_util/sync_point.h"
-#include "transformer/augment/augmenter.h"
-#include "transformer/convert/converter.h"
-#include "transformer/distribute/distributor.h"
-#include "transformer/identity/mynooper.h"
+#include "mycelium/augmenter.h"
+#include "mycelium/converter.h"
+#include "mycelium/distributor.h"
+#include "mycelium/mynooper.h"
 #include "db/mycelium_adapter/epoch_table_properties_collector.h"
 #include "db/mycelium_adapter/rocksdb_defer_callback.h"
 #include "db/mycelium_adapter/rocksdb_epoch_store.h"
@@ -652,7 +652,7 @@ Status CompactionJob::Run() {
       default_admission_policy_ = std::make_unique<AlwaysAdmitPolicy>();
       policy = default_admission_policy_.get();
     }
-    transform_scheduler_ = std::make_unique<TransformScheduler>(
+    transform_scheduler_ = std::make_unique<mycelium::TransformScheduler>(
         policy, &slack_estimator_,
         compact_->sub_compact_states[0].compaction->output_level());
   }
@@ -2113,7 +2113,7 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
       bool check_key_order = false;
       const auto& tfs = cfd->ioptions()->transformers;
       if (!tfs.empty() && tfs[0]) {
-        if (tfs[0]->Supports() == TransformerType::AUGMENTER && dest_cfd->GetName().find("secondary_index") != std::string::npos) {
+        if (tfs[0]->Supports() == mycelium::TransformerType::AUGMENTER && dest_cfd->GetName().find("secondary_index") != std::string::npos) {
           check_key_order = false;
         } else {
           check_key_order = sub_compact->compaction->mutable_cf_options()->check_flush_compaction_key_order;

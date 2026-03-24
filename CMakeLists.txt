@@ -678,10 +678,8 @@ set(SOURCES
         db/compaction/compaction_service_job.cc
         db/compaction/compaction_state.cc
         db/compaction/compaction_outputs.cc
-        db/compaction/compaction_slack_estimator.cc
         db/compaction/sst_partitioner.cc
         db/compaction/subcompaction_state.cc
-        db/compaction/transform_scheduler.cc
         db/mycelium_adapter/epoch_table_properties_collector.cc
         db/mycelium_adapter/rocksdb_compaction_writer.cc
         db/mycelium_adapter/rocksdb_defer_callback.cc
@@ -870,21 +868,6 @@ set(SOURCES
         trace_replay/trace_record_result.cc
         trace_replay/trace_record.cc
         trace_replay/trace_replay.cc
-        transformer/distribute/distributor.cc
-        transformer/convert/converter.cc
-        transformer/augment/augmenter.cc
-        transformer/common/parser/json_parser.cc
-        transformer/common/parser/csv_parser.cc
-        transformer/common/parser/fixedbin64_parser.cc
-        transformer/common/parser/flatbuffers_parser.cc
-        transformer/common/parser/protobuf_parser.cc
-        transformer/common/encoder/csv_encoder.cc
-        transformer/common/encoder/fixedbin64_encoder.cc
-        transformer/common/encoder/flatbuffers_encoder.cc
-        transformer/common/encoder/json_encoder.cc
-        transformer/common/encoder/protobuf_encoder.cc
-        transformer/identity/mynooper.cc
-        transformer/transformer_factory.cc
         util/async_file_reader.cc
         util/cleanable.cc
         util/coding.cc
@@ -1162,33 +1145,6 @@ if (NOT TARGET Arrow::arrow)
   else()
     message(FATAL_ERROR "Arrow CONFIG found but no Arrow library targets were exported")
   endif()
-endif()
-
-# ── P2: remove sources now compiled in libmycelium ───────────────────────────
-# When WITH_LIBMYCELIUM is ON the portable core is compiled once inside
-# libmycelium.  Remove the corresponding .cc files from the RocksDB SOURCES
-# list to prevent duplicate-symbol linker errors.
-option(WITH_LIBMYCELIUM_SOURCES "Remove libmycelium sources from RocksDB build" ON)
-if(WITH_LIBMYCELIUM_SOURCES)
-  list(REMOVE_ITEM SOURCES
-    db/compaction/compaction_slack_estimator.cc
-    db/compaction/transform_scheduler.cc
-    transformer/distribute/distributor.cc
-    transformer/convert/converter.cc
-    transformer/augment/augmenter.cc
-    transformer/common/parser/json_parser.cc
-    transformer/common/parser/csv_parser.cc
-    transformer/common/parser/fixedbin64_parser.cc
-    transformer/common/parser/flatbuffers_parser.cc
-    transformer/common/parser/protobuf_parser.cc
-    transformer/common/encoder/csv_encoder.cc
-    transformer/common/encoder/fixedbin64_encoder.cc
-    transformer/common/encoder/flatbuffers_encoder.cc
-    transformer/common/encoder/json_encoder.cc
-    transformer/common/encoder/protobuf_encoder.cc
-    transformer/identity/mynooper.cc
-    transformer/transformer_factory.cc
-  )
 endif()
 
 add_library(${ROCKSDB_STATIC_LIB} STATIC ${SOURCES} ${BUILD_VERSION_CC})
@@ -1694,10 +1650,10 @@ if(WITH_BENCHMARK)
   add_subdirectory(${PROJECT_SOURCE_DIR}/microbench/)
 endif()
 
-# ── libmycelium: portable transformation core (Phase P2 — compiled STATIC lib) ──
-# libmycelium lives alongside (not inside) the RocksDB tree.  In P2+ it is a
-# compiled STATIC library; the RocksDB adapter links against it and exposes the
-# mycelium types via thin shim headers in include/rocksdb/ and db/compaction/.
+# ── libmycelium: portable transformation core ────────────────────────────────
+# libmycelium lives alongside (not inside) the RocksDB tree.  It is compiled
+# as a STATIC library and the RocksDB adapter links against it.  All mycelium
+# types are referenced directly via mycelium/ headers (P5: shims removed).
 #
 # Pass -DMYCELIUM_WITH_PROTOBUF=ON / -DMYCELIUM_WITH_FLATBUFFERS=ON to enable
 # the optional serialisation back-ends inside libmycelium.
@@ -1708,8 +1664,8 @@ if(WITH_LIBMYCELIUM)
   # Link the compiled library privately — consumers don't need to link
   # libmycelium themselves.  Expose the include path PUBLIC so that
   # translation units that include rocksdb public headers (e.g.
-  # advanced_options.h → rocksdb/transformer.h shim → mycelium/transformer.h)
-  # can find the mycelium/ headers at compile time.
+  # advanced_options.h → mycelium/transformer.h) can find the mycelium/
+  # headers at compile time.
   target_link_libraries(rocksdb PRIVATE mycelium::mycelium)
   target_include_directories(rocksdb PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../libmycelium/include>)

@@ -11,7 +11,7 @@
 #include <google/protobuf/reflection.h>
 
 #include "rocksdb/slice.h"
-#include "rocksdb/transformer.h"
+#include "mycelium/transformer.h"
 
 #ifdef LZ4
   #pragma push_macro("LZ4")
@@ -53,11 +53,11 @@ class ValueParser {
   public:
     enum class Format { kJson, kCsv, kProtobuf };
 
-    ValueParser(const SchemaDescriptor& schema) : schema_(schema) {}
+    ValueParser(const mycelium::SchemaDescriptor& schema) : schema_(schema) {}
     arrow::Result<ParsedRow> Parse(const Slice& value) const;
 
   private:
-    const SchemaDescriptor& schema_;
+    const mycelium::SchemaDescriptor& schema_;
 
     // Parsers (as private helpers)
     arrow::Result<ParsedRow> ParseJson(const Slice& value) const;
@@ -73,7 +73,7 @@ class ValueParser {
 class ArrowCompactionBatcher {
  public:
   static arrow::Result<std::unique_ptr<ArrowCompactionBatcher>> Create(
-      const SchemaDescriptor& schema);
+      const mycelium::SchemaDescriptor& schema);
 
   // Add a row. Copies bytes into Arrow builders.
   arrow::Status Add(const Slice& internal_key, 
@@ -98,8 +98,8 @@ class ArrowCompactionBatcher {
   std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders_;
   std::shared_ptr<arrow::Schema> schema_;
   
-  explicit ArrowCompactionBatcher(const SchemaDescriptor& schema);
-  arrow::Status BuildFromSchema(const SchemaDescriptor& schema);
+  explicit ArrowCompactionBatcher(const mycelium::SchemaDescriptor& schema);
+  arrow::Status BuildFromSchema(const mycelium::SchemaDescriptor& schema);
   arrow::Status Clear();
   arrow::Status Reset();
 };

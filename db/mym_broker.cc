@@ -1,10 +1,10 @@
 #include <queue>
 #include <sstream>
 #include "rocksdb/mym_broker.h"
-#include "transformer/distribute/distributor.h"
-#include "transformer/convert/converter.h"
-#include "transformer/augment/augmenter.h"
-#include "transformer/identity/mynooper.h"
+#include "mycelium/distributor.h"
+#include "mycelium/converter.h"
+#include "mycelium/augmenter.h"
+#include "mycelium/mynooper.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -319,7 +319,7 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
             std::vector<std::string> child_names;
             const auto tmask = static_cast<int>(transformer->Supports());
             
-            if (tmask & static_cast<int>(TransformerType::DISTRIBUTOR)) {
+            if (tmask & static_cast<int>(mycelium::TransformerType::DISTRIBUTOR)) {
                 auto* trptr = dynamic_cast<const Distributor*>(transformer); 
                 const int splits = trptr->GetNumSplits();
                 child_names.reserve(splits);
@@ -327,10 +327,10 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
                     child_names.emplace_back(plan.nodes[parent_idx].name + "_split_cf_" + std::to_string(k));
                 }
 
-            } else if (tmask & static_cast<int>(TransformerType::CONVERTER)) {
+            } else if (tmask & static_cast<int>(mycelium::TransformerType::CONVERTER)) {
                 child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_converted_cf"));
 
-            } else if (tmask & static_cast<int>(TransformerType::AUGMENTER)) {
+            } else if (tmask & static_cast<int>(mycelium::TransformerType::AUGMENTER)) {
                 child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_indexed_data_cf"));
                 // secondary index CFs (no further transformers)
                 auto* trptr = dynamic_cast<const Augmenter*>(transformer);
@@ -339,7 +339,7 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
                     child_names.emplace_back(plan.nodes[parent_idx].name + "_secondary_index_cf" + std::to_string(k));
                 }
 
-            } else if (tmask & static_cast<int>(TransformerType::MYNOOPER)) {
+            } else if (tmask & static_cast<int>(mycelium::TransformerType::MYNOOPER)) {
                 child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_identity_cf"));
 
             } else {
