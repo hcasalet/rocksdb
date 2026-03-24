@@ -587,8 +587,8 @@ struct AdvancedColumnFamilyOptions {
   mycelium::TransformerType transformer_type = mycelium::TransformerType::NOTRANSFORMATION;
 
   // InputOutputData types
-  InputOutputDataType input_data_type = InputOutputDataType::UNKNOWN;
-  InputOutputDataType output_data_type = InputOutputDataType::UNKNOWN;
+  mycelium::InputOutputDataType input_data_type = mycelium::InputOutputDataType::UNKNOWN;
+  mycelium::InputOutputDataType output_data_type = mycelium::InputOutputDataType::UNKNOWN;
 
   // Soft limit on number of level-0 files. We start slowing down writes at this
   // point. A value <0 means that no writing slow down will be triggered by

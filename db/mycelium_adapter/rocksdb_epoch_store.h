@@ -16,6 +16,7 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "rocksdb/rocksdb_namespace.h"
 #include "mycelium/transform_epoch_tracker.h"
 #include "mycelium/compaction_hook.h"
 

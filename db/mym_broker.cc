@@ -320,7 +320,7 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
             const auto tmask = static_cast<int>(transformer->Supports());
             
             if (tmask & static_cast<int>(mycelium::TransformerType::DISTRIBUTOR)) {
-                auto* trptr = dynamic_cast<const Distributor*>(transformer); 
+                auto* trptr = dynamic_cast<const mycelium::Distributor*>(transformer);
                 const int splits = trptr->GetNumSplits();
                 child_names.reserve(splits);
                 for (int k = 0; k < splits; ++k) {
@@ -333,7 +333,7 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
             } else if (tmask & static_cast<int>(mycelium::TransformerType::AUGMENTER)) {
                 child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_indexed_data_cf"));
                 // secondary index CFs (no further transformers)
-                auto* trptr = dynamic_cast<const Augmenter*>(transformer);
+                auto* trptr = dynamic_cast<const mycelium::Augmenter*>(transformer);
                 size_t index_num = trptr->GetPositionedIndexKeys().size();
                 for (size_t k = 0; k < index_num; ++k) {
                     child_names.emplace_back(plan.nodes[parent_idx].name + "_secondary_index_cf" + std::to_string(k));

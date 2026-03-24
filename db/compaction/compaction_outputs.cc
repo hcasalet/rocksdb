@@ -372,7 +372,7 @@ Status CompactionOutputs::AddToOutput(
   assert(opts->transformers.size() == opts->schemaDescriptors.size());
 
   mycelium::TransformerType transformer_type = mycelium::TransformerType::NOTRANSFORMATION;
-  std::shared_ptr<Transformer> transformer = nullptr;
+  std::shared_ptr<mycelium::Transformer> transformer = nullptr;
   std::shared_ptr<mycelium::SchemaDescriptor> schemaDescriptor = nullptr;
 
   if (!opts->transformers.empty() && !opts->schemaDescriptors.empty()) {
@@ -444,15 +444,15 @@ Status CompactionOutputs::AddToOutput(
   const Slice& value = c_iter.value();
 
   // transform value
-  std::vector<ByteBuffer> output_values;
+  std::vector<mycelium::ByteBuffer> output_values;
 
-  auto as_bytes = [&](const rocksdb::Slice& v) -> ByteBuffer {
+  auto as_bytes = [&](const rocksdb::Slice& v) -> mycelium::ByteBuffer {
     const auto* p = reinterpret_cast<const uint8_t*>(v.data());
-    return ByteBuffer(p, p + v.size());
+    return mycelium::ByteBuffer(p, p + v.size());
   };
 
   auto has_flag = [&](mycelium::TransformerType f) {
-    return (to_underlying(transformer_type) & to_underlying(f)) != 0;
+    return (mycelium::to_underlying(transformer_type) & mycelium::to_underlying(f)) != 0;
   };
 
   if (transformer_type == mycelium::TransformerType::NOTRANSFORMATION) {
@@ -462,7 +462,7 @@ Status CompactionOutputs::AddToOutput(
     if (!ar_input_res.ok()) {
       s = EmitOne(0, key, value, &c_iter.ikey());
     } else {
-      ArrowRecord ar_input = std::move(*ar_input_res);
+      mycelium::ArrowRecord ar_input = std::move(*ar_input_res);
 
       // Use current_input_file_number_ set by CompactionJob before each file.
       const uint64_t sst_file_number = current_input_file_number_;
@@ -474,7 +474,7 @@ Status CompactionOutputs::AddToOutput(
           // key is rocksdb::Slice; convert to string_view at the adapter boundary.
           decltype(transformer->Transform(key.ToStringView(), ar_input)) ar_outputs;
           {
-            CpuTimer timer(&transform_cpu_ns);
+            mycelium::CpuTimer timer(&transform_cpu_ns);
             ar_outputs = transformer->Transform(key.ToStringView(), ar_input);
           }
           scheduler_->OnApplied(transform_cpu_ns);

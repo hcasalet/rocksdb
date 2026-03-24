@@ -72,8 +72,8 @@ struct ImmutableCFOptions {
 
   std::string cf_name;
 
-  std::vector<std::shared_ptr<Transformer>> transformers;
-  std::vector<std::shared_ptr<SchemaDescriptor>> schemaDescriptors;
+  std::vector<std::shared_ptr<mycelium::Transformer>> transformers;
+  std::vector<std::shared_ptr<mycelium::SchemaDescriptor>> schemaDescriptors;
   std::vector<std::string> destination_column_families;
 
   // Admission control policy for work-hiding transforms.

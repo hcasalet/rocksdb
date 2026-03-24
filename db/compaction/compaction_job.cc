@@ -671,6 +671,7 @@ Status CompactionJob::Run() {
   if (transform_scheduler_ != nullptr) {
     const ReadOptions ro_epoch(Env::IOActivity::kCompaction);
     const Compaction* c_pre = compact_->sub_compact_states[0].compaction;
+    ColumnFamilyData* cfd = c_pre->column_family_data();
     for (const auto& each_level : *c_pre->inputs()) {
       for (const auto& fmd : each_level.files) {
         std::shared_ptr<const TableProperties> tp;
