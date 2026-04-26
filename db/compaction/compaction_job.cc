@@ -879,6 +879,20 @@ Status CompactionJob::Run() {
   UpdateCompactionStats();
 
   RecordCompactionIOStats();
+
+  // ── Notify admission policy of job completion ──────────────────────────
+  // This drives the EWMA update so the policy's internal state converges
+  // toward the observed CPU load across compaction jobs.  The call is a
+  // no-op for AlwaysAdmit / Threshold; only EWMAAdmissionPolicy overrides it.
+  if (transform_scheduler_ != nullptr) {
+    const ColumnFamilyData* cfd = compact_->compaction->column_family_data();
+    if (cfd->ioptions()->admission_policy != nullptr) {
+      cfd->ioptions()->admission_policy->OnJobComplete(
+          transform_scheduler_->FinalCpuFraction());
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────
+
   LogFlush(db_options_.info_log);
   TEST_SYNC_POINT("CompactionJob::Run():End");
   compact_->status = status;
