@@ -1,10 +1,14 @@
+#include <cstdio>
+#include <cstring>
+#include <memory>
 #include <queue>
 #include <sstream>
 #include "rocksdb/mym_broker.h"
-#include "mycelium/distributor.h"
+#include "mycelium/augmenter.h"   // for kIndexKeySep
 #include "mycelium/converter.h"
-#include "mycelium/augmenter.h"
+#include "mycelium/distributor.h"
 #include "mycelium/mynooper.h"
+#include "rocksdb/iterator.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -257,15 +261,49 @@ int MymBroker::Delete(const std::string &key)
         // Skip level 0 — that is the base CF itself (already deleted above).
         if (level == 0) continue;
         for (auto& [cf_name, cf_meta] : name_to_meta) {
-            Status ds = db_->Delete(WriteOptions(), cf_meta.cf_handle_, key);
-            if (!ds.ok()) {
-                // Log and continue: partial propagation is preferable to
-                // leaving the base deletion un-reflected in derived trees.
-                // Full consistency can be restored via catch-up compaction.
-                fprintf(stderr,
-                        "[MymBroker] Delete: failed to delete key from "
-                        "derived CF '%s': %s\n",
-                        cf_name.c_str(), ds.ToString().c_str());
+            if (cf_name.find("_secondary_index_cf") != std::string::npos) {
+                // AUGMENTER secondary-index CF: keys have the form
+                //   field0%%field1%%...$$$KEY$$$<primary_key>
+                // A plain Delete(primary_key) would miss these entries.
+                // Scan the CF for all keys whose suffix matches and delete them.
+                std::string suffix(mycelium::kIndexKeySep);
+                suffix.append(key);
+
+                ReadOptions ro;
+                ro.fill_cache = false;
+                std::unique_ptr<Iterator> it(
+                    db_->NewIterator(ro, cf_meta.cf_handle_));
+
+                std::vector<std::string> to_delete;
+                for (it->SeekToFirst(); it->Valid(); it->Next()) {
+                    const Slice k = it->key();
+                    if (k.size() >= suffix.size() &&
+                        std::memcmp(k.data() + k.size() - suffix.size(),
+                                    suffix.data(), suffix.size()) == 0) {
+                        to_delete.emplace_back(k.data(), k.size());
+                    }
+                }
+                for (const auto& del_key : to_delete) {
+                    Status ds = db_->Delete(WriteOptions(), cf_meta.cf_handle_, del_key);
+                    if (!ds.ok()) {
+                        fprintf(stderr,
+                                "[MymBroker] Delete: failed to delete index entry "
+                                "from CF '%s': %s\n",
+                                cf_name.c_str(), ds.ToString().c_str());
+                    }
+                }
+            } else {
+                // SPLIT / CONVERT / IDENTITY / _indexed_data_cf:
+                // key is preserved as the primary key.
+                Status ds = db_->Delete(WriteOptions(), cf_meta.cf_handle_, key);
+                if (!ds.ok()) {
+                    // Log and continue: partial propagation is preferable to
+                    // leaving the base deletion un-reflected in derived trees.
+                    fprintf(stderr,
+                            "[MymBroker] Delete: failed to delete key from "
+                            "derived CF '%s': %s\n",
+                            cf_name.c_str(), ds.ToString().c_str());
+                }
             }
         }
     }
