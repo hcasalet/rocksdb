@@ -280,13 +280,20 @@ void CompactionJob::Prepare() {
     StopWatch sw(db_options_.clock, stats_, SUBCOMPACTION_SETUP_TIME);
     GenSubcompactionBoundaries();
   }
+  // When transformers are present, slot 0 is reserved for source CF output
+  // (deferred / passthrough KVs).  Slots 1..n are the dest CFs.  Without
+  // transformers GetDestinationCfdSize() already returns 1 (the single source
+  // CF slot), so no adjustment is needed in that case.
+  const bool has_transforms = !cfd->ioptions()->transformers.empty();
+  const int output_splits = cfd->GetDestinationCfdSize() + (has_transforms ? 1 : 0);
+
   if (boundaries_.size() >= 1) {
     for (size_t i = 0; i <= boundaries_.size(); i++) {
       compact_->sub_compact_states.emplace_back(
           c, (i != 0) ? std::optional<Slice>(boundaries_[i - 1]) : std::nullopt,
           (i != boundaries_.size()) ? std::optional<Slice>(boundaries_[i])
                                     : std::nullopt,
-          static_cast<uint32_t>(i), cfd->GetDestinationCfdSize());
+          static_cast<uint32_t>(i), output_splits);
       // assert to validate that boundaries don't have same user keys (without
       // timestamp part).
       assert(i == 0 || i == boundaries_.size() ||
@@ -297,7 +304,7 @@ void CompactionJob::Prepare() {
                       compact_->sub_compact_states.size());
   } else {
     compact_->sub_compact_states.emplace_back(c, std::nullopt, std::nullopt,
-                                              /*sub_job_id*/ 0, cfd->GetDestinationCfdSize());
+                                              /*sub_job_id*/ 0, output_splits);
   }
 
   // collect all seqno->time information from the input files which will be used
@@ -654,7 +661,8 @@ Status CompactionJob::Run() {
     }
     transform_scheduler_ = std::make_unique<mycelium::TransformScheduler>(
         policy, &slack_estimator_,
-        compact_->sub_compact_states[0].compaction->output_level());
+        compact_->sub_compact_states[0].compaction->output_level(),
+        bottommost_level_);
   }
   // ─────────────────────────────────────────────────────────────────────
 
@@ -919,7 +927,20 @@ Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   cfd->internal_stats()->AddCompactionStats(output_level, thread_pri_, compaction_stats_);
 
   if (status.ok()) {
-    status = InstallCompactionResults(mutable_cf_options, cfd->GetDestinationCfds(), cfd);
+    // Build the full CF list for InstallCompactionResults.  When transforms
+    // are configured, slot 0 is the source CF (for its own output files at
+    // output_level), followed by the dest CFs (whose outputs land at L0).
+    std::vector<ColumnFamilyData*> all_output_cfds;
+    if (!cfd->ioptions()->transformers.empty()) {
+      all_output_cfds.push_back(cfd);  // slot 0: source CF
+      for (auto* dest : cfd->GetDestinationCfds()) {
+        all_output_cfds.push_back(dest);  // slots 1..n: dest CFs
+      }
+    }
+    // Pass all_output_cfds (non-empty only when transforms present);
+    // InstallCompactionResults falls back to the regular single-CF path
+    // when the vector is empty.
+    status = InstallCompactionResults(mutable_cf_options, all_output_cfds, cfd);
   }
   if (!versions_->io_status().ok()) {
     io_status_ = versions_->io_status();
@@ -1893,52 +1914,29 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
   
   Status log_and_apply_status;
   if (transforming_cfds.size() > 0) {
-    log_and_apply_status = versions_->LogAndApply(compaction->column_family_data(),
-                                  mutable_cf_options, read_options, edit,
-                                  db_mutex_, db_directory_);
-    if (!log_and_apply_status.ok()) {
-      return log_and_apply_status;
-    }
+    // edit_outs[0] is a copy of `edit` (source CF) with its output files
+    // added at output_level by AddOutputsEdits.  edit_outs[1..n] are fresh
+    // edits for the dest CFs with their transform output files at L0.
+    // Apply each CF's edit in order: source CF first, then dest CFs.
     for (size_t i = 0; i < transforming_cfds.size(); i++) {
-      if (transforming_cfds[i]->GetName() != compacting_cfd->GetName()) {
-        log_and_apply_status = versions_->LogAndApply(transforming_cfds[i],
-                                mutable_cf_options, read_options, edit_outs[i].get(),
-                                db_mutex_, db_directory_);
-        if (!log_and_apply_status.ok()) {
-          return log_and_apply_status;
-        }
+      log_and_apply_status = versions_->LogAndApply(transforming_cfds[i],
+                              mutable_cf_options, read_options, edit_outs[i].get(),
+                              db_mutex_, db_directory_);
+      if (!log_and_apply_status.ok()) {
+        return log_and_apply_status;
       }
     }
   } else {
-     log_and_apply_status = versions_->LogAndApply(compaction->column_family_data(),
+    log_and_apply_status = versions_->LogAndApply(compaction->column_family_data(),
                                   mutable_cf_options, read_options, edit,
                                   db_mutex_, db_directory_);
   }
 
-  // ── Deferred catch-up scheduling ─────────────────────────────────────
-  // If any input files had their transforms deferred due to CPU budget, use
-  // the defer_callback_ adapter to mark each affected destination CF for
-  // compaction so the derived trees eventually converge with the base tree.
-  if (log_and_apply_status.ok() && transform_scheduler_ != nullptr &&
-      defer_callback_ != nullptr) {
-    auto deferred = transform_scheduler_->DeferredCFs();
-    if (!deferred.empty()) {
-      ROCKS_LOG_INFO(db_options_.info_log,
-                     "[%s] [JOB %d] Mycelium: %zu CF(s) deferred by admission "
-                     "control; scheduling catch-up compaction.",
-                     compaction->column_family_data()->GetName().c_str(),
-                     job_id_, deferred.size());
-      auto deferred_files = transform_scheduler_->DeferredFileNumbers();
-      auto mst = defer_callback_->ScheduleDeferred(deferred, deferred_files);
-      if (!mst.ok()) {
-        ROCKS_LOG_WARN(db_options_.info_log,
-                       "[%s] [JOB %d] Mycelium: DeferCallback::ScheduleDeferred "
-                       "returned error: %s",
-                       compaction->column_family_data()->GetName().c_str(),
-                       job_id_, mst.message().c_str());
-      }
-    }
-  }
+  // Deferred catch-up: no explicit scheduling needed.  Non-bottommost KVs
+  // stay in the source CF at the compaction output level and will reach the
+  // bottommost level naturally through subsequent compactions.  Bottommost
+  // deferrals (admission control said "too busy") also stay in source CF and
+  // will be retried when the next compaction touches those SSTs.
   // ─────────────────────────────────────────────────────────────────────
 
   return log_and_apply_status;
@@ -1998,10 +1996,17 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
     std::string fname = GetTableFileName(file_number);
     // Fire events.
     ColumnFamilyData* dest_cfd;
-    if (cfd->ioptions()->transformers.size() > 0 && cfd->GetDestinationCfds().size() > 0) {
-      dest_cfd = cfd->GetDestinationCfds()[i];
-    } else {
+    // Slot 0 is always the source CF (for passthrough / deferred KVs).
+    // When transformers are present, slots 1..n map to dest CFs [0..n-1].
+    // Without transformers there is only slot 0 (= source CF).
+    const bool has_transforms =
+        cfd->ioptions()->transformers.size() > 0 &&
+        cfd->GetDestinationCfds().size() > 0;
+    const bool is_source_slot = !has_transforms || (i == 0);
+    if (is_source_slot) {
       dest_cfd = cfd;
+    } else {
+      dest_cfd = cfd->GetDestinationCfds()[i - 1];  // slots 1..n → dest[0..n-1]
     }
     EventHelpers::NotifyTableFileCreationStarted(
         dest_cfd->ioptions()->listeners, dbname_, dest_cfd->GetName(), fname, job_id_,
@@ -2144,33 +2149,23 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
       return aug;
     };
 
-    if (cfd->ioptions()->transformers.size() == 0) {
-      auto aug_factories =
-          make_epoch_factories(cfd->int_tbl_prop_collector_factories());
-      TableBuilderOptions tboptions(
-        *cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
-        cfd->internal_comparator(), &aug_factories,
-        sub_compact->compaction->output_compression(),
-        sub_compact->compaction->output_compression_opts(), cfd->GetID(),
-        cfd->GetName(), sub_compact->compaction->output_level(),
-        bottommost_level_, TableFileCreationReason::kCompaction,
-        0 /* oldest_key_time */, current_time, db_id_, db_session_id_,
-        sub_compact->compaction->max_output_file_size(), file_number);
-      outputs.NewBuilder(tboptions, i);
-    } else {
-      auto aug_factories =
-          make_epoch_factories(dest_cfd->int_tbl_prop_collector_factories());
-      TableBuilderOptions tboptions(
+    // Source CF slot: output at the compaction's own output level.
+    // Dest CF slots: output at L0 (transform outputs always land at L0).
+    const int slot_output_level = is_source_slot
+        ? sub_compact->compaction->output_level()
+        : 0;
+    auto aug_factories =
+        make_epoch_factories(dest_cfd->int_tbl_prop_collector_factories());
+    TableBuilderOptions tboptions(
         *dest_cfd->ioptions(), *(sub_compact->compaction->mutable_cf_options()),
         dest_cfd->internal_comparator(), &aug_factories,
         sub_compact->compaction->output_compression(),
         sub_compact->compaction->output_compression_opts(), dest_cfd->GetID(),
-        dest_cfd->GetName(), 0,
+        dest_cfd->GetName(), slot_output_level,
         bottommost_level_, TableFileCreationReason::kCompaction,
         0 /* oldest_key_time */, current_time, db_id_, db_session_id_,
         sub_compact->compaction->max_output_file_size(), file_number);
-      outputs.NewBuilder(tboptions, i);
-    }
+    outputs.NewBuilder(tboptions, i);
 
     LogFlush(db_options_.info_log);
   }

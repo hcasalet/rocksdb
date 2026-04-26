@@ -439,8 +439,21 @@ Status CompactionOutputs::AddToOutput(
   };
 
   // Emit all serialised output_values, handling AUGMENTER's internal-key path.
+  //
+  // Slot layout (mirrors OpenCompactionOutputFile):
+  //   builders_[0]      → source CF  (passthrough / kDefer / kSkip writes here)
+  //   builders_[1..n]   → dest CFs   (transform outputs for non-AUGMENTER)
+  //
+  // For non-AUGMENTER transforms (SPLIT / CONVERT / IDENTITY / DISTRIBUTOR):
+  //   output_values[j] is the j-th dest CF output → slot j+1  (slot_offset = 1)
+  //
+  // For AUGMENTER:
+  //   output_values[0] is the augmented base record → slot 0 = source CF  ✓
+  //   output_values[1..m] are index entries → slots 1..m = dest CFs       ✓
+  //   (slot_offset = 0, the prepended base record already accounts for the shift)
   auto emit_outputs = [&](const std::vector<mycelium::ByteBuffer>& output_values) -> Status {
     Status es;
+    const size_t slot_offset = has_flag(mycelium::TransformerType::AUGMENTER) ? 0 : 1;
     for (size_t i = 0; i < output_values.size(); ++i) {
       const auto& ov = output_values[i];
       Slice compacted_value(reinterpret_cast<const char*>(ov.data()), ov.size());
@@ -462,7 +475,7 @@ Status CompactionOutputs::AddToOutput(
         ikey_ptr = &c_iter.ikey();
       }
 
-      es = EmitOne(i, key, compacted_value, ikey_ptr);
+      es = EmitOne(i + slot_offset, key, compacted_value, ikey_ptr);
       if (!es.ok()) return es;
     }
     return es;

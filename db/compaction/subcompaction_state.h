@@ -194,8 +194,11 @@ class SubcompactionState {
     }
 
     for (size_t i = 0; i < compaction_outputs_.outputs_.size(); i++) {
+      // Slot 0 is the source CF: add at the compaction's own output level.
+      // Slots 1..n are dest CFs: their transform outputs always land at L0.
+      const int level = (i == 0) ? compaction->output_level() : 0;
       for (const auto& file : compaction_outputs_.outputs_[i]) {
-        out_edits[i]->AddFile(0, file.meta);
+        out_edits[i]->AddFile(level, file.meta);
       }
     }
   }
