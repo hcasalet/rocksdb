@@ -40,7 +40,6 @@
 #include "rocksdb/compaction_filter.h"
 #include "mycelium/compaction_slack_estimator.h"
 #include "mycelium/transform_scheduler.h"
-#include "db/mycelium_adapter/rocksdb_defer_callback.h"
 #include "db/mycelium_adapter/rocksdb_epoch_store.h"
 #include "db/mycelium_adapter/rocksdb_grove_manager.h"
 #include "rocksdb/compaction_job_stats.h"
@@ -198,13 +197,6 @@ class CompactionJob {
   // Return the IO status
   IOStatus io_status() const { return io_status_; }
 
-  // ── Mycelium deferred-compaction hook ─────────────────────────────────
-  // Must be called (with db_mutex_ held) before Install() when the job may
-  // have deferred transforms.  DBImpl passes a lambda that calls its own
-  // SchedulePendingCompaction(cfd) so CompactionJob never needs a raw DBImpl*.
-  using DeferScheduleFn = std::function<void(ColumnFamilyData*)>;
-  void SetDeferScheduleFn(DeferScheduleFn fn);
-
   // ── Mycelium grove-manager hook ────────────────────────────────────────
   // Optional: inject a GroveManager before Run() so that compaction-time
   // tombstones are propagated to all derived CFs.  The manager is forwarded
@@ -319,15 +311,9 @@ class CompactionJob {
   // ─────────────────────────────────────────────────────────────────────
 
   // ── Mycelium adapter layer ─────────────────────────────────────────────
-  // defer_schedule_fn_: injected by DBImpl::BackgroundCompaction (or
-  //   CompactFilesImpl) before Install() is called.  Wraps the call to
-  //   DBImpl::SchedulePendingCompaction so CompactionJob needs no raw DBImpl*.
-  // defer_callback_:    built from defer_schedule_fn_ inside Install().
-  // epoch_store_:       in-memory per-SST epoch state (job-scoped; P4 adds SST
-  //                     property persistence via EpochIntTblPropCollector).
-  // grove_manager_:     propagates deletes to derived CFs during compaction.
-  DeferScheduleFn                         defer_schedule_fn_;
-  std::unique_ptr<RocksDBDeferCallback>   defer_callback_;
+  // epoch_store_:   in-memory per-SST epoch state (job-scoped; P4 adds SST
+  //                 property persistence via EpochIntTblPropCollector).
+  // grove_manager_: propagates deletes to derived CFs during compaction.
   std::unique_ptr<RocksDBEpochStore>      owned_epoch_store_;
   RocksDBEpochStore*                      epoch_store_ = nullptr;
   std::unique_ptr<RocksDBGroveManager>    grove_manager_;

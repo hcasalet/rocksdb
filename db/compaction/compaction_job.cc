@@ -65,7 +65,6 @@
 #include "mycelium/distributor.h"
 #include "mycelium/mynooper.h"
 #include "db/mycelium_adapter/epoch_table_properties_collector.h"
-#include "db/mycelium_adapter/rocksdb_defer_callback.h"
 #include "db/mycelium_adapter/rocksdb_epoch_store.h"
 #include "util/stop_watch.h"
 
@@ -694,10 +693,6 @@ Status CompactionJob::Run() {
     }
   }
 
-  // DeferCallback: built lazily in Install() once the caller (DBImpl) has
-  // supplied the schedule function via SetDeferScheduleFn().  See that method.
-  // ─────────────────────────────────────────────────────────────────────
-
   const size_t num_threads = compact_->sub_compact_states.size();
   assert(num_threads > 0);
   const uint64_t start_micros = db_options_.clock->NowMicros();
@@ -891,23 +886,12 @@ Status CompactionJob::Run() {
   return status;
 }
 
-void CompactionJob::SetDeferScheduleFn(DeferScheduleFn fn) {
-  defer_schedule_fn_ = std::move(fn);
-}
-
 void CompactionJob::SetGroveManager(std::unique_ptr<RocksDBGroveManager> gm) {
   grove_manager_ = std::move(gm);
 }
 
 Status CompactionJob::Install(const MutableCFOptions& mutable_cf_options) {
   assert(compact_);
-
-  // Build the deferred-compaction callback now that we hold db_mutex_ and the
-  // caller has (optionally) supplied a schedule function.
-  if (defer_schedule_fn_) {
-    defer_callback_ = std::make_unique<RocksDBDeferCallback>(
-        versions_, defer_schedule_fn_);
-  }
 
   AutoThreadOperationStageUpdater stage_updater(
       ThreadStatus::STAGE_COMPACTION_INSTALL);
