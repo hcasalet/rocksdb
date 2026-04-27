@@ -647,21 +647,24 @@ Status CompactionJob::Run() {
   LogCompaction();
 
   // ── Admission control setup ────────────────────────────────────────────
+  // TransformScheduler is only constructed when transformers are configured.
+  // Canonical RocksDB users with no transformers never touch this path —
+  // transform_scheduler_ stays nullptr and every downstream guard on it
+  // short-circuits.  No allocation, no virtual dispatch, no overhead.
   slack_estimator_.StartCompaction();
   {
     ColumnFamilyData* cfd =
         compact_->sub_compact_states[0].compaction->column_family_data();
-    const AdmissionPolicy* policy = nullptr;
-    if (cfd->ioptions()->admission_policy != nullptr) {
-      policy = cfd->ioptions()->admission_policy.get();
-    } else {
-      default_admission_policy_ = std::make_unique<AlwaysAdmitPolicy>();
-      policy = default_admission_policy_.get();
+    if (!cfd->ioptions()->transformers.empty()) {
+      const AdmissionPolicy* policy =
+          cfd->ioptions()->admission_policy
+              ? cfd->ioptions()->admission_policy.get()
+              : nullptr;
+      transform_scheduler_ = std::make_unique<mycelium::TransformScheduler>(
+          policy, &slack_estimator_,
+          compact_->sub_compact_states[0].compaction->output_level(),
+          bottommost_level_);
     }
-    transform_scheduler_ = std::make_unique<mycelium::TransformScheduler>(
-        policy, &slack_estimator_,
-        compact_->sub_compact_states[0].compaction->output_level(),
-        bottommost_level_);
   }
   // ─────────────────────────────────────────────────────────────────────
 

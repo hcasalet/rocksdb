@@ -305,8 +305,10 @@ class CompactionJob {
 
   // ── Admission control ──────────────────────────────────────────────────
   // One estimator + scheduler per CompactionJob (shared across subcompactions).
-  mycelium::CompactionSlackEstimator      slack_estimator_;
-  std::unique_ptr<AdmissionPolicy>        default_admission_policy_;  // owns fallback
+  // No fallback policy object is stored: nullptr admission_policy means
+  // "always admit" and is handled as a zero-overhead fast-path inside
+  // TransformScheduler::BeginFile — no allocation, no virtual dispatch.
+  mycelium::CompactionSlackEstimator           slack_estimator_;
   std::unique_ptr<mycelium::TransformScheduler> transform_scheduler_;
   // ─────────────────────────────────────────────────────────────────────
 
