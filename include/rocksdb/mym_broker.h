@@ -99,7 +99,19 @@ class MymBroker {
         static inline std::string make_child_name(const std::string& parent, std::string_view suffix) {
             return parent + std::string(suffix);
         }
-    
+
+        // ── Test seam ──────────────────────────────────────────────────────────
+        // Expose raw handles so integration tests can call CompactRange and
+        // do per-CF Gets without going through MymBroker's routing logic.
+        DB* GetDB() const { return db_; }
+        ColumnFamilyHandle* GetCFHandle(const std::string& name) const {
+            for (const auto& [level, cf_map] : int_cf_meta_) {
+                auto it = cf_map.find(name);
+                if (it != cf_map.end()) return it->second.cf_handle_;
+            }
+            return nullptr;
+        }
+
     private:
         DB *db_;
         Options options_;
