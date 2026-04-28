@@ -1837,7 +1837,15 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
 
   VersionEdit* const edit = compaction->edit();
   assert(edit);
-  
+
+  // Add input deletions BEFORE copying edit into edit_outs[0].
+  // edit_outs[0] is the source CF's version edit; it must carry the input
+  // SST deletions so that transformed keys are naturally removed from the
+  // source CF after compaction (source-xor-dest invariant).
+  if (!transforming_cfds.empty()) {
+    compaction->AddInputDeletions(edit);
+  }
+
   std::vector<std::shared_ptr<VersionEdit>> edit_outs;
   for (size_t i = 0; i < transforming_cfds.size(); i++) {
     if (transforming_cfds[i]->GetName() != compacting_cfd->GetName()) {
@@ -1848,9 +1856,11 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
       edit_outs.push_back(std::make_shared<VersionEdit>(*edit));
     }
   }
-  
-  // Add compaction inputs
-  compaction->AddInputDeletions(edit);
+
+  // For the non-transforming path, add input deletions to the original edit.
+  if (transforming_cfds.empty()) {
+    compaction->AddInputDeletions(edit);
+  }
 
   std::unordered_map<uint64_t, BlobGarbageMeter::BlobStats> blob_total_garbage;
 
