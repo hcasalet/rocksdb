@@ -1527,6 +1527,13 @@ Status DBImpl::CompactFilesImpl(
     InstallSuperVersionAndScheduleWork(c->column_family_data(),
                                        &job_context->superversion_contexts[0],
                                        *c->mutable_cf_options());
+    const auto& dest_cfds = c->column_family_data()->GetDestinationCfds();
+    for (size_t i = 0; i < dest_cfds.size(); ++i) {
+      job_context->superversion_contexts.emplace_back(SuperVersionContext(true));
+      InstallSuperVersionAndScheduleWork(dest_cfds[i],
+                                         &job_context->superversion_contexts.back(),
+                                         *dest_cfds[i]->GetLatestMutableCFOptions());
+    }
   }
   // status above captures any error during compaction_job.Install, so its ok
   // not check compaction_job.io_status() explicitly if we're not calling
@@ -3693,6 +3700,13 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       InstallSuperVersionAndScheduleWork(c->column_family_data(),
                                          &job_context->superversion_contexts[0],
                                          *c->mutable_cf_options());
+      const auto& dest_cfds = c->column_family_data()->GetDestinationCfds();
+      for (size_t i = 0; i < dest_cfds.size(); ++i) {
+        job_context->superversion_contexts.emplace_back(SuperVersionContext(true));
+        InstallSuperVersionAndScheduleWork(dest_cfds[i],
+                                           &job_context->superversion_contexts.back(),
+                                           *dest_cfds[i]->GetLatestMutableCFOptions());
+      }
     }
     *made_progress = true;
     TEST_SYNC_POINT_CALLBACK("DBImpl::BackgroundCompaction:AfterCompaction",
