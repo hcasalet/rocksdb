@@ -74,14 +74,14 @@ class MymBroker {
         MymBroker(const std::string& cfname,
                   bool cf_created,
                   const char *dbfilepath,
-                  Options& options,
+                  const Options& options,
                   int num_splits);
         int Read(const std::string &key, const std::set<int>* positions, std::string &result);
 
         int Scan(const std::string &begin_key, int scan_length, const std::set<int> *positions,
                  std::vector<std::string> &result);
 
-        int Insert(const std::string &key, std::string &values);
+        int Insert(const std::string &key, const std::string &values);
 
         int Delete(const std::string &key);
 

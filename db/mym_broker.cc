@@ -15,7 +15,7 @@ namespace ROCKSDB_NAMESPACE {
 MymBroker::MymBroker(const std::string& cfname,
                      bool cf_created,
                      const char *dbfilepath,
-                     Options& options,
+                     const Options& options,
                      int num_splits)
     : options_(options)
 {
@@ -238,7 +238,7 @@ int MymBroker::Scan(const std::string &begin_key, int scan_length, const std::se
     return 0;
 }
 
-int MymBroker::Insert(const std::string &key, std::string &values)
+int MymBroker::Insert(const std::string &key, const std::string &values)
 {
     Status s = db_->Put(WriteOptions(), user_cf_meta_.cf_handle_, key, values);
     if (s.ok()) {
