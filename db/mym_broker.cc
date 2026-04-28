@@ -38,7 +38,27 @@ MymBroker::MymBroker(const std::string& cfname,
         open_descs.emplace_back(kDefaultColumnFamilyName, ColumnFamilyOptions(options_));
         open_descs.insert(open_descs.end(), descriptors.begin(), descriptors.end());
 
+        std::vector<std::string> existing_cf_names;
+        Status list_s = DB::ListColumnFamilies(options_, dbfilepath, &existing_cf_names);
+        if (list_s.ok()) {
+            for (const auto& name : existing_cf_names) {
+                bool found = false;
+                for (const auto& desc : open_descs) {
+                    if (desc.name == name) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    open_descs.emplace_back(name, ColumnFamilyOptions(options_));
+                }
+            }
+        }
+
         s = DB::Open(options_, dbfilepath, open_descs, &cf_handles, &db_);
+        if (!s.ok()) {
+            fprintf(stderr, "MymBroker DB::Open failed: %s\n", s.ToString().c_str());
+        }
         assert(s.ok());
     }
 
