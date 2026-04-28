@@ -1631,7 +1631,8 @@ Status CompactionJob::FinishCompactionOutputFile(
   Status s;
   ColumnFamilyData* cfd = sub_compact->compaction->column_family_data();
   if (!cfd->ioptions()->transformers.empty()) {
-    assert(cfd->GetDestinationCfds().size() == outputs.GetOutputsSize());
+    // Slot 0 is the source CF passthrough; slots 1..n are dest CFs.
+    assert(cfd->GetDestinationCfds().size() + 1 == outputs.GetOutputsSize());
   }
 
   for (size_t i = 0; i < outputs.GetOutputsSize(); i++) {
@@ -1640,8 +1641,9 @@ Status CompactionJob::FinishCompactionOutputFile(
     assert(output_number != 0);
 
     ColumnFamilyData* this_cfd = cfd;
-    if (!cfd->ioptions()->transformers.empty()) {
-      this_cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i];
+    if (!cfd->ioptions()->transformers.empty() && i > 0) {
+      // Slot 0 is the source CF passthrough; slots 1..n map to dest CFs [0..n-1].
+      this_cfd = sub_compact->compaction->column_family_data()->GetDestinationCfds()[i - 1];
     }
     
     std::string file_checksum = kUnknownFileChecksum;
@@ -1975,7 +1977,9 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
   int output_size = static_cast<int>(outputs.GetOutputsSize());
   const auto& dests = cfd->GetDestinationCfds();
   if (!dests.empty()) {
-    if (dests.size() != static_cast<size_t>(output_size)) {
+    // output_size = dests.size() + 1 because slot 0 is reserved for the
+    // source CF (deferred/passthrough KVs) and slots 1..n are dest CFs.
+    if (dests.size() + 1 != static_cast<size_t>(output_size)) {
       return Status::InvalidArgument("Destination CF count mismatch: dests=" +
                                   std::to_string(dests.size()) + " outputs=" +
                                   std::to_string(output_size));
@@ -1990,7 +1994,8 @@ Status CompactionJob::OpenCompactionOutputFile(SubcompactionState* sub_compact,
   
   Status s;
   for (int i = 0; i < output_size; i++) {
-    assert(dests.empty() || static_cast<size_t>(i) < dests.size());
+    // i == 0 is the source-CF passthrough slot; i > 0 accesses dests[i-1].
+    assert(dests.empty() || static_cast<size_t>(i) <= dests.size());
 
     // no need to lock because VersionSet::next_file_number_ is atomic
     uint64_t file_number = versions_->NewFileNumber();
