@@ -441,7 +441,7 @@ Status CompactionOutputs::AddToOutput(
   // Emit all serialised output_values, handling AUGMENTER's internal-key path.
   //
   // Slot layout (mirrors OpenCompactionOutputFile):
-  //   builders_[0]      → source CF  (passthrough / kDefer / kSkip writes here)
+  //   builders_[0]      → source CF  (passthrough writes here)
   //   builders_[1..n]   → dest CFs   (transform outputs for non-AUGMENTER)
   //
   // For non-AUGMENTER transforms (SPLIT / CONVERT / IDENTITY / DISTRIBUTOR):
@@ -481,24 +481,6 @@ Status CompactionOutputs::AddToOutput(
     return es;
   };
 
-  // ── Scheduler path ────────────────────────────────────────────────────────
-  // BUG FIX: check the scheduler decision BEFORE parsing the record.
-  // Previously ParseToArrow() was called unconditionally, wasting allocator
-  // work on every kDefer / kSkip record.
-  if (scheduler_ != nullptr) {
-    const uint64_t sst_file_number = current_input_file_number_;
-    const auto decision = scheduler_->Decide(transformer_type, sst_file_number);
-
-    if (decision == mycelium::TransformScheduler::Decision::kDefer) {
-      scheduler_->OnDeferred(sst_file_number);
-      return EmitOne(0, key, value, &c_iter.ikey());   // passthrough, no parse
-    }
-    if (decision == mycelium::TransformScheduler::Decision::kSkip) {
-      return EmitOne(0, key, value, &c_iter.ikey());   // passthrough, no parse
-    }
-    // decision == kApply: fall through to parse + transform below.
-  }
-
   // ── Parse → Transform → Serialize ────────────────────────────────────────
   auto parse_res = schemaDescriptor->Parse(as_bytes(value));
   if (!parse_res.ok()) {
@@ -507,13 +489,8 @@ Status CompactionOutputs::AddToOutput(
   }
   mycelium::ParsedRow& parsed = *parse_res;
 
-  uint64_t transform_cpu_ns = 0;
-  std::vector<mycelium::ParsedRow> row_outputs;
-  {
-    mycelium::CpuTimer timer(&transform_cpu_ns);
-    row_outputs = transformer->Transform(key.ToStringView(), parsed);
-  }
-  if (scheduler_ != nullptr) scheduler_->OnApplied(transform_cpu_ns);
+  std::vector<mycelium::ParsedRow> row_outputs =
+      transformer->Transform(key.ToStringView(), parsed);
 
   // Build output_values from serialised row outputs.
   std::vector<mycelium::ByteBuffer> output_values;

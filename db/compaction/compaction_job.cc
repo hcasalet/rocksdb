@@ -646,55 +646,12 @@ Status CompactionJob::Run() {
   log_buffer_->FlushBufferToLog();
   LogCompaction();
 
-  // ── Admission control setup ────────────────────────────────────────────
-  // TransformScheduler is only constructed when transformers are configured.
-  // Canonical RocksDB users with no transformers never touch this path —
-  // transform_scheduler_ stays nullptr and every downstream guard on it
-  // short-circuits.  No allocation, no virtual dispatch, no overhead.
-  slack_estimator_.StartCompaction();
-  {
-    ColumnFamilyData* cfd =
-        compact_->sub_compact_states[0].compaction->column_family_data();
-    if (!cfd->ioptions()->transformers.empty()) {
-      const AdmissionPolicy* policy =
-          cfd->ioptions()->admission_policy
-              ? cfd->ioptions()->admission_policy.get()
-              : nullptr;
-      transform_scheduler_ = std::make_unique<mycelium::TransformScheduler>(
-          policy, &slack_estimator_,
-          compact_->sub_compact_states[0].compaction->output_level(),
-          bottommost_level_);
-    }
-  }
-  // ─────────────────────────────────────────────────────────────────────
-
   // ── Mycelium adapter layer ─────────────────────────────────────────────
   // EpochStore: allocate a per-job store.
   owned_epoch_store_ = std::make_unique<RocksDBEpochStore>();
   epoch_store_ = owned_epoch_store_.get();
 
-  // P4: Pre-populate the epoch store from each input SST's table properties.
-  // This lets the scheduler see which transforms were already applied or
-  // deferred in prior compactions, preventing double-application of
-  // non-reentrant transforms.  We piggyback on the same GetTableProperties()
-  // path used by seqno_time_mapping_ above — the TableCache makes it free.
-  if (transform_scheduler_ != nullptr) {
-    const ReadOptions ro_epoch(Env::IOActivity::kCompaction);
-    const Compaction* c_pre = compact_->sub_compact_states[0].compaction;
-    ColumnFamilyData* cfd = c_pre->column_family_data();
-    for (const auto& each_level : *c_pre->inputs()) {
-      for (const auto& fmd : each_level.files) {
-        std::shared_ptr<const TableProperties> tp;
-        Status stp = cfd->current()->GetTableProperties(ro_epoch, &tp, fmd,
-                                                        nullptr);
-        if (!stp.ok() || !tp) continue;
-        auto it = tp->user_collected_properties.find(kEpochPropertyKey);
-        if (it == tp->user_collected_properties.end()) continue;
-        epoch_store_->PreLoad(fmd->fd.GetNumber(),
-                              std::string_view(it->second));
-      }
-    }
-  }
+
 
   const size_t num_threads = compact_->sub_compact_states.size();
   assert(num_threads > 0);
@@ -883,18 +840,6 @@ Status CompactionJob::Run() {
 
   RecordCompactionIOStats();
 
-  // ── Notify admission policy of job completion ──────────────────────────
-  // This drives the EWMA update so the policy's internal state converges
-  // toward the observed CPU load across compaction jobs.  The call is a
-  // no-op for AlwaysAdmit / Threshold; only EWMAAdmissionPolicy overrides it.
-  if (transform_scheduler_ != nullptr) {
-    const ColumnFamilyData* cfd = compact_->compaction->column_family_data();
-    if (cfd->ioptions()->admission_policy != nullptr) {
-      cfd->ioptions()->admission_policy->OnJobComplete(
-          transform_scheduler_->FinalCpuFraction());
-    }
-  }
-  // ─────────────────────────────────────────────────────────────────────
 
   LogFlush(db_options_.info_log);
   TEST_SYNC_POINT("CompactionJob::Run():End");
@@ -1398,34 +1343,9 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
             sub_compact->end.has_value() ? &end_user_key : nullptr);
       };
 
-  // ── Admission control: wire scheduler and grove manager into outputs ──
   if (grove_manager_ != nullptr) {
     sub_compact->SetGroveManager(grove_manager_.get());
   }
-  if (transform_scheduler_ != nullptr) {
-    sub_compact->SetScheduler(transform_scheduler_.get());
-    sub_compact->SetEstimator(&slack_estimator_);
-
-    // CompactionIterator merges all input files; it does not expose the current
-    // input file number per KV pair.  We therefore make one admission decision
-    // for the entire subcompaction based on the first input file's metadata.
-    // TODO: For finer granularity, add CompactionIterator::CurrentFileNumber()
-    //       and call BeginFile/OnFileDone around each file transition.
-    const Compaction* c = sub_compact->compaction;
-    const std::vector<std::string>& dest_cfs =
-        cfd->ioptions()->destination_column_families;
-    uint64_t first_file_num  = 0;
-    uint64_t first_file_size = 0;
-    if (c->num_input_levels() > 0 && c->inputs(0) != nullptr &&
-        !c->inputs(0)->empty()) {
-      const FileMetaData* f = (*c->inputs(0))[0];
-      first_file_num  = f->fd.GetNumber();
-      first_file_size = f->fd.GetFileSize();
-    }
-    transform_scheduler_->BeginFile(first_file_num, dest_cfs, first_file_size);
-    sub_compact->SetCurrentInputFileNumber(first_file_num);
-  }
-  // ─────────────────────────────────────────────────────────────────────
 
   TEST_SYNC_POINT_CALLBACK(
       "CompactionJob::ProcessKeyValueCompaction()::Processing",
@@ -1464,12 +1384,7 @@ void CompactionJob::ProcessKeyValueCompaction(SubcompactionState* sub_compact) {
       break;
     }
   }
-  slack_estimator_.RecordBase(0, 0);  // no-op; total time captured by StartCompaction()
 
-  // Close out the per-subcompaction file tracking.
-  if (transform_scheduler_ != nullptr) {
-    transform_scheduler_->OnFileDone();
-  }
 
   sub_compact->compaction_job_stats.num_blobs_read =
       c_iter_stats.num_blobs_read;

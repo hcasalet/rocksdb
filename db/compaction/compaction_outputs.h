@@ -16,8 +16,6 @@
 #include "db/internal_stats.h"
 #include "db/output_validator.h"
 #include "rocksdb/arrow_compaction_batcher.h"
-#include "mycelium/compaction_slack_estimator.h"
-#include "mycelium/transform_scheduler.h"
 
 // Forward-declare so we can hold a pointer without pulling in
 // mycelium/compaction_hook.h (and transitively Arrow / protobuf) from every
@@ -233,20 +231,9 @@ class CompactionOutputs {
     return range_del_agg_ && !range_del_agg_->IsEmpty();
   }
 
-  // ── Admission control ──────────────────────────────────────────────────
-  // Called once per CompactionJob before any KV pairs are processed.
-  // Borrowed pointers; all must outlive this CompactionOutputs object.
-  void SetScheduler(mycelium::TransformScheduler* sched)          { scheduler_ = sched; }
-  void SetEstimator(mycelium::CompactionSlackEstimator* estimator) { estimator_ = estimator; }
-
   // P4: Inject the grove manager so that AddToOutput() can propagate deletes
   // to all derived column families when a tombstone KV is encountered.
   void SetGroveManager(mycelium::GroveManager* gm) { grove_manager_ = gm; }
-
-  // Called by CompactionJob at the start of each input SST file so that
-  // AddToOutput() can forward the file number to the scheduler.
-  void SetCurrentInputFileNumber(uint64_t fn) { current_input_file_number_ = fn; }
-  // ─────────────────────────────────────────────────────────────────────
 
   // Public bridge for the RocksDB adapter layer (RocksDBCompactionWriter).
   // Parses the encoded internal key from [key_sv], then delegates to EmitOne.
@@ -447,16 +434,7 @@ class CompactionOutputs {
   // increasing key range.
   std::vector<size_t> level_ptrs_;
 
-  // ── Admission control members ─────────────────────────────────────────
-  // All are nullptr until Set*() is called by CompactionJob.
-  mycelium::TransformScheduler*       scheduler_     = nullptr;
-  mycelium::CompactionSlackEstimator* estimator_     = nullptr;
-  mycelium::GroveManager*   grove_manager_ = nullptr;
-
-  // File number of the SST currently being processed.  Updated by
-  // SetCurrentInputFileNumber() before each file's KV pairs are processed.
-  uint64_t current_input_file_number_ = 0;
-  // ─────────────────────────────────────────────────────────────────────
+  mycelium::GroveManager* grove_manager_ = nullptr;
 };
 
 // helper struct to concatenate the last level and penultimate level outputs

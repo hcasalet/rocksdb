@@ -35,11 +35,8 @@
 #include "options/cf_options.h"
 #include "options/db_options.h"
 #include "port/port.h"
-#include "rocksdb/admission_policy.h"
 #include "rocksdb/arrow_compaction_batcher.h"
 #include "rocksdb/compaction_filter.h"
-#include "mycelium/compaction_slack_estimator.h"
-#include "mycelium/transform_scheduler.h"
 #include "db/mycelium_adapter/rocksdb_epoch_store.h"
 #include "db/mycelium_adapter/rocksdb_grove_manager.h"
 #include "rocksdb/compaction_job_stats.h"
@@ -303,14 +300,6 @@ class CompactionJob {
 
   uint32_t job_id_;
 
-  // ── Admission control ──────────────────────────────────────────────────
-  // One estimator + scheduler per CompactionJob (shared across subcompactions).
-  // No fallback policy object is stored: nullptr admission_policy means
-  // "always admit" and is handled as a zero-overhead fast-path inside
-  // TransformScheduler::BeginFile — no allocation, no virtual dispatch.
-  mycelium::CompactionSlackEstimator           slack_estimator_;
-  std::unique_ptr<mycelium::TransformScheduler> transform_scheduler_;
-  // ─────────────────────────────────────────────────────────────────────
 
   // ── Mycelium adapter layer ─────────────────────────────────────────────
   // epoch_store_:   in-memory per-SST epoch state (job-scoped; P4 adds SST

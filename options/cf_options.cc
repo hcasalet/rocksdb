@@ -950,7 +950,6 @@ ImmutableCFOptions::ImmutableCFOptions(const ColumnFamilyOptions& cf_options)
       transformers(cf_options.transformers),
       schemaDescriptors(cf_options.schemaDescriptors),
       destination_column_families(cf_options.destination_column_families),
-      admission_policy(cf_options.admission_policy),
       optimize_filters_for_hits(cf_options.optimize_filters_for_hits),
       force_consistency_checks(cf_options.force_consistency_checks),
       preclude_last_level_data_seconds(
