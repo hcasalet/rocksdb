@@ -28,10 +28,16 @@ MymBroker::MymBroker(const std::string& cfname,
 
     if (!cf_created) {
         s = DB::Open(options_, dbfilepath, &db_);
-        assert(s.ok());
+        if (!s.ok()) {
+            fprintf(stderr, "FATAL: MymBroker DB::Open failed (bootstrap=true): %s\n", s.ToString().c_str());
+            exit(1);
+        }
 
         s = db_->CreateColumnFamilies(descriptors, &cf_handles);
-        assert(s.ok());
+        if (!s.ok()) {
+            fprintf(stderr, "FATAL: MymBroker CreateColumnFamilies failed: %s\n", s.ToString().c_str());
+            exit(1);
+        }
     } else {
         // Opening an existing DB with all CFs present: include default explicitly first
         std::vector<ColumnFamilyDescriptor> open_descs;
@@ -57,19 +63,32 @@ MymBroker::MymBroker(const std::string& cfname,
 
         s = DB::Open(options_, dbfilepath, open_descs, &cf_handles, &db_);
         if (!s.ok()) {
-            fprintf(stderr, "MymBroker DB::Open failed: %s\n", s.ToString().c_str());
+            fprintf(stderr, "FATAL: MymBroker DB::Open failed (bootstrap=false): %s\n", s.ToString().c_str());
+            exit(1);
         }
-        assert(s.ok());
+
+        // Keep the default handle in owned_cf_handles_ so it is deleted on destruction
+        if (!cf_handles.empty()) {
+            owned_cf_handles_.push_back(cf_handles[0]);
+            cf_handles.erase(cf_handles.begin());
+        }
     }
 
     s = db_->AddTransformingDestinationCfds(cfname);
-    assert(s.ok());
+    if (!s.ok()) {
+        fprintf(stderr, "FATAL: MymBroker AddTransformingDestinationCfds failed: %s\n", s.ToString().c_str());
+        exit(1);
+    }
 
     saveColFamHandlesByName(plan, descriptors, cf_handles, cfname);
 }
 
 int MymBroker::Read(const std::string &key, const std::set<int>* positions, std::string &result)
 {
+    if (!db_) {
+        fprintf(stderr, "FATAL: MymBroker db_ is null in Read!\n");
+        exit(1);
+    }
     rocksdb::ReadOptions ro;
     Status s;
     size_t n_levels=int_cf_meta_.size();
@@ -77,6 +96,10 @@ int MymBroker::Read(const std::string &key, const std::set<int>* positions, std:
         auto handles = int_cf_meta_.find(level);
         if (handles != int_cf_meta_.end() && !handles->second.empty()) {
             const auto& [name, meta] = *handles->second.begin();
+            if (!meta.cf_handle_) {
+                fprintf(stderr, "FATAL: MymBroker cf_handle is null in Read level %zu name %s!\n", level, name.c_str());
+                exit(1);
+            }
             s = db_->Get(ro, meta.cf_handle_, key, &result);
             if (s.ok()) return 0;
         }
@@ -129,6 +152,10 @@ int MymBroker::Read(const std::string &key, const std::set<int>* positions, std:
 
 int MymBroker::IndexRead(const std::string &key, const std::set<int>* positions, std::vector<std::string> &result)
 {
+    if (!db_) {
+        fprintf(stderr, "FATAL: MymBroker db_ is null in IndexRead!\n");
+        exit(1);
+    }
     Status s;
 
     // search for index handles in level-1 handles
@@ -137,6 +164,10 @@ int MymBroker::IndexRead(const std::string &key, const std::set<int>* positions,
     std::string valkeystr;
     for (auto idx_hdl : level_1_handles) {
         if (idx_hdl.first.find("_secondary_") != std::string::npos) {
+            if (!idx_hdl.second.cf_handle_) {
+                fprintf(stderr, "FATAL: MymBroker cf_handle is null in IndexRead name %s!\n", idx_hdl.first.c_str());
+                exit(1);
+            }
             s = db_->Get(ReadOptions(), idx_hdl.second.cf_handle_, key, &valkeystr);
             if (!s.ok()) {
                 return Status::kNotFound;
@@ -180,6 +211,10 @@ int MymBroker::IndexRead(const std::string &key, const std::set<int>* positions,
 int MymBroker::Scan(const std::string &begin_key, int scan_length, const std::set<int> *positions,
                  std::vector<std::string> &result)
 {
+    if (!db_) {
+        fprintf(stderr, "FATAL: MymBroker db_ is null in Scan!\n");
+        exit(1);
+    }
     // The following are configs for avoiding OOM issue
     rocksdb::ReadOptions ro;
     ro.fill_cache = false;
@@ -189,6 +224,10 @@ int MymBroker::Scan(const std::string &begin_key, int scan_length, const std::se
     for (const auto& [lvl, handles] : int_cf_meta_) {
         if (handles.empty()) continue;
         for (const auto& [name, meta] : handles) {
+            if (!meta.cf_handle_) {
+                fprintf(stderr, "FATAL: MymBroker cf_handle is null in Scan level %d name %s!\n", lvl, name.c_str());
+                exit(1);
+            }
             std::unique_ptr<rocksdb::Iterator> it(db_->NewIterator(ro, meta.cf_handle_));
             it->SeekToFirst();
             for (int i = 0; it->Valid() && i < scan_length; i++) {
@@ -260,6 +299,11 @@ int MymBroker::Scan(const std::string &begin_key, int scan_length, const std::se
 
 int MymBroker::Insert(const std::string &key, const std::string &values)
 {
+    if (!db_ || !user_cf_meta_.cf_handle_) {
+        fprintf(stderr, "FATAL: MymBroker state is invalid in Insert! db_ = %p, cf_handle = %p\n",
+                (void*)db_, (void*)user_cf_meta_.cf_handle_);
+        exit(1);
+    }
     Status s = db_->Put(WriteOptions(), user_cf_meta_.cf_handle_, key, values);
     if (s.ok()) {
         return 0;
@@ -269,6 +313,11 @@ int MymBroker::Insert(const std::string &key, const std::string &values)
 
 int MymBroker::Delete(const std::string &key)
 {
+    if (!db_ || !user_cf_meta_.cf_handle_) {
+        fprintf(stderr, "FATAL: MymBroker state is invalid in Delete! db_ = %p, cf_handle = %p\n",
+                (void*)db_, (void*)user_cf_meta_.cf_handle_);
+        exit(1);
+    }
     // Delete from the base CF first.
     Status s = db_->Delete(WriteOptions(), user_cf_meta_.cf_handle_, key);
     if (!s.ok()) {
@@ -460,7 +509,11 @@ void MymBroker::saveColFamHandlesByName(const CFPlan& plan,
                                         const std::vector<ColumnFamilyHandle*>& handles,
                                         const std::string& root_cf)
 {
-    assert(descs.size() == handles.size());
+    if (descs.size() != handles.size()) {
+        fprintf(stderr, "FATAL: saveColFamHandlesByName: size mismatch! descs.size()=%zu, handles.size()=%zu\n",
+                descs.size(), handles.size());
+        exit(1);
+    }
 
     owned_cf_handles_.insert(owned_cf_handles_.end(), handles.begin(), handles.end());
 
@@ -476,7 +529,10 @@ void MymBroker::saveColFamHandlesByName(const CFPlan& plan,
 
     // Root must exist
     auto it_root = hmap.find(root_cf);
-    assert(it_root != hmap.end());
+    if (it_root == hmap.end()) {
+        fprintf(stderr, "FATAL: saveColFamHandlesByName: root_cf '%s' not found in hmap!\n", root_cf.c_str());
+        exit(1);
+    }
 
     // Build the “logical level 0” metadata for the user CF
     std::set<int> all_cols;
