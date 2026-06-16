@@ -328,7 +328,17 @@ class autovector {
 
   autovector& operator=(const autovector& other) { return assign(other); }
 
-  autovector(autovector&& other) noexcept { *this = std::move(other); }
+  autovector(autovector&& other) noexcept {
+    values_ = reinterpret_cast<pointer>(buf_);
+    vect_ = std::move(other.vect_);
+    size_t n = other.num_stack_items_;
+    num_stack_items_ = n;
+    other.num_stack_items_ = 0;
+    for (size_t i = 0; i < n; ++i) {
+      new ((void*)(&values_[i])) value_type(std::move(other.values_[i]));
+      other.values_[i].~value_type();
+    }
+  }
   autovector& operator=(autovector&& other);
 
   // -- Iterator Operations
@@ -365,27 +375,35 @@ class autovector {
 template <class T, size_t kSize>
 autovector<T, kSize>& autovector<T, kSize>::assign(
     const autovector<T, kSize>& other) {
+  if (this == &other) {
+    return *this;
+  }
+  clear();
   values_ = reinterpret_cast<pointer>(buf_);
-  // copy the internal vector
-  vect_.assign(other.vect_.begin(), other.vect_.end());
-
-  // copy array
-  num_stack_items_ = other.num_stack_items_;
-  std::copy(other.values_, other.values_ + num_stack_items_, values_);
-
+  vect_ = other.vect_;
+  size_t n = other.num_stack_items_;
+  num_stack_items_ = n;
+  for (size_t i = 0; i < n; ++i) {
+    new ((void*)(&values_[i])) value_type(other.values_[i]);
+  }
   return *this;
 }
 
 template <class T, size_t kSize>
 autovector<T, kSize>& autovector<T, kSize>::operator=(
     autovector<T, kSize>&& other) {
+  if (this == &other) {
+    return *this;
+  }
+  clear();
   values_ = reinterpret_cast<pointer>(buf_);
   vect_ = std::move(other.vect_);
   size_t n = other.num_stack_items_;
   num_stack_items_ = n;
   other.num_stack_items_ = 0;
   for (size_t i = 0; i < n; ++i) {
-    values_[i] = std::move(other.values_[i]);
+    new ((void*)(&values_[i])) value_type(std::move(other.values_[i]));
+    other.values_[i].~value_type();
   }
   return *this;
 }
