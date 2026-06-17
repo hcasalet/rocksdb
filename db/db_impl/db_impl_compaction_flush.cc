@@ -13,8 +13,8 @@
 #include "db/column_family.h"
 #include "db/db_impl/db_impl.h"
 #include "db/error_handler.h"
-#include "db/mycelium_adapter/rocksdb_grove_manager.h"
 #include "db/event_helpers.h"
+#include "db/mycelium_adapter/rocksdb_grove_manager.h"
 #include "file/sst_file_manager_impl.h"
 #include "logging/logging.h"
 #include "monitoring/iostats_context_imp.h"
@@ -854,8 +854,8 @@ void DBImpl::NotifyOnFlushBegin(ColumnFamilyData* cfd, FileMetaData* file_meta,
     }
   }
   mutex_.Lock();
-// no need to signal bg_cv_ as it will be signaled at the end of the
-// flush process.
+  // no need to signal bg_cv_ as it will be signaled at the end of the
+  // flush process.
 }
 
 void DBImpl::NotifyOnFlushCompleted(
@@ -1529,10 +1529,11 @@ Status DBImpl::CompactFilesImpl(
                                        *c->mutable_cf_options());
     const auto& dest_cfds = c->column_family_data()->GetDestinationCfds();
     for (size_t i = 0; i < dest_cfds.size(); ++i) {
-      job_context->superversion_contexts.emplace_back(SuperVersionContext(true));
-      InstallSuperVersionAndScheduleWork(dest_cfds[i],
-                                         &job_context->superversion_contexts.back(),
-                                         *dest_cfds[i]->GetLatestMutableCFOptions());
+      job_context->superversion_contexts.emplace_back(
+          SuperVersionContext(true));
+      InstallSuperVersionAndScheduleWork(
+          dest_cfds[i], &job_context->superversion_contexts.back(),
+          *dest_cfds[i]->GetLatestMutableCFOptions());
     }
   }
   // status above captures any error during compaction_job.Install, so its ok
@@ -1740,8 +1741,8 @@ Status DBImpl::ReFitLevel(ColumnFamilyData* cfd, int level, int target_level) {
     }
     InternalKey refit_level_smallest;
     InternalKey refit_level_largest;
-    cfd->compaction_picker()->GetRange(cfd->GetName(), input[0], &refit_level_smallest,
-                                       &refit_level_largest);
+    cfd->compaction_picker()->GetRange(
+        cfd->GetName(), input[0], &refit_level_smallest, &refit_level_largest);
     if (to_level > level) {
       if (level == 0) {
         refitting_level_ = false;
@@ -2546,12 +2547,13 @@ Status DBImpl::WaitUntilFlushWouldNotStallWrites(ColumnFamilyData* cfd,
       // check whether one extra immutable memtable or an extra L0 file would
       // cause write stalling mode to be entered. It could still enter stall
       // mode due to pending compaction bytes, but that's less common
-      write_stall_condition = ColumnFamilyData::GetWriteStallConditionAndCause(
-                                  cfd->imm()->NumNotFlushed() + 1,
-                                  vstorage->l0_delay_trigger_count() + 1,
-                                  vstorage->estimated_compaction_needed_bytes(),
-                                  mutable_cf_options, *cfd->ioptions())
-                                  .first;
+      write_stall_condition =
+          cfd->GetWriteStallConditionAndCause(
+                 cfd->imm()->NumNotFlushed() + 1,
+                 vstorage->l0_delay_trigger_count() + 1,
+                 vstorage->estimated_compaction_needed_bytes(),
+                 mutable_cf_options, *cfd->ioptions())
+              .first;
     } while (write_stall_condition != WriteStallCondition::kNormal);
   }
   return Status::OK();
@@ -3641,7 +3643,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                        &earliest_write_conflict_snapshot, &snapshot_checker);
     assert(is_snapshot_supported_ || snapshots_.empty());
 
-    if ((c->column_family_data()->ioptions()->transformers.size() > 0) && 
+    if ((c->column_family_data()->ioptions()->transformers.size() > 0) &&
         (!destination_cfds_computed_)) {
       return Status::Aborted();
     }
@@ -3674,7 +3676,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
         dest_raw.reserve(dest_cfds.size());
         for (ColumnFamilyData* dest_cfd : dest_cfds) {
           bg_dest_handle_owners.emplace_back(
-              std::make_unique<ColumnFamilyHandleImpl>(dest_cfd, this, &mutex_));
+              std::make_unique<ColumnFamilyHandleImpl>(dest_cfd, this,
+                                                       &mutex_));
           dest_raw.push_back(bg_dest_handle_owners.back().get());
         }
         compaction_job.SetGroveManager(
@@ -3702,10 +3705,11 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                                          *c->mutable_cf_options());
       const auto& dest_cfds = c->column_family_data()->GetDestinationCfds();
       for (size_t i = 0; i < dest_cfds.size(); ++i) {
-        job_context->superversion_contexts.emplace_back(SuperVersionContext(true));
-        InstallSuperVersionAndScheduleWork(dest_cfds[i],
-                                           &job_context->superversion_contexts.back(),
-                                           *dest_cfds[i]->GetLatestMutableCFOptions());
+        job_context->superversion_contexts.emplace_back(
+            SuperVersionContext(true));
+        InstallSuperVersionAndScheduleWork(
+            dest_cfds[i], &job_context->superversion_contexts.back(),
+            *dest_cfds[i]->GetLatestMutableCFOptions());
       }
     }
     *made_progress = true;
@@ -4020,7 +4024,8 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
     }
   }
 
-  if ((cfd->ioptions()->transformers.size() > 0) && (!destination_cfds_computed_)) {
+  if ((cfd->ioptions()->transformers.size() > 0) &&
+      (!destination_cfds_computed_)) {
     return;
   }
 
@@ -4034,10 +4039,11 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
     // schedule new compactions
     for (auto* my_cfd : *versions_->GetColumnFamilySet()) {
       if (((my_cfd->GetName().find("_split_cf_") != std::string::npos ||
-           my_cfd->GetName().find("_converted_cf") != std::string::npos ||
-           my_cfd->GetName().find("_identity_cf") != std::string::npos ||
-           my_cfd->GetName().find("_indexed_data_cf") != std::string::npos ||
-           my_cfd->GetName().find("_secondary_index_cf") != std::string::npos)) &&
+            my_cfd->GetName().find("_converted_cf") != std::string::npos ||
+            my_cfd->GetName().find("_identity_cf") != std::string::npos ||
+            my_cfd->GetName().find("_indexed_data_cf") != std::string::npos ||
+            my_cfd->GetName().find("_secondary_index_cf") !=
+                std::string::npos)) &&
           my_cfd->NeedsCompaction()) {
         SchedulePendingCompaction(my_cfd);
         MaybeScheduleFlushOrCompaction();
