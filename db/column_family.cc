@@ -875,19 +875,21 @@ ColumnFamilyData::GetWriteStallConditionAndCause(
     uint64_t num_compaction_needed_bytes,
     const MutableCFOptions& mutable_cf_options,
     const ImmutableCFOptions& immutable_cf_options) {
-  bool is_destination_cf = (
-      name_.find("_split_cf_") != std::string::npos ||
-      name_.find("_converted_cf") != std::string::npos ||
-      name_.find("_identity_cf") != std::string::npos ||
-      name_.find("_indexed_data_cf") != std::string::npos ||
-      name_.find("_secondary_index_cf") != std::string::npos);
+  bool is_destination_cf =
+      (name_.find("_split_cf_") != std::string::npos ||
+       name_.find("_converted_cf") != std::string::npos ||
+       name_.find("_identity_cf") != std::string::npos ||
+       name_.find("_indexed_data_cf") != std::string::npos ||
+       name_.find("_secondary_index_cf") != std::string::npos);
 
   if (num_unflushed_memtables >= mutable_cf_options.max_write_buffer_number) {
     return {WriteStallCondition::kStopped, WriteStallCause::kMemtableLimit};
-  } else if (!is_destination_cf && !mutable_cf_options.disable_auto_compactions &&
+  } else if (!is_destination_cf &&
+             !mutable_cf_options.disable_auto_compactions &&
              num_l0_files >= mutable_cf_options.level0_stop_writes_trigger) {
     return {WriteStallCondition::kStopped, WriteStallCause::kL0FileCountLimit};
-  } else if (!mutable_cf_options.disable_auto_compactions &&
+  } else if (!is_destination_cf &&
+             !mutable_cf_options.disable_auto_compactions &&
              mutable_cf_options.hard_pending_compaction_bytes_limit > 0 &&
              num_compaction_needed_bytes >=
                  mutable_cf_options.hard_pending_compaction_bytes_limit) {
@@ -899,12 +901,14 @@ ColumnFamilyData::GetWriteStallConditionAndCause(
              num_unflushed_memtables - 1 >=
                  immutable_cf_options.min_write_buffer_number_to_merge) {
     return {WriteStallCondition::kDelayed, WriteStallCause::kMemtableLimit};
-  } else if (!is_destination_cf && !mutable_cf_options.disable_auto_compactions &&
+  } else if (!is_destination_cf &&
+             !mutable_cf_options.disable_auto_compactions &&
              mutable_cf_options.level0_slowdown_writes_trigger >= 0 &&
              num_l0_files >=
                  mutable_cf_options.level0_slowdown_writes_trigger) {
     return {WriteStallCondition::kDelayed, WriteStallCause::kL0FileCountLimit};
-  } else if (!mutable_cf_options.disable_auto_compactions &&
+  } else if (!is_destination_cf &&
+             !mutable_cf_options.disable_auto_compactions &&
              mutable_cf_options.soft_pending_compaction_bytes_limit > 0 &&
              num_compaction_needed_bytes >=
                  mutable_cf_options.soft_pending_compaction_bytes_limit) {
