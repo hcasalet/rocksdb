@@ -304,7 +304,7 @@ int MymBroker::Insert(const std::string &key, const std::string &values)
                 (void*)db_, (void*)user_cf_meta_.cf_handle_);
         exit(1);
     }
-    Status s = db_->Put(WriteOptions(), user_cf_meta_.cf_handle_, key, values);
+    Status s = db_->Put(write_options_, user_cf_meta_.cf_handle_, key, values);
     if (s.ok()) {
         return 0;
     }
@@ -319,7 +319,7 @@ int MymBroker::Delete(const std::string &key)
         exit(1);
     }
     // Delete from the base CF first.
-    Status s = db_->Delete(WriteOptions(), user_cf_meta_.cf_handle_, key);
+    Status s = db_->Delete(write_options_, user_cf_meta_.cf_handle_, key);
     if (!s.ok()) {
         return 1;
     }
@@ -353,7 +353,7 @@ int MymBroker::Delete(const std::string &key)
                     }
                 }
                 for (const auto& del_key : to_delete) {
-                    Status ds = db_->Delete(WriteOptions(), cf_meta.cf_handle_, del_key);
+                    Status ds = db_->Delete(write_options_, cf_meta.cf_handle_, del_key);
                     if (!ds.ok()) {
                         fprintf(stderr,
                                 "[MymBroker] Delete: failed to delete index entry "
@@ -364,7 +364,7 @@ int MymBroker::Delete(const std::string &key)
             } else {
                 // SPLIT / CONVERT / IDENTITY / _indexed_data_cf:
                 // key is preserved as the primary key.
-                Status ds = db_->Delete(WriteOptions(), cf_meta.cf_handle_, key);
+                Status ds = db_->Delete(write_options_, cf_meta.cf_handle_, key);
                 if (!ds.ok()) {
                     // Log and continue: partial propagation is preferable to
                     // leaving the base deletion un-reflected in derived trees.

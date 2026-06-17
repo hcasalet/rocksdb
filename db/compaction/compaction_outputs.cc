@@ -11,17 +11,18 @@
 #include "db/compaction/compaction_outputs.h"
 
 #include "db/builder.h"
-#include "mycelium/distributor.h"
-#include "mycelium/converter.h"
 #include "mycelium/augmenter.h"
+#include "mycelium/compaction_hook.h"  // full definition of mycelium::GroveManager
+#include "mycelium/converter.h"
+#include "mycelium/distributor.h"
 #include "mycelium/mynooper.h"
-#include "mycelium/compaction_hook.h"   // full definition of mycelium::GroveManager
 
 namespace ROCKSDB_NAMESPACE {
 
 void CompactionOutputs::NewBuilder(const TableBuilderOptions& tboptions,
                                    int position) {
-  builders_[position].reset(NewTableBuilder(tboptions, file_writers_[position].get()));
+  builders_[position].reset(
+      NewTableBuilder(tboptions, file_writers_[position].get()));
 }
 
 Status CompactionOutputs::Finish(const Status& intput_status,
@@ -34,9 +35,9 @@ Status CompactionOutputs::Finish(const Status& intput_status,
   if (s.ok()) {
     std::string seqno_time_mapping_str;
     seqno_time_mapping.Encode(seqno_time_mapping_str, meta->fd.smallest_seqno,
-                            meta->fd.largest_seqno, meta->file_creation_time);
-    builders_[position]->SetSeqnoTimeTableProperties(seqno_time_mapping_str,
-                                        meta->oldest_ancester_time);
+                              meta->fd.largest_seqno, meta->file_creation_time);
+    builders_[position]->SetSeqnoTimeTableProperties(
+        seqno_time_mapping_str, meta->oldest_ancester_time);
     s = builders_[position]->Finish();
   } else {
     builders_[position]->Abandon();
@@ -52,21 +53,22 @@ Status CompactionOutputs::Finish(const Status& intput_status,
     meta->fd.file_size = current_bytes;
     meta->tail_size = builders_[position]->GetTailSize();
     meta->marked_for_compaction = builders_[position]->NeedCompact();
-    meta->user_defined_timestamps_persisted = static_cast<bool>(
-        builders_[position]->GetTableProperties().user_defined_timestamps_persisted);
+    meta->user_defined_timestamps_persisted =
+        static_cast<bool>(builders_[position]
+                              ->GetTableProperties()
+                              .user_defined_timestamps_persisted);
   }
   current_output(position).finished = true;
   stats_.bytes_written += current_bytes;
   stats_.num_output_files += outputs_[position].size();
-  
+
   return s;
 }
 
 IOStatus CompactionOutputs::WriterSyncClose(const Status& input_status,
                                             SystemClock* clock,
                                             Statistics* statistics,
-                                            bool use_fsync,
-                                            int position) {
+                                            bool use_fsync, int position) {
   IOStatus io_s;
   if (input_status.ok()) {
     StopWatch sw(clock, statistics, COMPACTION_OUTFILE_SYNC_MICROS);
@@ -79,7 +81,8 @@ IOStatus CompactionOutputs::WriterSyncClose(const Status& input_status,
   if (input_status.ok() && io_s.ok()) {
     FileMetaData* meta = GetMetaData(position);
     meta->file_checksum = file_writers_[position]->GetFileChecksum();
-    meta->file_checksum_func_name = file_writers_[position]->GetFileChecksumFuncName();
+    meta->file_checksum_func_name =
+        file_writers_[position]->GetFileChecksumFuncName();
   }
 
   file_writers_[position].reset();
@@ -371,19 +374,21 @@ Status CompactionOutputs::AddToOutput(
   const auto& opts = cfd->ioptions();
   assert(opts->transformers.size() == opts->schemaDescriptors.size());
 
-  mycelium::TransformerType transformer_type = mycelium::TransformerType::NOTRANSFORMATION;
-  std::shared_ptr<mycelium::Transformer>        transformer      = nullptr;
-  std::shared_ptr<mycelium::SchemaDescriptor>   schemaDescriptor = nullptr;
+  mycelium::TransformerType transformer_type =
+      mycelium::TransformerType::NOTRANSFORMATION;
+  std::shared_ptr<mycelium::Transformer> transformer = nullptr;
+  std::shared_ptr<mycelium::SchemaDescriptor> schemaDescriptor = nullptr;
 
   if (!opts->transformers.empty() && !opts->schemaDescriptors.empty()) {
     transformer_type = opts->transformers[0]->Supports();
-    transformer      = opts->transformers[0];
+    transformer = opts->transformers[0];
     schemaDescriptor = opts->schemaDescriptors[0];
   }
 
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
   if (is_range_del && compaction_->bottommost_level()) {
-    // Range tombstones at bottommost level are dropped — no overlap to consider.
+    // Range tombstones at bottommost level are dropped — no overlap to
+    // consider.
     return s;
   }
   Slice key = c_iter.key();
@@ -391,7 +396,8 @@ Status CompactionOutputs::AddToOutput(
     s = close_file_func(*this, c_iter.InputStatus(), key);
     if (!s.ok()) return s;
     grandparent_boundary_switched_num_ = 0;
-    grandparent_overlapped_bytes_ = GetCurrentKeyGrandparentOverlappedBytes(key);
+    grandparent_overlapped_bytes_ =
+        GetCurrentKeyGrandparentOverlappedBytes(key);
     if (UNLIKELY(is_range_del)) {
       range_tombstone_lower_bound_.DecodeFrom(key);
     } else {
@@ -427,6 +433,13 @@ Status CompactionOutputs::AddToOutput(
     return EmitOne(0, key, value, &c_iter.ikey());
   }
 
+  // ── Fast path: identity (Mynooper) ───────────────────────────────────────
+  // Same slot layout as SPLIT/CONVERT (slot 1 = derived CF, slot 0 left empty),
+  // but raw bytes are passed through directly — no parse/transform/serialize.
+  if (transformer_type == mycelium::TransformerType::MYNOOPER) {
+    return EmitOne(1, key, value, &c_iter.ikey());
+  }
+
   // ── Helper lambdas ────────────────────────────────────────────────────────
   auto as_bytes = [](const rocksdb::Slice& v) -> mycelium::ByteBuffer {
     const auto* p = reinterpret_cast<const uint8_t*>(v.data());
@@ -450,13 +463,17 @@ Status CompactionOutputs::AddToOutput(
   // For AUGMENTER:
   //   output_values[0] is the augmented base record → slot 0 = source CF  ✓
   //   output_values[1..m] are index entries → slots 1..m = dest CFs       ✓
-  //   (slot_offset = 0, the prepended base record already accounts for the shift)
-  auto emit_outputs = [&](const std::vector<mycelium::ByteBuffer>& output_values) -> Status {
+  //   (slot_offset = 0, the prepended base record already accounts for the
+  //   shift)
+  auto emit_outputs =
+      [&](const std::vector<mycelium::ByteBuffer>& output_values) -> Status {
     Status es;
-    const size_t slot_offset = has_flag(mycelium::TransformerType::AUGMENTER) ? 0 : 1;
+    const size_t slot_offset =
+        has_flag(mycelium::TransformerType::AUGMENTER) ? 0 : 1;
     for (size_t i = 0; i < output_values.size(); ++i) {
       const auto& ov = output_values[i];
-      Slice compacted_value(reinterpret_cast<const char*>(ov.data()), ov.size());
+      Slice compacted_value(reinterpret_cast<const char*>(ov.data()),
+                            ov.size());
       const ParsedInternalKey* ikey_ptr = nullptr;
 
       if (has_flag(mycelium::TransformerType::AUGMENTER)) {
@@ -465,11 +482,12 @@ Status CompactionOutputs::AddToOutput(
         // an empty value (the key itself carries the index entry).
         ParsedInternalKey index_ikey;
         if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
-          es = Status::Corruption("AddToOutput: failed to parse augmenter internal key");
+          es = Status::Corruption(
+              "AddToOutput: failed to parse augmenter internal key");
           continue;
         }
         ikey_ptr = &index_ikey;
-        key      = compacted_value;
+        key = compacted_value;
         compacted_value = Slice();
       } else {
         ikey_ptr = &c_iter.ikey();
@@ -504,8 +522,7 @@ Status CompactionOutputs::AddToOutput(
 
   for (const auto& row_out : row_outputs) {
     auto ser_res = schemaDescriptor->Serialize(row_out);
-    if (!ser_res.ok())
-      return Status::Corruption(ser_res.status.message());
+    if (!ser_res.ok()) return Status::Corruption(ser_res.status.message());
     auto& buffers = *ser_res;
     output_values.insert(output_values.end(),
                          std::make_move_iterator(buffers.begin()),
@@ -516,11 +533,9 @@ Status CompactionOutputs::AddToOutput(
   return s;
 }
 
-Status CompactionOutputs::EmitOne(
-    size_t output_index,
-    const Slice& key,
-    const Slice& value,
-    const ParsedInternalKey* ikey_ptr) {
+Status CompactionOutputs::EmitOne(size_t output_index, const Slice& key,
+                                  const Slice& value,
+                                  const ParsedInternalKey* ikey_ptr) {
   Status s;
 
   auto& oput = current_output(output_index);
@@ -538,14 +553,14 @@ Status CompactionOutputs::EmitOne(
     if (!s.ok()) return s;
   }
 
-  s = oput.meta.UpdateBoundaries(key, value, ikey_ptr->sequence, ikey_ptr->type);
+  s = oput.meta.UpdateBoundaries(key, value, ikey_ptr->sequence,
+                                 ikey_ptr->type);
   if (!s.ok()) return s;
 
   return Status::OK();
 }
 
-Status CompactionOutputs::AddKV(size_t dest_index,
-                                std::string_view key_sv,
+Status CompactionOutputs::AddKV(size_t dest_index, std::string_view key_sv,
                                 std::string_view value_sv) {
   Slice key(key_sv.data(), key_sv.size());
   Slice value(value_sv.data(), value_sv.size());
@@ -556,7 +571,8 @@ Status CompactionOutputs::AddKV(size_t dest_index,
 }
 
 Status CompactionOutputs::AddDerivedOutput(
-    std::vector<std::vector<std::pair<std::string, std::string>>> derived_outputs,
+    std::vector<std::vector<std::pair<std::string, std::string>>>
+        derived_outputs,
     const CompactionFileOpenFunc& open_file_func,
     const CompactionFileCloseFunc& close_file_func) {
   Status s;
@@ -566,30 +582,34 @@ Status CompactionOutputs::AddDerivedOutput(
 
     int sequence_number = 1;
     for (auto dout : derived_outputs[i]) {
-      rocksdb::InternalKey internal_key(dout.first, sequence_number, rocksdb::kTypeValue);
+      rocksdb::InternalKey internal_key(dout.first, sequence_number,
+                                        rocksdb::kTypeValue);
       rocksdb::Slice encoded_key = internal_key.Encode();
       rocksdb::Slice value = Slice(dout.second);
 
-      s = current_output(i+1).validator.Add(encoded_key, value);
+      s = current_output(i + 1).validator.Add(encoded_key, value);
       if (!s.ok()) {
         return s;
       }
 
       builders_[i + 1]->Add(encoded_key, value);
       stats_.num_output_records++;
-      current_output_file_size_ = builders_[i+1]->EstimatedFileSize();
+      current_output_file_size_ = builders_[i + 1]->EstimatedFileSize();
 
       if (blob_garbage_meter_) {
-        s = blob_garbage_meter_->ProcessOutFlow(Slice(dout.first), Slice(dout.second));
+        s = blob_garbage_meter_->ProcessOutFlow(Slice(dout.first),
+                                                Slice(dout.second));
       }
       if (!s.ok()) {
         return s;
       }
 
       ParsedInternalKey ikey;
-      ParseInternalKey(encoded_key, &ikey, false);  // Parse key to get sequence and type
+      ParseInternalKey(encoded_key, &ikey,
+                       false);  // Parse key to get sequence and type
 
-      s = current_output(i+1).meta.UpdateBoundaries(encoded_key, value, ikey.sequence, ikey.type);
+      s = current_output(i + 1).meta.UpdateBoundaries(encoded_key, value,
+                                                      ikey.sequence, ikey.type);
       if (!s.ok()) {
         return s;
       }

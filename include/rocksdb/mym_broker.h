@@ -115,6 +115,7 @@ class MymBroker {
     private:
         DB *db_;
         Options options_;
+        WriteOptions write_options_;  // cached; avoids per-call construction
         ColFamMeta user_cf_meta_;
         std::unordered_map<int, std::unordered_map<std::string, ColFamMeta>> int_cf_meta_;
         // to track ColumnFamilyHandles in order to delete
