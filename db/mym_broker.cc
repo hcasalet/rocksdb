@@ -81,6 +81,15 @@ MymBroker::MymBroker(const std::string& cfname,
     }
 
     saveColFamHandlesByName(plan, descriptors, cf_handles, cfname);
+
+    // Determine whether the source CF is drained into derived CFs on compaction.
+    // AUGMENTER writes the base record back to slot 0 (source CF retains SST data);
+    // all other transformer types use slot_offset=1 and fully drain the source CF.
+    if (!options_.transformers.empty()) {
+        auto tmask = static_cast<int>(options_.transformers[0]->Supports());
+        source_cf_drained_on_compaction_ =
+            !(tmask & static_cast<int>(mycelium::TransformerType::AUGMENTER));
+    }
 }
 
 int MymBroker::Read(const std::string &key, const std::set<int>* positions, std::string &result)
@@ -89,16 +98,25 @@ int MymBroker::Read(const std::string &key, const std::set<int>* positions, std:
         fprintf(stderr, "FATAL: MymBroker db_ is null in Read!\n");
         exit(1);
     }
-    rocksdb::ReadOptions ro;
     Status s;
-    size_t n_levels=int_cf_meta_.size();
-    for (size_t level=0; level < n_levels; level++) {
+    const size_t n_levels = int_cf_meta_.size();
+    for (size_t level = 0; level < n_levels; level++) {
         auto handles = int_cf_meta_.find(level);
         if (handles != int_cf_meta_.end() && !handles->second.empty()) {
             const auto& [name, meta] = *handles->second.begin();
             if (!meta.cf_handle_) {
                 fprintf(stderr, "FATAL: MymBroker cf_handle is null in Read level %zu name %s!\n", level, name.c_str());
                 exit(1);
+            }
+            rocksdb::ReadOptions ro;
+            // For transformers that drain the source CF into derived CFs on
+            // compaction (DISTRIBUTOR, CONVERTER, MYNOOPER), the source CF
+            // (level 0) only holds data still in the memtable. Probe the
+            // memtable only to avoid a wasted block-cache/disk lookup on every
+            // read of compacted data. AUGMENTER writes the base record back to
+            // the source CF so it must do a full read.
+            if (source_cf_drained_on_compaction_ && level == 0) {
+                ro.read_tier = rocksdb::kMemtableTier;
             }
             s = db_->Get(ro, meta.cf_handle_, key, &result);
             if (s.ok()) return 0;
