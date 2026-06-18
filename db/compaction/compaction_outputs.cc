@@ -441,10 +441,7 @@ Status CompactionOutputs::AddToOutput(
   }
 
   // ── Helper lambdas ────────────────────────────────────────────────────────
-  auto as_bytes = [](const rocksdb::Slice& v) -> mycelium::ByteBuffer {
-    const auto* p = reinterpret_cast<const uint8_t*>(v.data());
-    return mycelium::ByteBuffer(p, p + v.size());
-  };
+
 
   auto has_flag = [&](mycelium::TransformerType f) {
     return (mycelium::to_underlying(transformer_type) &
@@ -500,7 +497,7 @@ Status CompactionOutputs::AddToOutput(
   };
 
   // ── Parse → Transform → Serialize ────────────────────────────────────────
-  auto parse_res = schemaDescriptor->Parse(as_bytes(value));
+  auto parse_res = schemaDescriptor->Parse(std::string_view(value.data(), value.size()));
   if (!parse_res.ok()) {
     // Unparseable record: pass through unchanged.
     return EmitOne(0, key, value, &c_iter.ikey());

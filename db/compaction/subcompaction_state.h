@@ -211,26 +211,9 @@ class SubcompactionState {
         continue;
       }
 
-      // Slots 1..n are dest CFs.  Try to place each file at the highest level
-      // where its key range does not overlap any existing file, so we skip the
-      // dest CF L0→L1 compaction round.  Fall back to L0 on any overlap.
-      VersionStorageInfo* vstorage =
-          (i < dest_vstorages.size()) ? dest_vstorages[i] : nullptr;
-
+      // Slots 1..n are dest CFs. Always place target outputs in Level 0.
       for (const auto& file : compaction_outputs_.outputs_[i]) {
-        int target_level = 0;  // default: L0
-        if (vstorage != nullptr) {
-          Slice smallest = file.meta.smallest.user_key();
-          Slice largest  = file.meta.largest.user_key();
-          const int max_level = vstorage->num_levels() - 1;
-          for (int lvl = 1; lvl <= max_level; lvl++) {
-            if (vstorage->OverlapInLevel(lvl, &smallest, &largest)) {
-              break;  // overlap found; stop and use the level below
-            }
-            target_level = lvl;  // no overlap at this level; try one higher
-          }
-        }
-        out_edits[i]->AddFile(target_level, file.meta);
+        out_edits[i]->AddFile(0, file.meta);
       }
     }
   }
