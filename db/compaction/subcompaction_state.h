@@ -185,7 +185,16 @@ class SubcompactionState {
     }
   }
 
-  void AddOutputsEdits(std::vector<std::shared_ptr<VersionEdit>> out_edits) const {
+  // dest_vstorages[i] is the VersionStorageInfo for out_edits[i].
+  // When provided for a dest CF slot (i > 0), each output file is placed at
+  // the highest level where its key range has no overlap with existing files,
+  // falling back to L0 if overlap is found at every level above 0.
+  // This mirrors IngestExternalFile's level-selection logic and eliminates the
+  // dest CF L0→L1 compaction round whenever the incoming data is "fresh"
+  // (inserts or updates to key ranges not yet present at that level).
+  void AddOutputsEdits(
+      std::vector<std::shared_ptr<VersionEdit>> out_edits,
+      const std::vector<VersionStorageInfo*>& dest_vstorages = {}) const {
     assert(out_edits.size() == compaction_outputs_.outputs_.size());
     for (size_t i = 0; i < penultimate_level_outputs_.outputs_.size(); i++) {
       for (const auto& file : penultimate_level_outputs_.outputs_[i]) {
@@ -194,11 +203,34 @@ class SubcompactionState {
     }
 
     for (size_t i = 0; i < compaction_outputs_.outputs_.size(); i++) {
-      // Slot 0 is the source CF: add at the compaction's own output level.
-      // Slots 1..n are dest CFs: their transform outputs always land at L0.
-      const int level = (i == 0) ? compaction->output_level() : 0;
+      if (i == 0) {
+        // Slot 0 is always the source CF: use the compaction's own output level.
+        for (const auto& file : compaction_outputs_.outputs_[i]) {
+          out_edits[i]->AddFile(compaction->output_level(), file.meta);
+        }
+        continue;
+      }
+
+      // Slots 1..n are dest CFs.  Try to place each file at the highest level
+      // where its key range does not overlap any existing file, so we skip the
+      // dest CF L0→L1 compaction round.  Fall back to L0 on any overlap.
+      VersionStorageInfo* vstorage =
+          (i < dest_vstorages.size()) ? dest_vstorages[i] : nullptr;
+
       for (const auto& file : compaction_outputs_.outputs_[i]) {
-        out_edits[i]->AddFile(level, file.meta);
+        int target_level = 0;  // default: L0
+        if (vstorage != nullptr) {
+          Slice smallest = file.meta.smallest.user_key();
+          Slice largest  = file.meta.largest.user_key();
+          const int max_level = vstorage->num_levels() - 1;
+          for (int lvl = 1; lvl <= max_level; lvl++) {
+            if (vstorage->OverlapInLevel(lvl, &smallest, &largest)) {
+              break;  // overlap found; stop and use the level below
+            }
+            target_level = lvl;  // no overlap at this level; try one higher
+          }
+        }
+        out_edits[i]->AddFile(target_level, file.meta);
       }
     }
   }

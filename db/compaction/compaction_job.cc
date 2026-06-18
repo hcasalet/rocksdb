@@ -1779,9 +1779,20 @@ Status CompactionJob::InstallCompactionResults(const MutableCFOptions& mutable_c
 
   std::unordered_map<uint64_t, BlobGarbageMeter::BlobStats> blob_total_garbage;
 
+  // Build per-slot VersionStorageInfo pointers for ingestion-style level
+  // selection inside AddOutputsEdits.  Indexed parallel to transforming_cfds:
+  // slot 0 = source CF, slots 1..n = dest CFs.
+  std::vector<VersionStorageInfo*> dest_vstorages;
+  if (!transforming_cfds.empty()) {
+    dest_vstorages.reserve(transforming_cfds.size());
+    for (auto* cfd : transforming_cfds) {
+      dest_vstorages.push_back(cfd->current()->storage_info());
+    }
+  }
+
   for (const auto& sub_compact : compact_->sub_compact_states) {
     if (transforming_cfds.size() > 0) {
-      sub_compact.AddOutputsEdits(edit_outs);
+      sub_compact.AddOutputsEdits(edit_outs, dest_vstorages);
 
       int num = 0;
       for (const auto& blob : sub_compact.Current().GetBlobFileAdditions()) {
