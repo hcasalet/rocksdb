@@ -507,8 +507,14 @@ Status CompactionOutputs::AddToOutput(
   }
   mycelium::ParsedRow& parsed = *parse_res;
 
+  // For non-AUGMENTER transformers (DISTRIBUTOR, CONVERTER, MYNOOPER) `parsed`
+  // is not referenced again after Transform.  Use TransformMove so the
+  // transformer can steal field storage instead of copying it — for disjoint
+  // SPLITTING splits this eliminates all ParsedField string copies.
   std::vector<mycelium::ParsedRow> row_outputs =
-      transformer->Transform(key.ToStringView(), parsed);
+      has_flag(mycelium::TransformerType::AUGMENTER)
+          ? transformer->Transform(key.ToStringView(), parsed)
+          : transformer->TransformMove(key.ToStringView(), std::move(parsed));
 
   // Build output_values from serialised row outputs.
   std::vector<mycelium::ByteBuffer> output_values;
