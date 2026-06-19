@@ -469,26 +469,26 @@ Status CompactionOutputs::AddToOutput(
           std::vector<mycelium::ParsedRow>& row_outputs) -> Status {
     Status es;
     if (has_flag(mycelium::TransformerType::AUGMENTER)) {
-      // 1. Emit base record to Slot 0 (Source CF)
+      // 1. Emit base record to Slot 1 (_orig_data_cf)
       const auto& ov0 = output_values[0];
       Slice compacted_value0(reinterpret_cast<const char*>(ov0.data()),
                              ov0.size());
-      es = EmitOne(0, key, compacted_value0, &c_iter.ikey());
+      es = EmitOne(1, key, compacted_value0, &c_iter.ikey());
       if (!es.ok()) return es;
 
-      // 2. Emit index columns to Slot 1 (_indexed_data_cf)
+      // 2. Emit index columns to Slot 2 (_indexed_data_cf)
       Slice idx_cols_slice;
       if (!row_outputs.empty()) {
         idx_cols_slice = Slice(row_outputs[0].fields[3].value.bytes);
       }
-      es = EmitOne(1, key, idx_cols_slice, &c_iter.ikey());
+      es = EmitOne(2, key, idx_cols_slice, &c_iter.ikey());
       if (!es.ok()) return es;
 
-      // 3. Buffer index entries for Slot i + 2
+      // 3. Buffer index entries for Slot i + 3
       for (size_t i = 0; i < row_outputs.size(); ++i) {
         std::string idx_user_key = std::move(row_outputs[i].fields[1].value.bytes);
         std::string idx_val = "";
-        buffered_indices_[i + 2].push_back({std::move(idx_user_key), std::move(idx_val), c_iter.ikey().sequence});
+        buffered_indices_[i + 3].push_back({std::move(idx_user_key), std::move(idx_val), c_iter.ikey().sequence});
       }
     } else {
       const size_t slot_offset = 1;

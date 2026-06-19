@@ -83,12 +83,10 @@ MymBroker::MymBroker(const std::string& cfname,
     saveColFamHandlesByName(plan, descriptors, cf_handles, cfname);
 
     // Determine whether the source CF is drained into derived CFs on compaction.
-    // AUGMENTER writes the base record back to slot 0 (source CF retains SST data);
-    // all other transformer types use slot_offset=1 and fully drain the source CF.
+    // Now AUGMENTER also drains the source CF (leaving it empty from level 0 below)
+    // by moving base records to the _orig_data_cf destination CF.
     if (!options_.transformers.empty()) {
-        auto tmask = static_cast<int>(options_.transformers[0]->Supports());
-        source_cf_drained_on_compaction_ =
-            !(tmask & static_cast<int>(mycelium::TransformerType::AUGMENTER));
+        source_cf_drained_on_compaction_ = true;
     }
 }
 
@@ -103,22 +101,41 @@ int MymBroker::Read(const std::string &key, const std::set<int>* positions, std:
     for (size_t level = 0; level < n_levels; level++) {
         auto handles = int_cf_meta_.find(level);
         if (handles != int_cf_meta_.end() && !handles->second.empty()) {
-            const auto& [name, meta] = *handles->second.begin();
-            if (!meta.cf_handle_) {
-                fprintf(stderr, "FATAL: MymBroker cf_handle is null in Read level %zu name %s!\n", level, name.c_str());
+            // Select the correct base CF handle at Level 1 if multiple derived CFs exist
+            const ColFamMeta* selected_meta = nullptr;
+            for (const auto& [name, meta] : handles->second) {
+                if (name.find("_orig_data_cf") != std::string::npos) {
+                    selected_meta = &meta;
+                    break;
+                }
+            }
+            if (!selected_meta) {
+                for (const auto& [name, meta] : handles->second) {
+                    if (name.find("_indexed_data_cf") == std::string::npos &&
+                        name.find("_secondary_index_cf") == std::string::npos) {
+                        selected_meta = &meta;
+                        break;
+                    }
+                }
+            }
+            if (!selected_meta) {
+                selected_meta = &handles->second.begin()->second;
+            }
+
+            if (!selected_meta->cf_handle_) {
+                fprintf(stderr, "FATAL: MymBroker cf_handle is null in Read level %zu name %s!\n", level, selected_meta->cfName_.c_str());
                 exit(1);
             }
             rocksdb::ReadOptions ro;
             // For transformers that drain the source CF into derived CFs on
-            // compaction (DISTRIBUTOR, CONVERTER, MYNOOPER), the source CF
+            // compaction (DISTRIBUTOR, CONVERTER, MYNOOPER, AUGMENTER), the source CF
             // (level 0) only holds data still in the memtable. Probe the
             // memtable only to avoid a wasted block-cache/disk lookup on every
-            // read of compacted data. AUGMENTER writes the base record back to
-            // the source CF so it must do a full read.
+            // read of compacted data.
             if (source_cf_drained_on_compaction_ && level == 0) {
                 ro.read_tier = rocksdb::kMemtableTier;
             }
-            s = db_->Get(ro, meta.cf_handle_, key, &result);
+            s = db_->Get(ro, selected_meta->cf_handle_, key, &result);
             if (s.ok()) return 0;
         }
     }
@@ -459,6 +476,7 @@ CFPlan MymBroker::buildPlan(const std::string& root_cf)
                 child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_converted_cf"));
 
             } else if (tmask & static_cast<int>(mycelium::TransformerType::AUGMENTER)) {
+                child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_orig_data_cf"));
                 child_names.emplace_back(make_child_name(plan.nodes[parent_idx].name, "_indexed_data_cf"));
                 // secondary index CFs (no further transformers)
                 auto* trptr = dynamic_cast<const mycelium::Augmenter*>(transformer);

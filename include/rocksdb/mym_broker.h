@@ -117,8 +117,7 @@ class MymBroker {
         Options options_;
         WriteOptions write_options_;  // cached; avoids per-call construction
         // True when the transformer drains the source CF into derived CFs on
-        // compaction (slot_offset=1: DISTRIBUTOR, CONVERTER, MYNOOPER).
-        // False for AUGMENTER, which writes the base record back to slot 0.
+        // compaction (slot_offset=1: DISTRIBUTOR, CONVERTER, MYNOOPER, AUGMENTER).
         // Used in Read() to skip a full SST probe on the source CF.
         bool source_cf_drained_on_compaction_{false};
         ColFamMeta user_cf_meta_;
