@@ -9,6 +9,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "db/compaction/compaction_outputs.h"
+#include <algorithm>
 
 #include "db/builder.h"
 #include "mycelium/augmenter.h"
@@ -380,9 +381,11 @@ Status CompactionOutputs::AddToOutput(
   std::shared_ptr<mycelium::SchemaDescriptor> schemaDescriptor = nullptr;
 
   if (!opts->transformers.empty() && !opts->schemaDescriptors.empty()) {
-    transformer_type = opts->transformers[0]->Supports();
-    transformer = opts->transformers[0];
-    schemaDescriptor = opts->schemaDescriptors[0];
+    if (compaction_->start_level() == 0) {
+      transformer_type = opts->transformers[0]->Supports();
+      transformer = opts->transformers[0];
+      schemaDescriptor = opts->schemaDescriptors[0];
+    }
   }
 
   bool is_range_del = c_iter.IsDeleteRangeSentinelKey();
@@ -442,7 +445,6 @@ Status CompactionOutputs::AddToOutput(
 
   // ── Helper lambdas ────────────────────────────────────────────────────────
 
-
   auto has_flag = [&](mycelium::TransformerType f) {
     return (mycelium::to_underlying(transformer_type) &
             mycelium::to_underlying(f)) != 0;
@@ -463,41 +465,51 @@ Status CompactionOutputs::AddToOutput(
   //   (slot_offset = 0, the prepended base record already accounts for the
   //   shift)
   auto emit_outputs =
-      [&](const std::vector<mycelium::ByteBuffer>& output_values) -> Status {
+      [&](const std::vector<mycelium::ByteBuffer>& output_values,
+          const std::vector<mycelium::ParsedRow>& row_outputs) -> Status {
     Status es;
-    const size_t slot_offset =
-        has_flag(mycelium::TransformerType::AUGMENTER) ? 0 : 1;
-    for (size_t i = 0; i < output_values.size(); ++i) {
-      const auto& ov = output_values[i];
-      Slice compacted_value(reinterpret_cast<const char*>(ov.data()),
-                            ov.size());
-      const ParsedInternalKey* ikey_ptr = nullptr;
-
-      if (has_flag(mycelium::TransformerType::AUGMENTER)) {
-        // For AUGMENTER the serialised output is a packed internal key;
-        // parse it to recover the key type/sequence number, then emit with
-        // an empty value (the key itself carries the index entry).
-        ParsedInternalKey index_ikey;
-        if (!ParseInternalKey(compacted_value, &index_ikey, true).ok()) {
-          es = Status::Corruption(
-              "AddToOutput: failed to parse augmenter internal key");
-          continue;
-        }
-        ikey_ptr = &index_ikey;
-        key = compacted_value;
-        compacted_value = Slice();
-      } else {
-        ikey_ptr = &c_iter.ikey();
-      }
-
-      es = EmitOne(i + slot_offset, key, compacted_value, ikey_ptr);
+    if (has_flag(mycelium::TransformerType::AUGMENTER)) {
+      // 1. Emit base record to Slot 0 (Source CF)
+      const auto& ov0 = output_values[0];
+      Slice compacted_value0(reinterpret_cast<const char*>(ov0.data()),
+                             ov0.size());
+      es = EmitOne(0, key, compacted_value0, &c_iter.ikey());
       if (!es.ok()) return es;
+
+      // 2. Emit index columns to Slot 1 (_indexed_data_cf)
+      std::string idx_cols;
+      if (!row_outputs.empty()) {
+        std::string prefix = row_outputs[0].fields[1].value.bytes;
+        size_t sep_pos = prefix.find(mycelium::kIndexKeySep);
+        idx_cols =
+            (sep_pos != std::string::npos) ? prefix.substr(0, sep_pos) : prefix;
+      }
+      Slice idx_cols_slice(idx_cols);
+      es = EmitOne(1, key, idx_cols_slice, &c_iter.ikey());
+      if (!es.ok()) return es;
+
+      // 3. Buffer index entries for Slot i + 2
+      for (size_t i = 0; i < row_outputs.size(); ++i) {
+        std::string idx_user_key = row_outputs[i].fields[1].value.bytes;
+        std::string idx_val = "";
+        buffered_indices_[i + 2].push_back({idx_user_key, idx_val, c_iter.ikey().sequence});
+      }
+    } else {
+      const size_t slot_offset = 1;
+      for (size_t i = 0; i < output_values.size(); ++i) {
+        const auto& ov = output_values[i];
+        Slice compacted_value(reinterpret_cast<const char*>(ov.data()),
+                              ov.size());
+        es = EmitOne(i + slot_offset, key, compacted_value, &c_iter.ikey());
+        if (!es.ok()) return es;
+      }
     }
     return es;
   };
 
   // ── Parse → Transform → Serialize ────────────────────────────────────────
-  auto parse_res = schemaDescriptor->Parse(std::string_view(value.data(), value.size()));
+  auto parse_res =
+      schemaDescriptor->Parse(std::string_view(value.data(), value.size()));
   if (!parse_res.ok()) {
     // Unparseable record: pass through unchanged.
     return EmitOne(0, key, value, &c_iter.ikey());
@@ -510,8 +522,9 @@ Status CompactionOutputs::AddToOutput(
   // SPLITTING splits this eliminates all ParsedField string copies.
   std::vector<mycelium::ParsedRow> row_outputs =
       has_flag(mycelium::TransformerType::AUGMENTER)
-          ? transformer->Transform(key.ToStringView(), parsed)
-          : transformer->TransformMove(key.ToStringView(), std::move(parsed));
+          ? transformer->Transform(c_iter.user_key().ToStringView(), parsed)
+          : transformer->TransformMove(c_iter.user_key().ToStringView(),
+                                       std::move(parsed));
 
   // Build output_values from serialised row outputs.
   std::vector<mycelium::ByteBuffer> output_values;
@@ -521,18 +534,18 @@ Status CompactionOutputs::AddToOutput(
     output_values.emplace_back(
         reinterpret_cast<const uint8_t*>(value.data()),
         reinterpret_cast<const uint8_t*>(value.data()) + value.size());
+  } else {
+    for (const auto& row_out : row_outputs) {
+      auto ser_res = schemaDescriptor->Serialize(row_out);
+      if (!ser_res.ok()) return Status::Corruption(ser_res.status.message());
+      auto& buffers = *ser_res;
+      output_values.insert(output_values.end(),
+                           std::make_move_iterator(buffers.begin()),
+                           std::make_move_iterator(buffers.end()));
+    }
   }
 
-  for (const auto& row_out : row_outputs) {
-    auto ser_res = schemaDescriptor->Serialize(row_out);
-    if (!ser_res.ok()) return Status::Corruption(ser_res.status.message());
-    auto& buffers = *ser_res;
-    output_values.insert(output_values.end(),
-                         std::make_move_iterator(buffers.begin()),
-                         std::make_move_iterator(buffers.end()));
-  }
-
-  s = emit_outputs(output_values);
+  s = emit_outputs(output_values, row_outputs);
   return s;
 }
 
@@ -989,6 +1002,8 @@ CompactionOutputs::CompactionOutputs(const Compaction* compaction,
 
   level_ptrs_ = std::vector<size_t>(compaction_->number_levels(), 0);
 
+  buffered_indices_.resize(splits);
+
   for (int i = 0; i < splits; i++) {
     std::vector<Output> output;
     outputs_.push_back(output);
@@ -999,6 +1014,53 @@ CompactionOutputs::CompactionOutputs(const Compaction* compaction,
     std::unique_ptr<WritableFileWriter> filewriter;
     file_writers_.push_back(std::move(filewriter));
   }
+}
+
+Status CompactionOutputs::CloseOutput(const Status& curr_status,
+                                      const CompactionFileOpenFunc& open_file_func,
+                                      const CompactionFileCloseFunc& close_file_func) {
+  Status status = curr_status;
+
+  if (status.ok()) {
+    // Sort and emit all buffered secondary index entries
+    for (size_t pos = 0; pos < buffered_indices_.size(); ++pos) {
+      if (buffered_indices_[pos].empty()) continue;
+
+      std::sort(buffered_indices_[pos].begin(), buffered_indices_[pos].end());
+
+      for (const auto& entry : buffered_indices_[pos]) {
+        rocksdb::InternalKey internal_key(entry.user_key, entry.seq,
+                                          rocksdb::kTypeValue);
+        rocksdb::Slice encoded_key = internal_key.Encode();
+        rocksdb::Slice idx_val = entry.value;
+
+        ParsedInternalKey index_ikey;
+        if (!ParseInternalKey(encoded_key, &index_ikey, true).ok()) {
+          status = Status::Corruption(
+              "CloseOutput: failed to parse augmenter internal key");
+          break;
+        }
+
+        status = EmitOne(pos, encoded_key, idx_val, &index_ikey);
+        if (!status.ok()) break;
+      }
+      if (!status.ok()) break;
+    }
+  }
+
+  // handle subcompaction containing only range deletions
+  if (status.ok() && !HasBuilder() && !HasOutput() && HasRangeDel()) {
+    status = open_file_func(*this);
+  }
+  if (HasBuilder()) {
+    const Slice empty_key{};
+    Status s = close_file_func(*this, status, empty_key);
+    if (!s.ok() && status.ok()) {
+      status = s;
+    }
+  }
+
+  return status;
 }
 
 }  // namespace ROCKSDB_NAMESPACE

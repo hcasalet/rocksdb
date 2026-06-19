@@ -179,46 +179,49 @@ int MymBroker::IndexRead(const std::string &key, const std::set<int>* positions,
     // search for index handles in level-1 handles
     std::unordered_map<std::string, ColFamMeta> level_1_handles = int_cf_meta_[1];
 
-    std::string valkeystr;
-    for (auto idx_hdl : level_1_handles) {
-        if (idx_hdl.first.find("_secondary_") != std::string::npos) {
-            if (!idx_hdl.second.cf_handle_) {
-                fprintf(stderr, "FATAL: MymBroker cf_handle is null in IndexRead name %s!\n", idx_hdl.first.c_str());
-                exit(1);
-            }
-            s = db_->Get(ReadOptions(), idx_hdl.second.cf_handle_, key, &valkeystr);
-            if (!s.ok()) {
-                return Status::kNotFound;
-            }
-            break;
+    rocksdb::ColumnFamilyHandle* secondary_hdl = nullptr;
+    rocksdb::ColumnFamilyHandle* primary_hdl = nullptr;
+    for (auto lvl_hdl : level_1_handles) {
+        if (lvl_hdl.first.find("_secondary_") != std::string::npos) {
+            secondary_hdl = lvl_hdl.second.cf_handle_;
+        } else if (lvl_hdl.first.find("_indexed_data_cf") != std::string::npos) {
+            primary_hdl = lvl_hdl.second.cf_handle_;
         }
     }
 
-    ColumnFamilyHandle* primary_hdl = nullptr;
-    for (auto pri_hdl : level_1_handles) {
-        if (pri_hdl.first.find("_indexed_data_cf") != std::string::npos) {
-            primary_hdl = pri_hdl.second.cf_handle_;
-        }
+    if (!secondary_hdl) {
+        return Status::kNotFound;
     }
 
-    if (valkeystr != "") {
-        std::vector<std::string> valkeys = parsePrimaryKeys(valkeystr);
-        for (auto valkey : valkeys) {
-            std::string valresult;
-            s = db_->Get(ReadOptions(), user_cf_meta_.cf_handle_, key, &valresult);
+    // Prefixed index scan: key = indexed_column + kIndexKeySep + primary_key.
+    // Seek to key + kIndexKeySep and collect all matching keys.
+    std::string prefix = key + std::string(mycelium::kIndexKeySep);
+    rocksdb::ReadOptions ro;
+    ro.fill_cache = false;
+    std::unique_ptr<rocksdb::Iterator> it(db_->NewIterator(ro, secondary_hdl));
+
+    std::vector<std::string> valkeys;
+    for (it->Seek(prefix); it->Valid() && it->key().starts_with(rocksdb::Slice(prefix)); it->Next()) {
+        rocksdb::Slice k = it->key();
+        std::string pk = k.ToString().substr(prefix.size());
+        valkeys.push_back(pk);
+    }
+
+    for (const auto& valkey : valkeys) {
+        std::string valresult;
+        s = db_->Get(rocksdb::ReadOptions(), user_cf_meta_.cf_handle_, valkey, &valresult);
+        if (valresult != "") {
+            result.push_back(valresult);
+            continue;
+        }
+
+        if (primary_hdl != nullptr) {
+            s = db_->Get(rocksdb::ReadOptions(), primary_hdl, valkey, &valresult);
             if (valresult != "") {
                 result.push_back(valresult);
-                continue;
             }
-
-            if (primary_hdl != nullptr) {
-                s = db_->Get(ReadOptions(), primary_hdl, valkey, &valresult);
-                if (valresult != "") {
-                    result.push_back(valresult);
-                }
-            }
-        }   
-    }
+        }
+    }   
 
     if (result.size() > 0) {
         return 0;

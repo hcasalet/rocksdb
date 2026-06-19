@@ -9,6 +9,9 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
+#include <vector>
+#include <string>
+#include <utility>
 
 #include "db/blob/blob_garbage_meter.h"
 #include "db/compaction/compaction.h"
@@ -322,22 +325,7 @@ class CompactionOutputs {
   // for range-dels only output file.
   Status CloseOutput(const Status& curr_status,
                      const CompactionFileOpenFunc& open_file_func,
-                     const CompactionFileCloseFunc& close_file_func) {
-    Status status = curr_status;
-    // handle subcompaction containing only range deletions
-    if (status.ok() && !HasBuilder() && !HasOutput() && HasRangeDel()) {
-      status = open_file_func(*this);
-    }
-    if (HasBuilder()) {
-      const Slice empty_key{};
-      Status s = close_file_func(*this, status, empty_key);
-      if (!s.ok() && status.ok()) {
-        status = s;
-      }
-    }
-
-    return status;
-  }
+                     const CompactionFileCloseFunc& close_file_func);
 
   // This subcompaction's output could be empty if compaction was aborted before
   // this subcompaction had a chance to generate any output files. When
@@ -435,6 +423,23 @@ class CompactionOutputs {
   std::vector<size_t> level_ptrs_;
 
   mycelium::GroveManager* grove_manager_ = nullptr;
+
+ public:
+  struct BufferedEntry {
+    std::string user_key;
+    std::string value;
+    SequenceNumber seq;
+
+    bool operator<(const BufferedEntry& other) const {
+      if (user_key != other.user_key) {
+        return user_key < other.user_key;
+      }
+      return seq < other.seq;
+    }
+  };
+
+ private:
+  std::vector<std::vector<BufferedEntry>> buffered_indices_;
 };
 
 // helper struct to concatenate the last level and penultimate level outputs

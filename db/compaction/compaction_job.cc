@@ -264,13 +264,8 @@ void CompactionJob::Prepare() {
 
   int splits = cfd->GetDestinationCfdSize();
 
-  if (cfd->ioptions()->transformers.size() > 0) {
-    EnsureInputOnlyOnLevel0(cfd);
-    assert(cfd->current()->storage_info()->NumLevelFiles(0) > 0);
-  } else {
-    assert(cfd->current()->storage_info()->NumLevelFiles(
-             compact_->compaction->level()) > 0);
-  }
+  assert(cfd->current()->storage_info()->NumLevelFiles(
+           compact_->compaction->level()) > 0);
 
   write_hint_ = cfd->CalculateSSTWriteHint(c->output_level());
   bottommost_level_ = c->bottommost_level();
