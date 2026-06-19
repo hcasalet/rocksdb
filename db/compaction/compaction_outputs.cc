@@ -466,7 +466,7 @@ Status CompactionOutputs::AddToOutput(
   //   shift)
   auto emit_outputs =
       [&](const std::vector<mycelium::ByteBuffer>& output_values,
-          const std::vector<mycelium::ParsedRow>& row_outputs) -> Status {
+          std::vector<mycelium::ParsedRow>& row_outputs) -> Status {
     Status es;
     if (has_flag(mycelium::TransformerType::AUGMENTER)) {
       // 1. Emit base record to Slot 0 (Source CF)
@@ -477,22 +477,18 @@ Status CompactionOutputs::AddToOutput(
       if (!es.ok()) return es;
 
       // 2. Emit index columns to Slot 1 (_indexed_data_cf)
-      std::string idx_cols;
+      Slice idx_cols_slice;
       if (!row_outputs.empty()) {
-        std::string prefix = row_outputs[0].fields[1].value.bytes;
-        size_t sep_pos = prefix.find(mycelium::kIndexKeySep);
-        idx_cols =
-            (sep_pos != std::string::npos) ? prefix.substr(0, sep_pos) : prefix;
+        idx_cols_slice = Slice(row_outputs[0].fields[3].value.bytes);
       }
-      Slice idx_cols_slice(idx_cols);
       es = EmitOne(1, key, idx_cols_slice, &c_iter.ikey());
       if (!es.ok()) return es;
 
       // 3. Buffer index entries for Slot i + 2
       for (size_t i = 0; i < row_outputs.size(); ++i) {
-        std::string idx_user_key = row_outputs[i].fields[1].value.bytes;
+        std::string idx_user_key = std::move(row_outputs[i].fields[1].value.bytes);
         std::string idx_val = "";
-        buffered_indices_[i + 2].push_back({idx_user_key, idx_val, c_iter.ikey().sequence});
+        buffered_indices_[i + 2].push_back({std::move(idx_user_key), std::move(idx_val), c_iter.ikey().sequence});
       }
     } else {
       const size_t slot_offset = 1;
@@ -516,15 +512,11 @@ Status CompactionOutputs::AddToOutput(
   }
   mycelium::ParsedRow& parsed = *parse_res;
 
-  // For non-AUGMENTER transformers (DISTRIBUTOR, CONVERTER, MYNOOPER) `parsed`
-  // is not referenced again after Transform.  Use TransformMove so the
-  // transformer can steal field storage instead of copying it — for disjoint
-  // SPLITTING splits this eliminates all ParsedField string copies.
+  // `parsed` is not referenced again after Transform. Use TransformMove so the
+  // transformer can steal field storage instead of copying it.
   std::vector<mycelium::ParsedRow> row_outputs =
-      has_flag(mycelium::TransformerType::AUGMENTER)
-          ? transformer->Transform(c_iter.user_key().ToStringView(), parsed)
-          : transformer->TransformMove(c_iter.user_key().ToStringView(),
-                                       std::move(parsed));
+      transformer->TransformMove(c_iter.user_key().ToStringView(),
+                                 std::move(parsed));
 
   // Build output_values from serialised row outputs.
   std::vector<mycelium::ByteBuffer> output_values;
