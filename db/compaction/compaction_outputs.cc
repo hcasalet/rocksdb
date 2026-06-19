@@ -1026,12 +1026,8 @@ Status CompactionOutputs::CloseOutput(const Status& curr_status,
         rocksdb::Slice encoded_key = internal_key.Encode();
         rocksdb::Slice idx_val = entry.value;
 
-        ParsedInternalKey index_ikey;
-        if (!ParseInternalKey(encoded_key, &index_ikey, true).ok()) {
-          status = Status::Corruption(
-              "CloseOutput: failed to parse augmenter internal key");
-          break;
-        }
+        rocksdb::ParsedInternalKey index_ikey(entry.user_key, entry.seq,
+                                              rocksdb::kTypeValue);
 
         status = EmitOne(pos, encoded_key, idx_val, &index_ikey);
         if (!status.ok()) break;
