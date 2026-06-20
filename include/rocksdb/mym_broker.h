@@ -88,12 +88,18 @@ class MymBroker {
         int IndexRead(const std::string &key, const std::set<int>* positions, std::vector<std::string> &result);
 
         ~MymBroker() {
-            for (auto* h : owned_cf_handles_) {
-                delete h;
+            if (db_) {
+                for (auto* h : owned_cf_handles_) {
+                    if (h) {
+                        db_->DestroyColumnFamilyHandle(h);
+                    }
+                }
+                owned_cf_handles_.clear();
+                int_cf_meta_.clear();
+                db_->Close();
+                delete db_;
+                db_ = nullptr;
             }
-            owned_cf_handles_.clear();
-            int_cf_meta_.clear();
-            delete db_;
         };
 
         static inline std::string make_child_name(const std::string& parent, std::string_view suffix) {
