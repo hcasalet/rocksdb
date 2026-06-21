@@ -555,6 +555,18 @@ class ColumnFamilyData {
     return destination_cfds_;
   }
 
+  // Returns true if this CF is a Mycelium destination CF (i.e. it receives
+  // transformed data from a source CF during compaction).  Destination CFs
+  // are given lower scheduling priority than source CFs so that source CF
+  // compaction jobs run first when both are waiting.
+  bool IsDestinationCF() const {
+    return (name_.find("_split_cf_") != std::string::npos ||
+            name_.find("_converted_cf") != std::string::npos ||
+            name_.find("_identity_cf") != std::string::npos ||
+            name_.find("_indexed_data_cf") != std::string::npos ||
+            name_.find("_secondary_index_cf") != std::string::npos);
+  }
+
  private:
   friend class ColumnFamilySet;
   ColumnFamilyData(uint32_t id, const std::string& name,

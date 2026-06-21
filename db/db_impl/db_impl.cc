@@ -13,10 +13,10 @@
 #include <alloca.h>
 #endif
 
-#include <iostream>
 #include <algorithm>
 #include <cinttypes>
 #include <cstdio>
+#include <iostream>
 #include <map>
 #include <set>
 #include <sstream>
@@ -610,6 +610,10 @@ Status DBImpl::CloseHelper() {
     auto cfd = PopFirstFromCompactionQueue();
     cfd->UnrefAndTryDelete();
   }
+  while (!dest_compaction_queue_.empty()) {
+    auto cfd = PopFirstFromCompactionQueue();
+    cfd->UnrefAndTryDelete();
+  }
 
   if (default_cf_handle_ != nullptr || persist_stats_cf_handle_ != nullptr) {
     // we need to delete handle outside of lock because it does its own locking
@@ -786,7 +790,6 @@ void DBImpl::PrintStatistics() {
 }
 
 Status DBImpl::StartPeriodicTaskScheduler() {
-
 #ifndef NDEBUG
   // It only used by test to disable scheduler
   bool disable_scheduler = false;
@@ -3286,9 +3289,9 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name) {
   return Status::OK();
 }
 /*
-Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name, 
-              bool cracked, bool converted, bool derived, bool writeboth, int splits) {
-  assert(!cracked || !derived);
+Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
+              bool cracked, bool converted, bool derived, bool writeboth, int
+splits) { assert(!cracked || !derived);
 
   ColumnFamilySet* all_cfds = versions_->GetColumnFamilySet();
   ColumnFamilyData* root_cfd = all_cfds->GetColumnFamily(cf_name);
@@ -3330,16 +3333,16 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
         }
 
         for (int j = 0; j < splits; j++) {
-          std::string dest_cf_name = cf_name_prefix + "_split_cf_" + std::to_string(src_group*splits+j);
-          ColumnFamilyData* dest_cfd = all_cfds->GetColumnFamily(dest_cf_name);
-          if (dest_cfd != nullptr) {
+          std::string dest_cf_name = cf_name_prefix + "_split_cf_" +
+std::to_string(src_group*splits+j); ColumnFamilyData* dest_cfd =
+all_cfds->GetColumnFamily(dest_cf_name); if (dest_cfd != nullptr) {
             src_cfd->AddDestinationCfd(dest_cfd);
             if (src_level < compacting_levels - 3) {
               cfd_list.push(dest_cfd);
             }
           }
         }
-        
+
         cfd_list.pop();
       }
 
@@ -3350,14 +3353,14 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
     }
   } else {
     if (converted) {
-      ColumnFamilyData* converted_cf = all_cfds->GetColumnFamily(cf_name_prefix);
-      if (converted_cf != nullptr) {
+      ColumnFamilyData* converted_cf =
+all_cfds->GetColumnFamily(cf_name_prefix); if (converted_cf != nullptr) {
         root_cfd->AddDestinationCfd(converted_cf);
 
         if (derived) {
           std::string derived_cf_name = cf_name_prefix + "_index_cf";
-          ColumnFamilyData* derived_cf = all_cfds->GetColumnFamily(derived_cf_name);
-          if (derived_cf != nullptr) {
+          ColumnFamilyData* derived_cf =
+all_cfds->GetColumnFamily(derived_cf_name); if (derived_cf != nullptr) {
             root_cfd->AddDestinationCfd(derived_cf);
           }
         }
@@ -3393,11 +3396,12 @@ Status DBImpl::AddTransformingDestinationCfdsImpl(const std::string& cf_name,
 
 Status DBImpl::DisplayTransformingDestinationCfds() {
   for (auto cfd : *versions_->GetColumnFamilySet()) {
-    std::cout << "source cfd: " << cfd->GetName() << " ---- destination cfds: " << std::endl;
-      for (auto dest_cfd : cfd->GetDestinationCfds()) {
-        std::cout << dest_cfd->GetName() << " .. ";
-      }
-      std::cout << std::endl; 
+    std::cout << "source cfd: " << cfd->GetName()
+              << " ---- destination cfds: " << std::endl;
+    for (auto dest_cfd : cfd->GetDestinationCfds()) {
+      std::cout << dest_cfd->GetName() << " .. ";
+    }
+    std::cout << std::endl;
   }
   return Status::OK();
 }
@@ -4044,7 +4048,6 @@ Status DBImpl::GetPropertiesOfTablesInRange(ColumnFamilyHandle* column_family,
   return s;
 }
 
-
 const std::string& DBImpl::GetName() const { return dbname_; }
 
 Env* DBImpl::GetEnv() const { return env_; }
@@ -4068,7 +4071,6 @@ SystemClock* DBImpl::GetSystemClock() const {
   return immutable_db_options_.clock;
 }
 
-
 Status DBImpl::StartIOTrace(const TraceOptions& trace_options,
                             std::unique_ptr<TraceWriter>&& trace_writer) {
   assert(trace_writer != nullptr);
@@ -4080,7 +4082,6 @@ Status DBImpl::EndIOTrace() {
   io_tracer_->EndIOTrace();
   return Status::OK();
 }
-
 
 Options DBImpl::GetOptions(ColumnFamilyHandle* column_family) const {
   InstrumentedMutexLock l(&mutex_);
@@ -4824,9 +4825,10 @@ Status DB::CreateColumnFamily(const ColumnFamilyOptions& /*cf_options*/,
   return Status::NotSupported("");
 }
 
-Status DB::CreateColumnFamilyAndItsCompactingCFs(const ColumnFamilyOptions& /*cf_options*/,
-                              const std::string& /*column_family_name*/,
-                              std::map<std::string, ColumnFamilyHandle*>& /*handles*/) {
+Status DB::CreateColumnFamilyAndItsCompactingCFs(
+    const ColumnFamilyOptions& /*cf_options*/,
+    const std::string& /*column_family_name*/,
+    std::map<std::string, ColumnFamilyHandle*>& /*handles*/) {
   return Status::NotSupported("");
 }
 
@@ -6313,7 +6315,8 @@ void DBImpl::RecordSeqnoToTimeMapping() {
   }
 }
 
-ColumnFamilyData* DBImpl::GetColumnFamilyDataByName(const std::string& cf_name) {
+ColumnFamilyData* DBImpl::GetColumnFamilyDataByName(
+    const std::string& cf_name) {
   return versions_->GetColumnFamilySet()->GetColumnFamily(cf_name);
 }
 

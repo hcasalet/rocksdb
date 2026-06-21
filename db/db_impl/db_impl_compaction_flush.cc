@@ -2802,14 +2802,28 @@ DBImpl::BGJobLimits DBImpl::GetBGJobLimits(int max_background_flushes,
 void DBImpl::AddToCompactionQueue(ColumnFamilyData* cfd) {
   assert(!cfd->queued_for_compaction());
   cfd->Ref();
-  compaction_queue_.push_back(cfd);
+  // Destination CFs go into a separate lower-priority queue so that source
+  // CF compaction jobs are always scheduled first.
+  if (cfd->IsDestinationCF()) {
+    dest_compaction_queue_.push_back(cfd);
+  } else {
+    compaction_queue_.push_back(cfd);
+  }
   cfd->set_queued_for_compaction(true);
 }
 
 ColumnFamilyData* DBImpl::PopFirstFromCompactionQueue() {
-  assert(!compaction_queue_.empty());
-  auto cfd = *compaction_queue_.begin();
-  compaction_queue_.pop_front();
+  // Drain source CFs before dest CFs.
+  if (!compaction_queue_.empty()) {
+    auto cfd = *compaction_queue_.begin();
+    compaction_queue_.pop_front();
+    assert(cfd->queued_for_compaction());
+    cfd->set_queued_for_compaction(false);
+    return cfd;
+  }
+  assert(!dest_compaction_queue_.empty());
+  auto cfd = *dest_compaction_queue_.begin();
+  dest_compaction_queue_.pop_front();
   assert(cfd->queued_for_compaction());
   cfd->set_queued_for_compaction(false);
   return cfd;
@@ -2835,27 +2849,40 @@ DBImpl::FlushRequest DBImpl::PopFirstFromFlushQueue() {
 
 ColumnFamilyData* DBImpl::PickCompactionFromQueue(
     std::unique_ptr<TaskLimiterToken>* token, LogBuffer* log_buffer) {
-  assert(!compaction_queue_.empty());
+  assert(!compaction_queue_.empty() || !dest_compaction_queue_.empty());
   assert(*token == nullptr);
   autovector<ColumnFamilyData*> throttled_candidates;
   ColumnFamilyData* cfd = nullptr;
-  while (!compaction_queue_.empty()) {
-    auto first_cfd = *compaction_queue_.begin();
-    compaction_queue_.pop_front();
-    assert(first_cfd->queued_for_compaction());
-    if (!RequestCompactionToken(first_cfd, false, token, log_buffer)) {
-      throttled_candidates.push_back(first_cfd);
-      continue;
+
+  // Always drain source CF compaction jobs before dest CF compaction jobs so
+  // that source CFs are never starved by dest CF backlog.
+  auto try_pick_from = [&](std::deque<ColumnFamilyData*>& queue) {
+    while (!queue.empty()) {
+      auto first_cfd = *queue.begin();
+      queue.pop_front();
+      assert(first_cfd->queued_for_compaction());
+      if (!RequestCompactionToken(first_cfd, false, token, log_buffer)) {
+        throttled_candidates.push_back(first_cfd);
+        continue;
+      }
+      cfd = first_cfd;
+      cfd->set_queued_for_compaction(false);
+      break;
     }
-    cfd = first_cfd;
-    cfd->set_queued_for_compaction(false);
-    break;
+    // Return throttled candidates to their queue in original order.
+    for (auto iter = throttled_candidates.rbegin();
+         iter != throttled_candidates.rend(); ++iter) {
+      queue.push_front(*iter);
+    }
+    throttled_candidates.clear();
+  };
+
+  try_pick_from(compaction_queue_);
+  if (cfd == nullptr) {
+    // No source CF job available; try dest CF queue.
+    try_pick_from(dest_compaction_queue_);
   }
-  // Add throttled compaction candidates back to queue in the original order.
-  for (auto iter = throttled_candidates.rbegin();
-       iter != throttled_candidates.rend(); ++iter) {
-    compaction_queue_.push_front(*iter);
-  }
+
   return cfd;
 }
 
@@ -3393,7 +3420,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                  : m->manual_end->DebugString(true).c_str()));
       }
     }
-  } else if (!is_prepicked && !compaction_queue_.empty()) {
+  } else if (!is_prepicked &&
+             (!compaction_queue_.empty() || !dest_compaction_queue_.empty())) {
     if (HasExclusiveManualCompaction()) {
       // Can't compact right now, but try again later
       TEST_SYNC_POINT("DBImpl::BackgroundCompaction()::Conflict");
