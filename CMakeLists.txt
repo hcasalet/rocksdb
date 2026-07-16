@@ -1657,7 +1657,7 @@ endif()
 # the optional serialisation back-ends inside libmycelium.
 option(WITH_LIBMYCELIUM "Build the portable libmycelium alongside RocksDB" ON)
 if(WITH_LIBMYCELIUM)
-  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libmycelium
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../lib_transform
                    ${CMAKE_CURRENT_BINARY_DIR}/libmycelium)
   # Link the compiled library privately — consumers don't need to link
   # libmycelium themselves.  Expose the include path PUBLIC so that
@@ -1666,5 +1666,5 @@ if(WITH_LIBMYCELIUM)
   # headers at compile time.
   target_link_libraries(rocksdb PRIVATE mycelium::mycelium)
   target_include_directories(rocksdb PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../libmycelium/include>)
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../lib_transform/include>)
 endif()
